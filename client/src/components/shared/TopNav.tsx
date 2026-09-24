@@ -1056,6 +1056,7 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
                 <input
                   ref={desktopSearchInputRef}
                   type="text"
+                  id="top-nav-desktop-search"
                   value={desktopSearchDraft}
                   onChange={handleDesktopSearchDraftChange}
                   onInput={handleDesktopSearchDraftInput}

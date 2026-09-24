@@ -99,6 +99,7 @@ export function BatchImportModal({
                   {uploadPolicy.selectionImportMaxRows} 行
                 </span>
                 <input
+                  name="file"
                   type="file"
                   accept=".xlsx,.csv"
                   className="hidden"

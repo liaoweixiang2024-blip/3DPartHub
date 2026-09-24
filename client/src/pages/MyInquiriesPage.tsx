@@ -140,6 +140,7 @@ function InquiryCartSection({ compact, onSubmitted }: { compact?: boolean; onSub
                 </p>
               </div>
               <input
+                name="qty"
                 type="number"
                 min={1}
                 value={item.qty}
@@ -148,6 +149,7 @@ function InquiryCartSection({ compact, onSubmitted }: { compact?: boolean; onSub
                 aria-label={t('myInquiries.qtyAria')}
               />
               <input
+                name="remark"
                 value={item.remark}
                 onChange={(event) => cart.updateItem(item.id, { remark: event.target.value })}
                 placeholder={t('myInquiries.remarkPlaceholder')}

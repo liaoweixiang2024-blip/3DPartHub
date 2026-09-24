@@ -89,6 +89,7 @@ function ConversionConcurrencyControl({ compact = false }: { compact?: boolean }
         </div>
         <div className={`flex items-center gap-2 ${compact ? 'w-full' : 'shrink-0'}`}>
           <input
+            name="local-value"
             type="range"
             min={1}
             max={8}
@@ -99,6 +100,7 @@ function ConversionConcurrencyControl({ compact = false }: { compact?: boolean }
             aria-label="转换并发数"
           />
           <input
+            name="local-value"
             type="number"
             min={1}
             max={8}

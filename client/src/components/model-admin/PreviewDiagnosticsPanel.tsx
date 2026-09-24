@@ -241,6 +241,7 @@ export default function PreviewDiagnosticsPanel({
                   key={item.model_id}
                   to={`/model/${item.model_id}`}
                   target="_blank"
+                  rel="noopener"
                   className="flex items-center gap-3 rounded-sm border border-outline-variant/10 bg-surface-container-lowest px-3 py-2 hover:bg-surface-container-high"
                 >
                   <div className="h-10 w-10 shrink-0 overflow-hidden rounded-sm bg-surface-container-highest">

@@ -29,6 +29,9 @@ export function ProductWallThumbnail({
   children?: ReactNode;
 }) {
   const previewSrc = productWallPreviewImage(item);
+  // 外层容器与 img 用同一比例：img 的 aspect-ratio 仅作加载前占位提示（DevTools lazy 尺寸审计），
+  // 实际尺寸由 h-full w-full（撑满已定比例的容器）决定
+  const ratio = ratioOverride ?? productWallRatioValue(item.ratio);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const eager = imageIndex < eagerImageCount;
   const [src, setSrc] = useState(previewSrc);
@@ -66,7 +69,7 @@ export function ProductWallThumbnail({
     <div
       ref={surfaceRef}
       className={`product-wall-image-surface product-wall-canvas-${canvasMode} relative overflow-hidden rounded-xl`}
-      style={{ aspectRatio: ratioOverride ?? productWallRatioValue(item.ratio) }}
+      style={{ aspectRatio: ratio }}
     >
       {!loaded && !failed && <div className="product-wall-image-placeholder" aria-hidden />}
       {failed ? (
@@ -83,6 +86,7 @@ export function ProductWallThumbnail({
           className={`product-wall-thumb relative z-10 block h-full w-full object-contain align-middle transition duration-200 group-hover:brightness-[0.96] ${
             loaded ? 'opacity-100' : 'opacity-0'
           }`}
+          style={{ aspectRatio: ratio }}
           onLoad={() => {
             window.requestAnimationFrame(() => setLoaded(true));
           }}

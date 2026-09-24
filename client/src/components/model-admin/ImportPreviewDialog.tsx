@@ -105,6 +105,7 @@ export default function ImportPreviewDialog({
               <span className="text-sm text-on-surface-variant">点击选择 .offline.zip 文件</span>
             )}
             <input
+              name="file"
               ref={inputRef}
               type="file"
               accept=".zip"

@@ -72,6 +72,10 @@ export default function ModelThumbnail({
     return (
       <img
         src={src}
+        // 显式宽高只作加载前的占位比例提示（DevTools lazy 图片尺寸审计）；
+        // 显示尺寸始终由调用方的 w-full h-full object-cover 类覆盖，不参与实际布局
+        width={512}
+        height={512}
         srcSet={smallSrc ? `${smallSrc} 256w, ${src} 512w` : undefined}
         sizes={smallSrc ? '(max-width: 640px) 128px, (max-width: 1024px) 200px, 256px' : undefined}
         alt={alt || ''}

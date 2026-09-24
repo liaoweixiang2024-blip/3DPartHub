@@ -272,7 +272,7 @@ export default function UserAdminPage() {
     const params = new URLSearchParams({ sort });
     if (search) params.set('search', search);
     if (roleFilter) params.set('role', roleFilter);
-    window.open(`/api/admin/users/export?${params.toString()}`, '_blank');
+    window.open(`/api/admin/users/export?${params.toString()}`, '_blank', 'noopener');
   }
 
   function toggleSelect(id: string) {
@@ -317,6 +317,7 @@ export default function UserAdminPage() {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <select
+          name="sort"
           value={sort}
           onChange={(e) => setSort(e.target.value)}
           // iOS Safari 原生 select 不继承 font-size，需显式声明；text-sm(14px) 同时避免聚焦自动放大
@@ -394,6 +395,7 @@ export default function UserAdminPage() {
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-primary/20 bg-primary-container/10 px-3 py-2">
           <span className="text-xs font-medium text-on-surface">已选 {selected.size} 项</span>
           <select
+            name="batch-role"
             value={batchRole}
             onChange={(e) => setBatchRole(e.target.value)}
             className="rounded border border-outline-variant/20 bg-surface-container-high px-2 py-1 text-xs"
@@ -441,7 +443,13 @@ export default function UserAdminPage() {
         {isLoading && users.length === 0 && <AdminLoadingState variant="list" label="用户列表加载中" />}
         {users.length > 0 ? (
           <div className="flex items-center gap-2 px-1 pb-1 text-[11px] text-on-surface-variant">
-            <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="h-3.5 w-3.5" />
+            <input
+              name="all-selected"
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              className="h-3.5 w-3.5"
+            />
             <span>全选当前页</span>
           </div>
         ) : null}
@@ -457,6 +465,7 @@ export default function UserAdminPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 flex-1 items-start gap-2">
                   <input
+                    name="is-selected"
                     type="checkbox"
                     checked={isSelected}
                     onChange={() => toggleSelect(u.id)}
@@ -510,6 +519,7 @@ export default function UserAdminPage() {
                 </div>
                 <div className="flex shrink-0 items-center justify-end gap-1.5">
                   <select
+                    name="role"
                     value={u.role}
                     onChange={(e) => handleRoleSelect(u.id, u.username, e.target.value)}
                     className="rounded border border-outline-variant/20 bg-surface-container-high px-2 py-1 text-xs text-on-surface"

@@ -86,6 +86,7 @@ export function ResultCard({
           <div className="flex items-center gap-2 flex-wrap">
             {onToggleSelect && (
               <input
+                id={`result-select-${product.id}`}
                 type="checkbox"
                 checked={selected}
                 onChange={onToggleSelect}

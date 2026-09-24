@@ -400,7 +400,12 @@ function EmailChangeDialog({
                     <label className="text-xs uppercase tracking-wider text-on-surface-variant">
                       {t('profile.emailChangeDialog.currentEmail')}
                     </label>
-                    <input value={currentEmail} readOnly className={`${inputClass} opacity-60 cursor-default`} />
+                    <input
+                      name="current-email"
+                      value={currentEmail}
+                      readOnly
+                      className={`${inputClass} opacity-60 cursor-default`}
+                    />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs uppercase tracking-wider text-on-surface-variant">
@@ -408,6 +413,7 @@ function EmailChangeDialog({
                     </label>
                     <div className="flex gap-2">
                       <input
+                        name="old-code"
                         value={oldCode}
                         onChange={(e) => setOldCode(e.target.value)}
                         maxLength={6}
@@ -438,6 +444,7 @@ function EmailChangeDialog({
                       {t('profile.emailChangeDialog.newEmail')}
                     </label>
                     <input
+                      name="new-email"
                       type="email"
                       value={newEmail}
                       onChange={(e) => setNewEmail(e.target.value)}
@@ -451,6 +458,7 @@ function EmailChangeDialog({
                     </label>
                     <div className="flex gap-2">
                       <input
+                        name="new-code"
                         value={newCode}
                         onChange={(e) => setNewCode(e.target.value)}
                         maxLength={6}
@@ -723,7 +731,14 @@ function DesktopContent() {
             </h3>
           </div>
           <div className="flex flex-col items-center mb-8">
-            <input ref={avatarInputRef} type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
+            <input
+              name="file"
+              ref={avatarInputRef}
+              type="file"
+              className="hidden"
+              accept="image/*"
+              onChange={handleAvatarChange}
+            />
             <div onClick={() => avatarInputRef.current?.click()} className="relative group cursor-pointer mb-4">
               <div className="w-24 h-24 rounded-full bg-surface-container-highest flex items-center justify-center">
                 {user?.avatar ? (
@@ -1037,7 +1052,14 @@ function MobileContent() {
       <PageBody className="mt-4 pb-20 space-y-4">
         {/* Avatar + basic info */}
         <div className="flex items-center gap-4 rounded-lg bg-surface-container-high p-4">
-          <input ref={avatarInputRef} type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
+          <input
+            name="file"
+            ref={avatarInputRef}
+            type="file"
+            className="hidden"
+            accept="image/*"
+            onChange={handleAvatarChange}
+          />
           <div onClick={() => avatarInputRef.current?.click()} className="relative group cursor-pointer shrink-0">
             <div className="h-14 w-14 rounded-full bg-surface-container-lowest flex items-center justify-center">
               {user?.avatar ? (

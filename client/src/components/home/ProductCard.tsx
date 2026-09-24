@@ -237,6 +237,7 @@ function ProductCardInner({
             </p>
             {renaming ? (
               <textarea
+                name="rename-value"
                 value={renameValue}
                 onChange={(event) => setRenameValue(event.target.value)}
                 onClick={(event) => event.stopPropagation()}

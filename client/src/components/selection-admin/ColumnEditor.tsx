@@ -212,6 +212,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       数据字段
                     </span>
                     <input
+                      name="key"
                       value={col.key}
                       onChange={(e) => updateCol(i, 'key', e.target.value)}
                       placeholder="如 通径"
@@ -224,6 +225,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       页面名称
                     </span>
                     <input
+                      name="label"
                       value={col.label}
                       onChange={(e) => updateCol(i, 'label', e.target.value)}
                       placeholder="如 选择通径"
@@ -234,6 +236,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                   <label>
                     <span className="mb-1 block text-[10px] font-medium text-on-surface-variant md:hidden">单位</span>
                     <input
+                      name="unit"
                       value={col.unit}
                       onChange={(e) => updateCol(i, 'unit', e.target.value)}
                       placeholder="单位"
@@ -243,6 +246,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                   <label>
                     <span className="mb-1 block text-[10px] font-medium text-on-surface-variant md:hidden">类型</span>
                     <select
+                      name="mode"
                       value={mode}
                       onChange={(e) =>
                         updateColumnMode(i, e.target.value as 'select' | 'manual' | 'preset' | 'displayOnly')
@@ -311,6 +315,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                           <label className="sm:col-span-2">
                             <span className="mb-1 block text-[10px] text-on-surface-variant">可选值（逗号分隔）</span>
                             <input
+                              name="text"
                               value={(col.presetOptions || []).join(',')}
                               onChange={(e) => {
                                 const val = e.target.value
@@ -326,6 +331,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                           <label>
                             <span className="mb-1 block text-[10px] text-on-surface-variant">依赖字段</span>
                             <select
+                              name="depends-on"
                               value={col.dependsOn?.field || ''}
                               onChange={(e) => {
                                 const field = e.target.value;
@@ -350,6 +356,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                           <label>
                             <span className="mb-1 block text-[10px] text-on-surface-variant">依赖最小序号</span>
                             <input
+                              name="depends-on"
                               type="number"
                               min={1}
                               value={col.dependsOn?.minIndex ?? ''}
@@ -369,6 +376,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">输入提示</span>
                         <input
+                          name="placeholder"
                           value={col.placeholder || ''}
                           onChange={(e) => updateCol(i, 'placeholder', e.target.value || undefined)}
                           disabled={mode !== 'manual'}
@@ -379,6 +387,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">填写后缀</span>
                         <input
+                          name="suffix"
                           value={col.suffix || ''}
                           onChange={(e) => updateCol(i, 'suffix', e.target.value || undefined)}
                           disabled={mode !== 'manual'}
@@ -389,6 +398,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">结果里显示</span>
                         <select
+                          name="hide-in-results"
                           value={col.hideInResults ? 'hide' : 'show'}
                           onChange={(e) => updateCol(i, 'hideInResults', e.target.value === 'hide' ? true : undefined)}
                           className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container"
@@ -400,6 +410,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">兼容旧占位符</span>
                         <input
+                          name="legacy-placeholder"
                           value={col.legacyPlaceholder || ''}
                           onChange={(e) => updateCol(i, 'legacyPlaceholder', e.target.value || undefined)}
                           disabled={mode !== 'manual'}
@@ -410,6 +421,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">选项排序</span>
                         <select
+                          name="sort-type"
                           disabled={mode !== 'select'}
                           value={col.sortType || 'default'}
                           onChange={(e) =>
@@ -429,6 +441,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">选项显示</span>
                         <select
+                          name="option-display"
                           disabled={mode !== 'select'}
                           value={col.optionDisplay || 'auto'}
                           onChange={(e) =>
@@ -448,6 +461,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">显示产品数</span>
                         <select
+                          name="show-count"
                           disabled={mode !== 'select'}
                           value={col.showCount === false ? 'hide' : 'show'}
                           onChange={(e) => updateCol(i, 'showCount', e.target.value === 'hide' ? false : undefined)}
@@ -460,6 +474,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">单一选项</span>
                         <select
+                          name="auto-select-single"
                           disabled={mode !== 'select'}
                           value={col.autoSelectSingle === false ? 'manual' : 'auto'}
                           onChange={(e) => updateSingleOptionBehavior(i, e.target.value as 'auto' | 'manual')}
@@ -472,6 +487,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">字段完整性</span>
                         <select
+                          name="required"
                           disabled={mode !== 'select'}
                           value={col.required === true ? 'required' : 'skip'}
                           onChange={(e) => updateEmptyBehavior(i, e.target.value as 'skip' | 'required')}

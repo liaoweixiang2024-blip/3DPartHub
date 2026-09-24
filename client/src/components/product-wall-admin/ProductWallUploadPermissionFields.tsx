@@ -155,6 +155,7 @@ export function ProductWallUploadUsersEditor({
       )}
       <div className="relative">
         <input
+          name="search"
           value={search}
           onChange={(event) => {
             setSearch(event.target.value);

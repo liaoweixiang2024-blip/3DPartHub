@@ -400,6 +400,7 @@ function ItemsTable({
                 <div className="flex shrink-0 items-start gap-1">
                   {editing && draft ? (
                     <input
+                      name="qty"
                       type="number"
                       min={1}
                       value={draft.qty}
@@ -433,6 +434,7 @@ function ItemsTable({
 
               {editing && draft ? (
                 <textarea
+                  name="remark"
                   value={draft.remark}
                   onChange={(event) => onDraftChange?.(item.id, { remark: event.target.value })}
                   placeholder={t('inquiryDetail.items.remark')}
@@ -495,6 +497,7 @@ function ItemsTable({
                   <td className="px-3 py-2.5 text-right">
                     {editing && draft ? (
                       <input
+                        name="qty"
                         type="number"
                         min={1}
                         value={draft.qty}
@@ -516,6 +519,7 @@ function ItemsTable({
                   <td className="px-3 py-2.5 text-[11px] leading-5 text-on-surface-variant">
                     {editing && draft ? (
                       <input
+                        name="remark"
                         value={draft.remark}
                         onChange={(event) => onDraftChange?.(item.id, { remark: event.target.value })}
                         placeholder={t('inquiryDetail.items.remark')}
@@ -1533,6 +1537,11 @@ function DetailContent({ id }: { id: string }) {
       toast(t('inquiryDetail.export.popupBlocked'), 'error');
       return;
     }
+    try {
+      printWindow.opener = null;
+    } catch {
+      // 与 browserDownload 一致：部分浏览器 opener 只读
+    }
     printWindow.document.open();
     printWindow.document.write(html);
     printWindow.document.close();
@@ -1734,13 +1743,14 @@ function DetailContent({ id }: { id: string }) {
             </div>
           ) : null}
           <div className="flex items-end gap-1.5">
-            <input ref={fileInputRef} type="file" className="hidden" onChange={handleAttachmentSelect} />
+            <input name="file" ref={fileInputRef} type="file" className="hidden" onChange={handleAttachmentSelect} />
             <QuickReplyChips
               phrases={quickReplyPhrases}
               onPick={handleQuickReply}
               title={isAdmin ? t('inquiryDetail.quickReplyAdminTitle') : t('inquiryDetail.quickReplyUserTitle')}
             />
             <textarea
+              name="msg-input"
               value={msgInput}
               onChange={(e) => setMsgInput(e.target.value)}
               onPaste={handleComposerPaste}

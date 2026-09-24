@@ -298,7 +298,14 @@ export default function CategoryNavAdminPage() {
         }
       >
         <AdminContentPanel scroll className="overflow-y-auto">
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+          <input
+            name="file"
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
           {error ? (
             <div className="mb-3 rounded-lg border border-error/30 bg-error-container/20 px-3 py-2 text-xs text-error">
               {error}
@@ -314,6 +321,7 @@ export default function CategoryNavAdminPage() {
                   {t('categoryNav.admin.pageTitle')}
                 </span>
                 <input
+                  name="page-title"
                   value={draft.pageTitle ?? ''}
                   onChange={(e) => patchConfig({ pageTitle: e.target.value })}
                   placeholder={t('categoryNav.title')}
@@ -324,6 +332,7 @@ export default function CategoryNavAdminPage() {
                   {t('categoryNav.admin.pageDescription')}
                 </span>
                 <input
+                  name="page-description"
                   value={draft.pageDescription ?? ''}
                   onChange={(e) => patchConfig({ pageDescription: e.target.value })}
                   placeholder={t('categoryNav.subtitle')}
@@ -406,6 +415,7 @@ export default function CategoryNavAdminPage() {
                         </button>
                         {editingGroup === group.id ? (
                           <input
+                            name="name"
                             autoFocus
                             value={group.name}
                             onChange={(e) => patchGroup(group.id, { name: e.target.value })}
@@ -511,6 +521,7 @@ export default function CategoryNavAdminPage() {
                                     #{idx + 1}
                                   </span>
                                   <input
+                                    name="label"
                                     value={node.label ?? ''}
                                     onChange={(e) => patchNode(node.id, { label: e.target.value })}
                                     placeholder={t('categoryNav.admin.labelPlaceholder')}
@@ -519,6 +530,7 @@ export default function CategoryNavAdminPage() {
                                     title={t('categoryNav.admin.labelPlaceholder')}
                                   />
                                   <input
+                                    name="description"
                                     value={node.description ?? ''}
                                     onChange={(e) => patchNode(node.id, { description: e.target.value })}
                                     placeholder={t('categoryNav.admin.descriptionPlaceholder')}
@@ -578,6 +590,7 @@ export default function CategoryNavAdminPage() {
                                           )}
                                         </button>
                                         <select
+                                          name="category-id"
                                           value={it.categoryId ?? ''}
                                           onChange={(e) =>
                                             patchItem(node.id, j, {
@@ -595,6 +608,7 @@ export default function CategoryNavAdminPage() {
                                           ))}
                                         </select>
                                         <input
+                                          name="custom-name"
                                           value={it.customName ?? ''}
                                           onChange={(e) => patchItem(node.id, j, { customName: e.target.value })}
                                           placeholder={t('categoryNav.admin.customNamePlaceholder')}

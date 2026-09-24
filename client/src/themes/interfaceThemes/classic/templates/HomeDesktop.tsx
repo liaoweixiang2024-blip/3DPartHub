@@ -110,6 +110,8 @@ export default function ClassicHomeDesktop({
           <div className="home-toolbar-actions flex items-center gap-3">
             <div className="relative">
               <select
+                id="home-sort-select"
+                aria-label={t('home.sortLabel')}
                 value={sortBy}
                 onChange={(event) => onSortChange(event.target.value)}
                 className="bg-surface-container-lowest text-sm text-on-surface rounded-sm pl-3 pr-8 py-1 border border-outline-variant/30 outline-none appearance-none cursor-pointer"

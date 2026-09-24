@@ -400,6 +400,7 @@ function CategoryAccessSection({
           <div className="relative">
             <div className="mb-1.5 text-xs font-medium text-on-surface-variant">指定用户（搜索用户名 / 邮箱）</div>
             <input
+              name="user-search"
               value={userSearch}
               onChange={(e) => {
                 setUserSearch(e.target.value);
@@ -617,6 +618,7 @@ function CategoryModal({
             <div>
               <label className="mb-1 block text-xs font-medium text-on-surface-variant">分类名称</label>
               <input
+                name="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="h-11 w-full rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none transition-colors focus:border-primary-container focus:ring-2 focus:ring-primary-container/10"

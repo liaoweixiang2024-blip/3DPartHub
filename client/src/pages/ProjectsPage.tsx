@@ -217,6 +217,7 @@ export default function ProjectsPage() {
                   <div>
                     <label className="block text-xs text-on-surface-variant mb-1">{t('projects.nameRequired')}</label>
                     <input
+                      name="new-name"
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
                       className="w-full bg-surface-container-lowest text-on-surface rounded-sm px-3 py-2 border border-outline-variant/30 outline-none focus:border-primary"
@@ -226,6 +227,7 @@ export default function ProjectsPage() {
                   <div>
                     <label className="block text-xs text-on-surface-variant mb-1">{t('projects.description')}</label>
                     <textarea
+                      name="new-desc"
                       value={newDesc}
                       onChange={(e) => setNewDesc(e.target.value)}
                       className="w-full bg-surface-container-lowest text-on-surface rounded-sm px-3 py-2 border border-outline-variant/30 outline-none focus:border-primary resize-none h-20"

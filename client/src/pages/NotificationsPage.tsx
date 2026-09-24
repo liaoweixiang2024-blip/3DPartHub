@@ -300,6 +300,7 @@ export default function NotificationsPage() {
         ))}
       </div>
       <select
+        name="type-filter"
         value={typeFilter}
         onChange={(e) => changeFilter({ type: e.target.value })}
         className="rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-1.5 text-xs text-on-surface outline-none focus:border-primary"

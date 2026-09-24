@@ -345,6 +345,7 @@ export default function InquirySubmitDialog({
                         </td>
                         <td className="px-3 py-2 text-right">
                           <input
+                            name="qty"
                             aria-label={t('inquirySubmit.itemQtyAria', { title: getItemTitle(item) })}
                             type="number"
                             min={1}
@@ -357,6 +358,7 @@ export default function InquirySubmitDialog({
                         </td>
                         <td className="px-3 py-2">
                           <input
+                            name="remark"
                             value={state.remark}
                             onChange={(event) => updateItem(item.id, { remark: event.target.value })}
                             placeholder={t('inquirySubmit.itemRemarkPlaceholder')}
@@ -404,6 +406,7 @@ export default function InquirySubmitDialog({
                     {t('inquirySubmit.companyOptional')}
                   </label>
                   <input
+                    name="company"
                     value={company}
                     onChange={(event) => setCompany(event.target.value)}
                     placeholder={t('inquirySubmit.companyPlaceholder')}
@@ -413,6 +416,7 @@ export default function InquirySubmitDialog({
                 <div>
                   <label className="mb-1 block text-xs text-on-surface-variant">{t('inquirySubmit.contactName')}</label>
                   <input
+                    name="contact-name"
                     value={contactName}
                     onChange={(event) => setContactName(event.target.value)}
                     placeholder={t('inquirySubmit.contactNamePlaceholder')}
@@ -424,6 +428,7 @@ export default function InquirySubmitDialog({
                     {t('inquirySubmit.contactPhone')}
                   </label>
                   <input
+                    name="contact-phone"
                     value={contactPhone}
                     onChange={(event) => setContactPhone(event.target.value)}
                     placeholder={t('inquirySubmit.contactPhonePlaceholder')}
@@ -435,6 +440,7 @@ export default function InquirySubmitDialog({
                     {t('inquirySubmit.contactAddress')}
                   </label>
                   <input
+                    name="contact-address"
                     value={contactAddress}
                     onChange={(event) => setContactAddress(event.target.value)}
                     placeholder={t('inquirySubmit.contactAddressPlaceholder')}
@@ -495,6 +501,7 @@ export default function InquirySubmitDialog({
           <div>
             <label className="mb-1 block text-xs text-on-surface-variant">{t('inquirySubmit.overallRemark')}</label>
             <textarea
+              name="remark"
               value={remark}
               onChange={(event) => setRemark(event.target.value)}
               rows={2}

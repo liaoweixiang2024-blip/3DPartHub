@@ -337,7 +337,9 @@ export default function SharePage() {
               </div>
               <div className="px-6 py-5 space-y-4">
                 <input
+                  id="share-access-password"
                   type="password"
+                  autoComplete="off"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleVerifyPassword()}

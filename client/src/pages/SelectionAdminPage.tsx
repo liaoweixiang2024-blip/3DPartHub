@@ -1714,6 +1714,7 @@ function Content() {
                 <div>
                   <label className="text-xs text-on-surface-variant mb-1 block">名称 *</label>
                   <input
+                    name="name"
                     value={catForm.name}
                     onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
                     className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
@@ -1722,6 +1723,7 @@ function Content() {
                 <div>
                   <label className="text-xs text-on-surface-variant mb-1 block">标识 (slug) *</label>
                   <input
+                    name="slug"
                     value={catForm.slug}
                     onChange={(e) =>
                       setCatForm({ ...catForm, slug: e.target.value.replace(/\s+/g, '-').toLowerCase() })
@@ -1733,6 +1735,7 @@ function Content() {
               <div>
                 <label className="text-xs text-on-surface-variant mb-1 block">描述</label>
                 <input
+                  name="description"
                   value={catForm.description}
                   onChange={(e) => setCatForm({ ...catForm, description: e.target.value })}
                   className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
@@ -1741,6 +1744,7 @@ function Content() {
               <div>
                 <label className="text-xs text-on-surface-variant mb-1 block">套件清单标题</label>
                 <input
+                  name="kit-list-title"
                   value={catForm.kitListTitle}
                   onChange={(e) => setCatForm({ ...catForm, kitListTitle: e.target.value })}
                   placeholder="默认：子零件清单，例如：组装清单 / BOM清单"
@@ -1753,6 +1757,7 @@ function Content() {
               <div>
                 <label className="text-xs text-on-surface-variant mb-1 block">所属分组（可选）</label>
                 <select
+                  name="select"
                   value={(() => {
                     const editCatObj = editCat ? categories.find((c) => c.id === editCat.id) : null;
                     return editCatObj?.groupId || '';
@@ -1804,6 +1809,7 @@ function Content() {
                 <div>
                   <label className="text-xs text-on-surface-variant mb-1 block">图标名称</label>
                   <input
+                    name="icon"
                     value={catForm.icon}
                     onChange={(e) => setCatForm({ ...catForm, icon: e.target.value })}
                     placeholder="如: tune"
@@ -1817,6 +1823,7 @@ function Content() {
                   </p>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                     <input
+                      name="image"
                       value={catForm.image}
                       onChange={(e) => setCatForm({ ...catForm, image: e.target.value })}
                       placeholder="URL 或上传"
@@ -1824,6 +1831,7 @@ function Content() {
                     />
                     <label className="shrink-0">
                       <input
+                        name="file"
                         type="file"
                         accept="image/*"
                         className="hidden"
@@ -1893,6 +1901,7 @@ function Content() {
                 <div>
                   <label className="text-xs text-on-surface-variant mb-1 block">名称 *</label>
                   <input
+                    name="name"
                     value={prodForm.name}
                     onChange={(e) => setProdForm({ ...prodForm, name: e.target.value })}
                     className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
@@ -1901,6 +1910,7 @@ function Content() {
                 <div>
                   <label className="text-xs text-on-surface-variant mb-1 block">型号编号</label>
                   <input
+                    name="model-no"
                     value={prodForm.modelNo}
                     onChange={(e) => setProdForm({ ...prodForm, modelNo: e.target.value })}
                     className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
@@ -1911,6 +1921,7 @@ function Content() {
                 <div>
                   <label className="text-xs text-on-surface-variant mb-1 block">产品图片 URL</label>
                   <input
+                    name="image"
                     value={prodForm.image}
                     onChange={(e) => setProdForm({ ...prodForm, image: e.target.value })}
                     placeholder="https://..."
@@ -1920,6 +1931,7 @@ function Content() {
                 <div>
                   <label className="text-xs text-on-surface-variant mb-1 block">PDF 规格书 URL</label>
                   <input
+                    name="pdf-url"
                     value={prodForm.pdfUrl}
                     onChange={(e) => setProdForm({ ...prodForm, pdfUrl: e.target.value })}
                     placeholder="https://..."
@@ -1955,6 +1967,7 @@ function Content() {
                 }`}
               >
                 <input
+                  name="file"
                   ref={productAssetInputRef}
                   type="file"
                   accept="image/*,application/pdf"
@@ -2038,6 +2051,7 @@ function Content() {
                     {col.unit ? ` (${col.unit})` : ''}
                   </label>
                   <input
+                    name="specs"
                     value={prodForm.specs[col.key] || ''}
                     onChange={(e) =>
                       setProdForm({ ...prodForm, specs: { ...prodForm.specs, [col.key]: e.target.value } })
@@ -2098,6 +2112,7 @@ function Content() {
                       <div key={i} className="flex items-start gap-2 bg-surface-container-high/50 rounded-lg p-2">
                         <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <input
+                            name="name"
                             value={comp.name}
                             onChange={(e) => {
                               const next = [...prodForm.components];
@@ -2108,6 +2123,7 @@ function Content() {
                             className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
                           />
                           <input
+                            name="model-no"
                             value={comp.modelNo || ''}
                             onChange={(e) => {
                               const next = [...prodForm.components];
@@ -2118,6 +2134,7 @@ function Content() {
                             className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
                           />
                           <input
+                            name="qty"
                             type="number"
                             min={1}
                             value={comp.qty}
@@ -2183,6 +2200,7 @@ function Content() {
               </p>
             </div>
             <textarea
+              name="kit-import-text"
               value={kitImportText}
               onChange={(e) => setKitImportText(e.target.value)}
               rows={8}
@@ -2282,6 +2300,7 @@ function Content() {
             {/* Field selector + view toggle */}
             <div className="grid grid-cols-1 gap-2 shrink-0 pb-2 border-b border-outline-variant/10 sm:flex sm:flex-wrap sm:items-center sm:pb-0 sm:border-b-0">
               <select
+                name="opt-img-field"
                 value={optImgField}
                 onChange={(e) => {
                   const f = e.target.value;
@@ -2702,6 +2721,7 @@ function Content() {
                             ) : (
                               <label className="block">
                                 <input
+                                  name="file"
                                   type="file"
                                   accept=".pdf,image/*"
                                   className="hidden"
@@ -2732,6 +2752,7 @@ function Content() {
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                           <label className="flex-1">
                             <input
+                              name="file"
                               type="file"
                               accept="image/*"
                               className="hidden"
@@ -2834,6 +2855,7 @@ function Content() {
             <div>
               <label className="text-xs text-on-surface-variant mb-1 block">改为</label>
               <input
+                name="rename-new-val"
                 value={renameNewVal}
                 onChange={(e) => setRenameNewVal(e.target.value)}
                 autoFocus
@@ -3092,12 +3114,14 @@ function Content() {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] gap-2">
                           <input
+                            name="g"
                             value={g?.icon || ''}
                             onChange={(e) => updateManagedGroup({ icon: e.target.value })}
                             placeholder="图标"
                             className="w-full bg-surface-container-low text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
                           />
                           <input
+                            name="g"
                             value={g?.name || ''}
                             onChange={(e) => updateManagedGroup({ name: e.target.value })}
                             placeholder="分组名称"
@@ -3171,6 +3195,7 @@ function Content() {
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-[10px] text-on-surface-variant">图片主体尽量居中，四周保留 8% 安全边距</p>
                           <input
+                            name="file"
                             ref={groupCoverInputRef}
                             type="file"
                             accept="image/*"
@@ -3362,12 +3387,14 @@ function Content() {
                 <div className="shrink-0 space-y-2 border-b border-outline-variant/10 pb-3">
                   <div className="flex items-center gap-2">
                     <input
+                      name="icon"
                       value={groupForm.icon}
                       onChange={(e) => setGroupForm({ ...groupForm, icon: e.target.value })}
                       placeholder="图标"
                       className="w-20 bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
                     />
                     <input
+                      name="name"
                       value={groupForm.name}
                       onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
                       placeholder="分组名称"

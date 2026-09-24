@@ -315,6 +315,7 @@ function DesktopContent() {
                         {t('support.attachment')}
                       </label>
                       <input
+                        name="file"
                         ref={fileInputRef}
                         type="file"
                         className="hidden"
@@ -555,7 +556,14 @@ function MobileContent() {
               className="w-full bg-surface-container-lowest rounded-sm px-3 py-2.5 text-sm text-on-surface border border-outline-variant/20 outline-none focus:border-primary resize-none"
               placeholder={t('support.descriptionPlaceholderMobile')}
             />
-            <input ref={fileInputRef} type="file" className="hidden" accept=".step,.iges,.stl,.pdf" multiple />
+            <input
+              name="file"
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".step,.iges,.stl,.pdf"
+              multiple
+            />
             <button
               onClick={() => fileInputRef.current?.click()}
               className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-outline-variant/30 rounded-sm text-xs text-on-surface-variant hover:border-outline-variant/60"

@@ -204,7 +204,7 @@ export default function UserEditDialog({
         <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
           <div>
             <span className={labelClass}>角色</span>
-            <select value={role} onChange={(e) => setRole(e.target.value)} className={inputClass}>
+            <select name="role" value={role} onChange={(e) => setRole(e.target.value)} className={inputClass}>
               {ROLE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
@@ -216,22 +216,33 @@ export default function UserEditDialog({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <span className={labelClass}>公司</span>
-              <input value={company} onChange={(e) => setCompany(e.target.value)} className={inputClass} />
+              <input
+                name="company"
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                className={inputClass}
+              />
             </div>
             <div>
               <span className={labelClass}>部门</span>
-              <input value={department} onChange={(e) => setDepartment(e.target.value)} className={inputClass} />
+              <input
+                name="department"
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className={inputClass}
+              />
             </div>
           </div>
 
           <div>
             <span className={labelClass}>电话</span>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
+            <input name="phone" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
           </div>
 
           <div>
             <span className={labelClass}>备注</span>
             <textarea
+              name="bio"
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               rows={2}
@@ -242,6 +253,7 @@ export default function UserEditDialog({
           <div className="flex flex-wrap items-center gap-4 pt-1">
             <label className="flex cursor-pointer items-center gap-2 text-sm text-on-surface">
               <input
+                name="must-change-password"
                 type="checkbox"
                 checked={mustChangePassword}
                 onChange={(e) => setMustChangePassword(e.target.checked)}
@@ -251,6 +263,7 @@ export default function UserEditDialog({
             </label>
             <label className="flex cursor-pointer items-center gap-2 text-sm text-on-surface">
               <input
+                name="disabled"
                 type="checkbox"
                 checked={disabled}
                 onChange={(e) => setDisabled(e.target.checked)}
@@ -260,6 +273,7 @@ export default function UserEditDialog({
             </label>
             <label className="flex cursor-pointer items-center gap-2 text-sm text-on-surface">
               <input
+                name="can-invite"
                 type="checkbox"
                 checked={canInvite}
                 onChange={(e) => setCanInvite(e.target.checked)}
@@ -282,6 +296,7 @@ export default function UserEditDialog({
             </div>
             <div className="mt-2 flex gap-2">
               <input
+                id="user-edit-temp-password"
                 value={tempPassword}
                 onChange={(e) => setTempPassword(e.target.value)}
                 placeholder="设临时密码（≥8 位）"

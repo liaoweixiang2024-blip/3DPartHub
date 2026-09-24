@@ -1300,6 +1300,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                       }`}
                     >
                       <input
+                        name="file"
                         ref={addMoreInputRef}
                         type="file"
                         multiple
@@ -1395,6 +1396,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                     } ${uploading ? 'pointer-events-none opacity-60' : ''}`}
                   >
                     <input
+                      name="file"
                       ref={inputRef}
                       type="file"
                       multiple

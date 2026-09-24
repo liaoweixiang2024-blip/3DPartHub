@@ -165,6 +165,7 @@ function ClipControl({
         <span className="ml-auto font-mono text-[10px] text-on-surface-variant">{labelValue}</span>
       </div>
       <input
+        name="clip-position"
         type="range"
         min={range.min}
         max={range.max}
@@ -230,6 +231,7 @@ function ExplodeControl({
         <span className="ml-auto font-mono text-[10px] text-on-surface-variant">{explodeAmount.toFixed(1)}x</span>
       </div>
       <input
+        name="explode-amount"
         type="range"
         min={0}
         max={3}

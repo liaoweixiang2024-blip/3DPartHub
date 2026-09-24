@@ -422,6 +422,7 @@ function DeletedModelsPanel({
           >
             <div className="flex items-start gap-3">
               <input
+                name="has"
                 type="checkbox"
                 checked={selectedIds.has(model.model_id)}
                 onChange={() => onToggleSelect(model.model_id)}
@@ -538,6 +539,7 @@ function DeletedModelsPanel({
           <AdminTableHeadRow>
             <AdminTableHeadCell className="w-12">
               <input
+                name="all-loaded-selected"
                 type="checkbox"
                 checked={allLoadedSelected}
                 disabled={items.length === 0 || actionBusy}
@@ -562,6 +564,7 @@ function DeletedModelsPanel({
             >
               <td className="px-4 py-3 align-middle">
                 <input
+                  name="has"
                   type="checkbox"
                   checked={selectedIds.has(model.model_id)}
                   onChange={() => onToggleSelect(model.model_id)}
@@ -700,6 +703,7 @@ function FailedModelsPanel({
           >
             <div className="flex items-start gap-3">
               <input
+                name="has"
                 type="checkbox"
                 checked={selectedIds.has(model.model_id)}
                 onChange={() => onToggleSelect(model.model_id)}
@@ -813,6 +817,7 @@ function FailedModelsPanel({
           <AdminTableHeadRow>
             <AdminTableHeadCell className="w-12">
               <input
+                name="all-loaded-selected"
                 type="checkbox"
                 checked={allLoadedSelected}
                 disabled={items.length === 0 || actionBusy}
@@ -836,6 +841,7 @@ function FailedModelsPanel({
             >
               <td className="px-4 py-3 align-middle">
                 <input
+                  name="has"
                   type="checkbox"
                   checked={selectedIds.has(model.model_id)}
                   onChange={() => onToggleSelect(model.model_id)}
@@ -1873,6 +1879,7 @@ function DesktopContent() {
                     >
                       <div className="flex items-center gap-3 px-4 py-3">
                         <input
+                          name="has"
                           type="checkbox"
                           checked={selectedNames.has(group.name)}
                           onChange={() => toggleSelect(group.name)}
@@ -2003,6 +2010,7 @@ function DesktopContent() {
                             <Icon name="folder_special" size={18} className="shrink-0 text-primary-container" />
                             {editing ? (
                               <input
+                                name="group-name-draft"
                                 value={groupNameDraft}
                                 onChange={(e) => setGroupNameDraft(e.target.value)}
                                 className="min-w-0 flex-1 rounded-sm border border-outline-variant/25 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
@@ -2089,6 +2097,7 @@ function DesktopContent() {
                                     <Link
                                       to={`/model/${model.id}`}
                                       target="_blank"
+                                      rel="noopener"
                                       className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-primary"
                                     >
                                       查看
@@ -2152,6 +2161,7 @@ function DesktopContent() {
                     <AdminTableHeadRow>
                       <AdminTableHeadCell className="w-12">
                         <input
+                          name="all-visible-models-selected"
                           type="checkbox"
                           checked={allVisibleModelsSelected}
                           disabled={visibleModelIds.length === 0}
@@ -2176,6 +2186,7 @@ function DesktopContent() {
                       >
                         <td className="px-4 py-3 align-middle">
                           <input
+                            name="has"
                             type="checkbox"
                             checked={selectedModelIds.has(m.model_id)}
                             onChange={() => toggleSelectModel(m.model_id)}
@@ -2187,6 +2198,7 @@ function DesktopContent() {
                           <Link
                             to={`/model/${m.model_id}`}
                             target="_blank"
+                            rel="noopener"
                             className="flex items-center gap-3 hover:opacity-80 transition-opacity"
                           >
                             <div className="w-10 h-10 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
@@ -2227,6 +2239,7 @@ function DesktopContent() {
                             <Link
                               to={`/model/${m.model_id}`}
                               target="_blank"
+                              rel="noopener"
                               className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-sm transition-colors border border-outline-variant/20"
                             >
                               <Icon name="open_in_new" size={14} />
@@ -3151,6 +3164,7 @@ function MobileContent() {
         {activeTab === 'models' && (
           <div className="grid gap-2">
             <select
+              name="category-filter"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="h-10 rounded-sm border border-outline-variant/30 bg-surface-container-high px-3 text-sm text-on-surface outline-none"
@@ -3298,6 +3312,7 @@ function MobileContent() {
                 <div key={group.name} className="rounded-lg bg-surface-container-high p-3">
                   <div className="flex items-center gap-3">
                     <input
+                      name="has"
                       type="checkbox"
                       checked={selectedNames.has(group.name)}
                       onChange={() => toggleSelect(group.name)}
@@ -3441,6 +3456,7 @@ function MobileContent() {
                       <div className="min-w-0 flex-1">
                         {editing ? (
                           <input
+                            name="group-name-draft"
                             value={groupNameDraft}
                             onChange={(e) => setGroupNameDraft(e.target.value)}
                             className="w-full rounded-sm border border-outline-variant/25 bg-surface-container-lowest px-3 py-2 text-sm font-semibold text-on-surface outline-none focus:border-primary"
@@ -3500,6 +3516,7 @@ function MobileContent() {
                                 <Link
                                   to={`/model/${model.id}`}
                                   target="_blank"
+                                  rel="noopener"
                                   className="h-14 w-14 shrink-0 overflow-hidden rounded bg-surface-container-highest"
                                 >
                                   <ModelThumbnail
@@ -3528,6 +3545,7 @@ function MobileContent() {
                                 <Link
                                   to={`/model/${model.id}`}
                                   target="_blank"
+                                  rel="noopener"
                                   className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant"
                                 >
                                   查看
@@ -3573,6 +3591,7 @@ function MobileContent() {
                 key={m.model_id}
                 to={`/model/${m.model_id}`}
                 target="_blank"
+                rel="noopener"
                 className={`flex items-stretch rounded-lg border border-outline-variant/10 bg-surface-container-high shadow-sm transition-colors hover:bg-surface-container-highest ${
                   selectedModelIds.has(m.model_id) ? 'ring-1 ring-primary-container/40' : ''
                 }`}
@@ -3585,6 +3604,7 @@ function MobileContent() {
                   }}
                 >
                   <input
+                    name="has"
                     type="checkbox"
                     checked={selectedModelIds.has(m.model_id)}
                     onChange={() => toggleSelectModel(m.model_id)}

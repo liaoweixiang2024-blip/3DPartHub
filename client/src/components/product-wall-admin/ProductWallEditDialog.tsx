@@ -65,6 +65,7 @@ export function ProductWallEditDialog({
           <label className="block">
             <span className="text-xs font-medium text-on-surface-variant">标题</span>
             <input
+              name="edit-title"
               value={editTitle}
               onChange={(event) => setEditTitle(event.target.value)}
               className="mt-1 h-10 w-full border-b border-outline-variant/35 bg-transparent text-sm text-on-surface outline-none transition-colors focus:border-primary-container"
@@ -74,6 +75,7 @@ export function ProductWallEditDialog({
           <label className="block">
             <span className="text-xs font-medium text-on-surface-variant">描述</span>
             <textarea
+              name="edit-description"
               value={editDescription}
               onChange={(event) => setEditDescription(event.target.value)}
               rows={3}
@@ -84,6 +86,7 @@ export function ProductWallEditDialog({
           <label className="block">
             <span className="text-xs font-medium text-on-surface-variant">分类</span>
             <select
+              name="edit-kind"
               value={editKind}
               onChange={(event) => setEditKind(event.target.value as ProductWallKind)}
               className="mt-1 h-10 w-full border-b border-outline-variant/35 bg-transparent text-sm text-on-surface outline-none transition-colors focus:border-primary-container"
@@ -98,6 +101,7 @@ export function ProductWallEditDialog({
           <label className="block">
             <span className="text-xs font-medium text-on-surface-variant">标签</span>
             <input
+              name="edit-tags"
               value={editTags}
               onChange={(event) => setEditTags(event.target.value)}
               className="mt-1 h-10 w-full border-b border-outline-variant/35 bg-transparent text-sm text-on-surface outline-none transition-colors focus:border-primary-container"

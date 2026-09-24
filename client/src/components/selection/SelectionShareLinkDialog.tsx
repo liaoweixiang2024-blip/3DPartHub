@@ -48,6 +48,7 @@ export function SelectionShareLinkDialog({
           </button>
         </div>
         <input
+          name="url"
           readOnly
           value={state.url}
           onFocus={(event) => event.currentTarget.select()}

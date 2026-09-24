@@ -279,6 +279,7 @@ export default function ConversionQueuePanel({
             <Link
               to={`/model/${job.model_id}`}
               target="_blank"
+              rel="noopener"
               className="inline-flex items-center justify-center rounded-sm border border-outline-variant/20 p-1 text-on-surface-variant hover:bg-surface-container-high hover:text-primary"
             >
               <Icon name="open_in_new" size={14} />
@@ -584,6 +585,7 @@ export default function ConversionQueuePanel({
                       <Link
                         to={`/model/${detail.model_id}`}
                         target="_blank"
+                        rel="noopener"
                         className="inline-flex items-center gap-1.5 rounded-sm border border-outline-variant/20 px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-primary"
                       >
                         <Icon name="open_in_new" size={14} />

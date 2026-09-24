@@ -2938,24 +2938,28 @@ function StatusListEditor({
           className={`grid grid-cols-1 xl:grid-cols-[1fr_1fr_1fr_1fr_auto_auto] gap-2 ${compactPanelClass}`}
         >
           <input
+            name="value"
             value={item.value}
             onChange={(e) => patch(index, { value: e.target.value })}
             placeholder="状态值，如 submitted"
             className={inputClass}
           />
           <input
+            name="label"
             value={item.label}
             onChange={(e) => patch(index, { label: e.target.value })}
             placeholder="显示名称"
             className={inputClass}
           />
           <input
+            name="color"
             value={item.color || ''}
             onChange={(e) => patch(index, { color: e.target.value })}
             placeholder="文字色 class"
             className={inputClass}
           />
           <input
+            name="bg"
             value={item.bg || ''}
             onChange={(e) => patch(index, { bg: e.target.value })}
             placeholder="背景色 class"
@@ -2964,6 +2968,7 @@ function StatusListEditor({
           <div className="flex items-center gap-3 px-1">
             <label className="flex items-center gap-1.5 text-xs text-on-surface-variant">
               <input
+                name="tab"
                 type="checkbox"
                 checked={item.tab === true}
                 onChange={(e) => patch(index, { tab: e.target.checked })}
@@ -2973,6 +2978,7 @@ function StatusListEditor({
             </label>
             <label className="flex items-center gap-1.5 text-xs text-on-surface-variant">
               <input
+                name="terminal"
                 type="checkbox"
                 checked={item.terminal === true}
                 onChange={(e) => patch(index, { terminal: e.target.checked })}
@@ -3020,24 +3026,28 @@ function ClassificationEditor({
           className={`grid grid-cols-1 xl:grid-cols-[1fr_1fr_1fr_2fr_auto_auto] gap-2 ${compactPanelClass}`}
         >
           <input
+            name="value"
             value={item.value}
             onChange={(e) => patch(index, { value: e.target.value })}
             placeholder="分类值"
             className={inputClass}
           />
           <input
+            name="label"
             value={item.label}
             onChange={(e) => patch(index, { label: e.target.value })}
             placeholder="显示名称"
             className={inputClass}
           />
           <input
+            name="icon"
             value={item.icon}
             onChange={(e) => patch(index, { icon: e.target.value })}
             placeholder="图标名"
             className={inputClass}
           />
           <input
+            name="desc"
             value={item.desc}
             onChange={(e) => patch(index, { desc: e.target.value })}
             placeholder="说明"
@@ -3045,6 +3055,7 @@ function ClassificationEditor({
           />
           <label className="flex items-center gap-1.5 text-xs text-on-surface-variant px-1">
             <input
+              name="enabled"
               type="checkbox"
               checked={item.enabled !== false}
               onChange={(e) => patch(index, { enabled: e.target.checked })}
@@ -3082,18 +3093,21 @@ function SupportStepsEditor({ settings, updateSetting }: { settings: SystemSetti
           className={`grid grid-cols-1 xl:grid-cols-[1fr_1fr_2fr_auto] gap-2 ${compactPanelClass}`}
         >
           <input
+            name="icon"
             value={item.icon}
             onChange={(e) => patch(index, { icon: e.target.value })}
             placeholder="图标名"
             className={inputClass}
           />
           <input
+            name="title"
             value={item.title}
             onChange={(e) => patch(index, { title: e.target.value })}
             placeholder="标题"
             className={inputClass}
           />
           <input
+            name="desc"
             value={item.desc}
             onChange={(e) => patch(index, { desc: e.target.value })}
             placeholder="说明"
@@ -3347,6 +3361,7 @@ function NavItemsEditor({
             <label className="space-y-0.5 xl:hidden">
               <span className="text-[10px] text-on-surface-variant">名称</span>
               <input
+                name="label"
                 value={item.label}
                 onChange={(e) => patch(index, { label: e.target.value })}
                 placeholder="菜单名称"
@@ -3360,6 +3375,7 @@ function NavItemsEditor({
             <label className="space-y-0.5 xl:hidden">
               <span className="text-[10px] text-on-surface-variant">页面路径</span>
               <select
+                name="path"
                 value={item.path}
                 onChange={(e) => patch(index, { path: e.target.value })}
                 className={`${inputClass} truncate`}
@@ -3374,6 +3390,7 @@ function NavItemsEditor({
             </label>
             {/* Desktop inline */}
             <input
+              name="label"
               value={item.label}
               onChange={(e) => patch(index, { label: e.target.value })}
               placeholder="菜单名称"
@@ -3384,6 +3401,7 @@ function NavItemsEditor({
             </div>
             <div className="hidden xl:flex items-center gap-2">
               <select
+                name="path"
                 value={item.path}
                 onChange={(e) => patch(index, { path: e.target.value })}
                 className={`${inputClass} truncate flex-1`}
@@ -3405,6 +3423,7 @@ function NavItemsEditor({
             </div>
             <label className="flex items-center gap-1.5 text-xs text-on-surface-variant px-1">
               <input
+                name="enabled"
                 type="checkbox"
                 checked={item.enabled !== false}
                 onChange={(e) => patch(index, { enabled: e.target.checked })}
@@ -3447,6 +3466,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <label className="space-y-1">
           <span className="text-xs text-on-surface-variant">模型格式</span>
           <input
+            name="join"
             value={policy.modelFormats.join(', ')}
             onChange={(e) => update({ modelFormats: parseCsv(e.target.value) })}
             placeholder="step, stp, iges, igs"
@@ -3456,6 +3476,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <label className="space-y-1">
           <span className="text-xs text-on-surface-variant">模型大小上限 MB</span>
           <input
+            name="model-max-size-mb"
             type="number"
             min={1}
             value={policy.modelMaxSizeMb}
@@ -3466,6 +3487,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <label className="space-y-1">
           <span className="text-xs text-on-surface-variant">分片大小 MB</span>
           <input
+            name="chunk-size-mb"
             type="number"
             min={1}
             value={policy.chunkSizeMb}
@@ -3476,6 +3498,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <label className="space-y-1">
           <span className="text-xs text-on-surface-variant">启用分片阈值 MB</span>
           <input
+            name="chunk-threshold-mb"
             type="number"
             min={1}
             value={policy.chunkThresholdMb}
@@ -3486,6 +3509,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <label className="space-y-1">
           <span className="text-xs text-on-surface-variant">选型图片上限 MB</span>
           <input
+            name="option-image-max-size-mb"
             type="number"
             min={1}
             value={policy.optionImageMaxSizeMb}
@@ -3496,6 +3520,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <label className="space-y-1">
           <span className="text-xs text-on-surface-variant">选型图片 MIME 规则</span>
           <input
+            name="option-image-mime-pattern"
             value={policy.optionImageMimePattern}
             onChange={(e) => update({ optionImageMimePattern: e.target.value })}
             placeholder="image\\/(png|jpe?g|gif|webp)"
@@ -3505,6 +3530,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <label className="space-y-1">
           <span className="text-xs text-on-surface-variant">选型导入文件上限 MB</span>
           <input
+            name="selection-import-max-size-mb"
             type="number"
             min={1}
             value={policy.selectionImportMaxSizeMb}
@@ -3517,6 +3543,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <label className="space-y-1">
           <span className="text-xs text-on-surface-variant">选型单次导入行数</span>
           <input
+            name="selection-import-max-rows"
             type="number"
             min={1}
             value={policy.selectionImportMaxRows}
@@ -3529,6 +3556,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <label className="space-y-1">
           <span className="text-xs text-on-surface-variant">选型导入列数上限</span>
           <input
+            name="selection-import-max-columns"
             type="number"
             min={1}
             value={policy.selectionImportMaxColumns}
@@ -3541,6 +3569,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <label className="space-y-1">
           <span className="text-xs text-on-surface-variant">工单附件上限 MB</span>
           <input
+            name="ticket-attachment-max-size-mb"
             type="number"
             min={1}
             value={policy.ticketAttachmentMaxSizeMb}
@@ -3553,6 +3582,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <label className="space-y-1">
           <span className="text-xs text-on-surface-variant">工单附件格式</span>
           <input
+            name="join"
             value={policy.ticketAttachmentExts.join(', ')}
             onChange={(e) => update({ ticketAttachmentExts: parseCsv(e.target.value) })}
             placeholder=".jpg, .png, .webp"
@@ -3616,6 +3646,7 @@ function PageSizePolicyEditor({
           <label key={field.key} className="space-y-1">
             <span className="text-xs text-on-surface-variant">{field.label}</span>
             <input
+              name="policy"
               type="number"
               min={1}
               value={policy[field.key]}
@@ -3657,6 +3688,7 @@ function ThreadPriorityEditor({
       {rows.map((row, index) => (
         <div key={`${row.prefix}-${index}`} className={`grid grid-cols-[1fr_1fr_auto] gap-2 ${compactPanelClass}`}>
           <input
+            name="prefix"
             value={row.prefix}
             onChange={(e) =>
               updateRows(rows.map((item, i) => (i === index ? { ...item, prefix: e.target.value } : item)))
@@ -3665,6 +3697,7 @@ function ThreadPriorityEditor({
             className={inputClass}
           />
           <input
+            name="rank"
             type="number"
             value={row.rank}
             onChange={(e) =>
@@ -3726,12 +3759,14 @@ function FooterLinksEditor({ settings, updateSetting }: { settings: SystemSettin
               className={`grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] gap-2 ${compactPanelClass}`}
             >
               <input
+                name="label"
                 value={link.label}
                 onChange={(e) => patch(index, { label: e.target.value })}
                 placeholder="链接文字"
                 className={inputClass}
               />
               <input
+                name="url"
                 value={link.url}
                 onChange={(e) => patch(index, { url: e.target.value })}
                 placeholder="/about 或 https://example.com"
@@ -3859,6 +3894,7 @@ function LegalSectionsEditor({
             <label className="block space-y-1.5">
               <span className="text-xs font-medium text-on-surface-variant">章节标题</span>
               <input
+                name="title"
                 value={activeSection.title}
                 onChange={(e) => patch(safeActiveIndex, { title: e.target.value })}
                 placeholder="例如：定义与适用主体"
@@ -3869,6 +3905,7 @@ function LegalSectionsEditor({
             <label className="block space-y-1.5">
               <span className="text-xs font-medium text-on-surface-variant">章节正文</span>
               <textarea
+                name="content"
                 value={activeSection.content}
                 onChange={(e) => patch(safeActiveIndex, { content: e.target.value })}
                 placeholder="每一行或空行会作为前台自然段展示，适合维护正式条款内容。"
@@ -3943,6 +3980,7 @@ function EmailTestPanel({
 
         <div className="grid grid-cols-1 sm:grid-cols-[minmax(220px,320px)_auto] gap-2 xl:ml-auto shrink-0">
           <input
+            name="value"
             type="email"
             value={value}
             onChange={(e) => onChange(e.target.value)}
@@ -4738,6 +4776,7 @@ function EmailTemplatesEditor({
                 <label className="block space-y-1.5">
                   <span className="text-xs font-medium text-on-surface-variant">邮件标题</span>
                   <input
+                    name="subject"
                     value={active.subject}
                     onChange={(e) => patch(resolvedActiveKey, { subject: e.target.value })}
                     className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2.5 border border-outline-variant/20 outline-none focus:border-primary"
@@ -4764,6 +4803,7 @@ function EmailTemplatesEditor({
                 <label className="block space-y-1.5">
                   <span className="text-xs font-medium text-on-surface-variant">HTML 正文</span>
                   <textarea
+                    name="html"
                     value={active.html}
                     onChange={(e) => patch(resolvedActiveKey, { html: e.target.value })}
                     rows={18}
@@ -6158,6 +6198,7 @@ function Content() {
                                       <p className="text-xs text-on-surface-variant mt-0.5">选择要编辑的材质预设方案</p>
                                     </div>
                                     <select
+                                      name="mat-preset-edit"
                                       value={matPresetEdit}
                                       onChange={(e) => setMatPresetEdit(e.target.value as MaterialPresetKey)}
                                       className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
@@ -6200,6 +6241,7 @@ function Content() {
                                               />
                                             )}
                                             <input
+                                              name="text"
                                               type="text"
                                               value={(val as string) || ''}
                                               onChange={(e) => updateSetting(field.key, e.target.value)}
@@ -6207,6 +6249,7 @@ function Content() {
                                               className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
                                             />
                                             <input
+                                              name="color"
                                               type="color"
                                               value={(val as string) || '#000000'}
                                               onChange={(e) => updateSetting(field.key, e.target.value)}
@@ -6233,6 +6276,7 @@ function Content() {
                                             {!isEmpty && (
                                               <div className="flex items-center gap-3">
                                                 <input
+                                                  name="number"
                                                   type="range"
                                                   min={field.min ?? 0}
                                                   max={field.max ?? 1}
@@ -6256,6 +6300,7 @@ function Content() {
                                         ) : (
                                           <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
                                             <input
+                                              name="number"
                                               type="range"
                                               min={field.min ?? 0}
                                               max={field.max ?? 1}
@@ -6439,6 +6484,7 @@ function Content() {
                                                   )}
                                                   <div className="flex items-center gap-2">
                                                     <input
+                                                      name="text"
                                                       ref={(el) => {
                                                         imageInputRefs.current[item.key] = el;
                                                       }}
@@ -6473,6 +6519,7 @@ function Content() {
                                               ) : item.type === 'number' ? (
                                                 <div className="flex items-center gap-2 min-w-0 lg:justify-self-start">
                                                   <input
+                                                    name="settings"
                                                     type="number"
                                                     min={item.min ?? 0}
                                                     max={item.max}
@@ -6494,6 +6541,7 @@ function Content() {
                                               ) : item.type === 'range' ? (
                                                 <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
                                                   <input
+                                                    name="number"
                                                     type="range"
                                                     min={item.min ?? 0}
                                                     max={item.max ?? 1}
@@ -6517,6 +6565,7 @@ function Content() {
                                               ) : item.type === 'textarea' ? (
                                                 <div className="w-full">
                                                   <textarea
+                                                    name="settings"
                                                     value={settings[item.key] as string}
                                                     onChange={(e) => updateSetting(item.key, e.target.value)}
                                                     placeholder={item.desc}
@@ -6526,6 +6575,7 @@ function Content() {
                                                 </div>
                                               ) : item.type === 'select' ? (
                                                 <select
+                                                  name="settings"
                                                   value={settings[item.key] as string}
                                                   onChange={(e) => updateSetting(item.key, e.target.value)}
                                                   className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
@@ -6545,6 +6595,7 @@ function Content() {
                                                     />
                                                   )}
                                                   <input
+                                                    name="settings"
                                                     type="text"
                                                     value={settings[item.key] as string}
                                                     onChange={(e) => updateSetting(item.key, e.target.value)}
@@ -6552,6 +6603,7 @@ function Content() {
                                                     className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
                                                   />
                                                   <input
+                                                    name="color"
                                                     type="color"
                                                     value={(settings[item.key] as string) || '#000000'}
                                                     onChange={(e) => updateSetting(item.key, e.target.value)}
@@ -6560,6 +6612,7 @@ function Content() {
                                                 </div>
                                               ) : (
                                                 <input
+                                                  name="settings"
                                                   type={
                                                     item.key === 'contact_phone'
                                                       ? 'tel'
@@ -6770,6 +6823,7 @@ function Content() {
                                             )}
                                             <div className="flex items-center gap-2">
                                               <input
+                                                name="text"
                                                 ref={(el) => {
                                                   imageInputRefs.current[item.key] = el;
                                                 }}
@@ -6804,6 +6858,7 @@ function Content() {
                                         ) : item.type === 'number' ? (
                                           <div className="flex items-center gap-2 min-w-0 lg:justify-self-start">
                                             <input
+                                              name="settings"
                                               type="number"
                                               min={item.min ?? 0}
                                               max={item.max}
@@ -6825,6 +6880,7 @@ function Content() {
                                         ) : item.type === 'range' ? (
                                           <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
                                             <input
+                                              name="number"
                                               type="range"
                                               min={item.min ?? 0}
                                               max={item.max ?? 1}
@@ -6842,6 +6898,7 @@ function Content() {
                                         ) : item.type === 'textarea' ? (
                                           <div className="w-full">
                                             <textarea
+                                              name="settings"
                                               value={settings[item.key] as string}
                                               onChange={(e) => updateSetting(item.key, e.target.value)}
                                               placeholder={item.desc}
@@ -6871,6 +6928,7 @@ function Content() {
                                           </div>
                                         ) : item.type === 'select' ? (
                                           <select
+                                            name="settings"
                                             value={settings[item.key] as string}
                                             onChange={(e) => updateSetting(item.key, e.target.value)}
                                             className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
@@ -6890,6 +6948,7 @@ function Content() {
                                               />
                                             )}
                                             <input
+                                              name="settings"
                                               type="text"
                                               value={settings[item.key] as string}
                                               onChange={(e) => updateSetting(item.key, e.target.value)}
@@ -6897,6 +6956,7 @@ function Content() {
                                               className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
                                             />
                                             <input
+                                              name="color"
                                               type="color"
                                               value={(settings[item.key] as string) || '#000000'}
                                               onChange={(e) => updateSetting(item.key, e.target.value)}
@@ -6905,6 +6965,7 @@ function Content() {
                                           </div>
                                         ) : (
                                           <input
+                                            name="copyright-input-locked"
                                             type={
                                               item.key === 'contact_phone'
                                                 ? 'tel'
@@ -7168,6 +7229,7 @@ function Content() {
                                       {renamingId === b.id ? (
                                         <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-center">
                                           <input
+                                            name="rename-value"
                                             type="text"
                                             value={renameValue}
                                             onChange={(e) => setRenameValue(e.target.value)}
@@ -7317,6 +7379,7 @@ function Content() {
                                               </p>
                                               <label className="flex items-start gap-2 mt-2 cursor-pointer select-none">
                                                 <input
+                                                  name="restore-force"
                                                   type="checkbox"
                                                   checked={restoreForce}
                                                   onChange={(e) => setRestoreForce(e.target.checked)}
@@ -7371,6 +7434,7 @@ function Content() {
                             </div>
                             <div className="grid grid-cols-2 gap-2 sm:flex">
                               <input
+                                name="file"
                                 ref={backupInputRef}
                                 type="file"
                                 accept=".tar.gz,.tgz,application/gzip,application/x-gzip"
@@ -7892,6 +7956,7 @@ function Content() {
                                       }`}
                                     >
                                       <input
+                                        name="selected"
                                         type="checkbox"
                                         checked={selected}
                                         onChange={() => {

@@ -203,6 +203,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                         )}
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                           <input
+                            id="share-url"
                             type="text"
                             readOnly
                             value={shareUrl}
@@ -288,6 +289,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                           <label className="block text-sm text-on-surface mb-1">{t('shareDialog.downloadLimit')}</label>
                           <div className="flex flex-wrap items-center gap-2">
                             <input
+                              id="share-download-limit"
                               type="number"
                               min={0}
                               max={maxDownloadLimit || undefined}
@@ -324,6 +326,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                           </div>
                           {usePassword && (
                             <input
+                              id="share-password"
                               type="text"
                               value={password}
                               onChange={(e) => setPassword(e.target.value)}

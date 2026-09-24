@@ -360,6 +360,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
             <label className="block">
               <span className="text-xs font-bold text-on-surface-variant">类型</span>
               <select
+                name="kind"
                 value={entryDraft.kind}
                 onChange={(event) =>
                   setEntryDraft((prev: typeof entryDraft) => ({ ...prev, kind: event.target.value as DataTab }))
@@ -375,6 +376,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
             <label className="block">
               <span className="text-xs font-bold text-on-surface-variant">螺纹分类</span>
               <input
+                name="family"
                 value={entryDraft.family}
                 onChange={(event) =>
                   setEntryDraft((prev: typeof entryDraft) => ({ ...prev, family: event.target.value }))
@@ -386,6 +388,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
             <label className="block">
               <span className="text-xs font-bold text-on-surface-variant">管路分类</span>
               <input
+                name="hose-kind"
                 value={entryDraft.hoseKind}
                 onChange={(event) =>
                   setEntryDraft((prev: typeof entryDraft) => ({ ...prev, hoseKind: event.target.value }))
@@ -400,6 +403,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
             <label className="block">
               <span className="text-xs font-bold text-on-surface-variant">规格 / 型号</span>
               <input
+                name="primary"
                 value={entryDraft.primary}
                 onChange={(event) =>
                   setEntryDraft((prev: typeof entryDraft) => ({ ...prev, primary: event.target.value }))
@@ -410,6 +414,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
             <label className="block">
               <span className="text-xs font-bold text-on-surface-variant">分类显示</span>
               <input
+                name="secondary"
                 value={entryDraft.secondary}
                 onChange={(event) =>
                   setEntryDraft((prev: typeof entryDraft) => ({ ...prev, secondary: event.target.value }))
@@ -422,6 +427,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
           <label className="block">
             <span className="text-xs font-bold text-on-surface-variant">关键参数</span>
             <input
+              name="meta"
               value={entryDraft.meta}
               onChange={(event) => setEntryDraft((prev: typeof entryDraft) => ({ ...prev, meta: event.target.value }))}
               className="mt-1 h-10 w-full rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none"
@@ -431,6 +437,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
           <label className="block">
             <span className="text-xs font-bold text-on-surface-variant">说明</span>
             <textarea
+              name="note"
               value={entryDraft.note}
               onChange={(event) => setEntryDraft((prev: typeof entryDraft) => ({ ...prev, note: event.target.value }))}
               rows={3}
@@ -441,6 +448,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
           <label className="block">
             <span className="text-xs font-bold text-on-surface-variant">结构化 JSON</span>
             <textarea
+              name="data-text"
               value={entryDraft.dataText}
               onChange={(event) =>
                 setEntryDraft((prev: typeof entryDraft) => ({ ...prev, dataText: event.target.value }))
@@ -455,6 +463,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
             <label className="block">
               <span className="text-xs font-bold text-on-surface-variant">排序</span>
               <input
+                name="sort-order"
                 type="number"
                 value={entryDraft.sortOrder}
                 onChange={(event) =>
@@ -465,6 +474,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
             </label>
             <label className="inline-flex h-10 items-center gap-2 rounded-lg border border-outline-variant/15 px-3 text-sm text-on-surface-variant">
               <input
+                name="enabled"
                 type="checkbox"
                 checked={entryDraft.enabled}
                 onChange={(event) =>

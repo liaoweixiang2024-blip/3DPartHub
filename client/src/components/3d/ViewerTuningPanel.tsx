@@ -52,6 +52,7 @@ export default function ViewerTuningPanel({
         <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
           <label className="text-[10px] text-on-surface-variant">背景</label>
           <input
+            name="viewer-bg-color"
             value={value.viewer_bg_color}
             onChange={(event) => update('viewer_bg_color', event.target.value)}
             className="w-44 min-w-0 rounded-sm border border-outline-variant/20 bg-surface-container-lowest px-2 py-1 text-[10px] text-on-surface outline-none focus:border-primary"
@@ -59,6 +60,7 @@ export default function ViewerTuningPanel({
           <label className="text-[10px] text-on-surface-variant">材质色</label>
           <div className="flex items-center gap-2">
             <input
+              name="mat-default-color"
               type="color"
               value={value.mat_default_color}
               onChange={(event) => update('mat_default_color', event.target.value)}
@@ -73,6 +75,7 @@ export default function ViewerTuningPanel({
             <div key={field.key} className="grid grid-cols-[52px_1fr_38px] items-center gap-2">
               <label className="text-[10px] text-on-surface-variant">{field.label}</label>
               <input
+                name="number"
                 type="range"
                 min={field.min}
                 max={field.max}

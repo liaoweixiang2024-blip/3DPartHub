@@ -872,7 +872,14 @@ export default function TempViewerPage() {
           onDragLeave={handlePageDragLeave}
           onDrop={handlePageDrop}
         >
-          <input ref={fileInputRef} type="file" accept=".step,.stp" className="hidden" onChange={handleInputChange} />
+          <input
+            name="file"
+            ref={fileInputRef}
+            type="file"
+            accept=".step,.stp"
+            className="hidden"
+            onChange={handleInputChange}
+          />
           {dragOverlay}
           {renderViewer(mobileViewerStyle, '', !mobileSheetExpanded)}
 
@@ -972,7 +979,14 @@ export default function TempViewerPage() {
         onDragLeave={handlePageDragLeave}
         onDrop={handlePageDrop}
       >
-        <input ref={fileInputRef} type="file" accept=".step,.stp" className="hidden" onChange={handleInputChange} />
+        <input
+          name="file"
+          ref={fileInputRef}
+          type="file"
+          accept=".step,.stp"
+          className="hidden"
+          onChange={handleInputChange}
+        />
         {dragOverlay}
         {viewer}
 

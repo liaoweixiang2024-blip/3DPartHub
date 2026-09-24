@@ -99,6 +99,7 @@ function EditModal({ project, onClose, onSaved }: { project: Project; onClose: (
           <div>
             <label className="block text-xs text-on-surface-variant mb-1">{t('projects.name')}</label>
             <input
+              name="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full bg-surface-container-lowest text-on-surface rounded-sm px-3 py-2 border border-outline-variant/30 outline-none focus:border-primary"
@@ -107,6 +108,7 @@ function EditModal({ project, onClose, onSaved }: { project: Project; onClose: (
           <div>
             <label className="block text-xs text-on-surface-variant mb-1">{t('projects.description')}</label>
             <textarea
+              name="desc"
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
               className="w-full bg-surface-container-lowest text-on-surface rounded-sm px-3 py-2 border border-outline-variant/30 outline-none focus:border-primary resize-none h-20"

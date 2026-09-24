@@ -331,6 +331,7 @@ export function ProductWallUploadModal({
         {t('productWall.uploadModal.kindLabel')}
       </span>
       <select
+        name="resolved-kind"
         value={resolvedKind}
         onChange={(event) => setKind(event.target.value)}
         disabled={uploading}
@@ -352,6 +353,7 @@ export function ProductWallUploadModal({
           {t('productWall.uploadDialog.titleLabel')} <span className="text-red-500">*</span>
         </span>
         <input
+          name="title"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           disabled={uploading}
@@ -364,6 +366,7 @@ export function ProductWallUploadModal({
           {t('productWall.uploadDialog.descriptionLabel')} <span className="text-red-500">*</span>
         </span>
         <textarea
+          name="description"
           value={description}
           onChange={(event) => setDescription(event.target.value)}
           rows={3}
@@ -449,6 +452,7 @@ export function ProductWallUploadModal({
                     />
                     {renamingIndex === index ? (
                       <input
+                        name="rename-draft"
                         value={renameDraft}
                         onChange={(event) => setRenameDraft(event.target.value)}
                         onBlur={() => commitRename()}
@@ -514,6 +518,7 @@ export function ProductWallUploadModal({
                   }`}
                 >
                   <input
+                    name="file"
                     ref={addMoreInputRef}
                     type="file"
                     multiple
@@ -595,6 +600,7 @@ export function ProductWallUploadModal({
                 } ${uploading ? 'pointer-events-none opacity-60' : ''}`}
               >
                 <input
+                  name="file"
                   ref={inputRef}
                   type="file"
                   multiple
@@ -626,6 +632,7 @@ export function ProductWallUploadModal({
                 {t('productWall.uploadModal.selectFolder')}
               </button>
               <input
+                name="file"
                 ref={folderInputRef}
                 type="file"
                 multiple

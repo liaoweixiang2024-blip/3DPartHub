@@ -543,13 +543,14 @@ function ChatContent({ ticketId }: { ticketId: string }) {
           </div>
         ) : null}
         <div className="flex items-end gap-1.5">
-          <input ref={fileInputRef} type="file" className="hidden" onChange={handleImageSelect} />
+          <input name="file" ref={fileInputRef} type="file" className="hidden" onChange={handleImageSelect} />
           <QuickReplyChips
             phrases={quickReplyPhrases}
             onPick={handleQuickReply}
             title={isAdmin ? t('ticketDetail.quickReplyAdminTitle') : t('ticketDetail.quickReplyUserTitle')}
           />
           <textarea
+            name="input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onPaste={handleComposerPaste}

@@ -170,6 +170,7 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                   <span className="text-sm text-on-surface-variant">点击选择模型导出包（zip）</span>
                 )}
                 <input
+                  name="file"
                   ref={inputRef}
                   type="file"
                   accept=".zip"
@@ -201,6 +202,7 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-on-surface-variant">统一归类到：</span>
                   <select
+                    name="select"
                     onChange={(e) => setAllCategories(e.target.value === '__none' ? null : e.target.value || null)}
                     value=""
                     className="max-w-[200px] rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-2 py-1 text-xs text-on-surface"
@@ -240,6 +242,7 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                           </span>
                         )}
                         <select
+                          name="value"
                           value={value || ''}
                           onChange={(e) =>
                             setCategoryByIndex((prev) => new Map(prev).set(m.index, e.target.value || null))

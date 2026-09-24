@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { FormHTMLAttributes, InputHTMLAttributes, ReactNode, Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from './Icon';
@@ -34,16 +35,20 @@ export default function SearchField({
   iconSize = 16,
 }: SearchFieldProps) {
   const { t } = useTranslation();
+  const autoInputId = useId();
   const visibleValue = value ?? (typeof inputProps?.value === 'string' ? inputProps.value : '');
   const visibleClearAriaLabel = clearAriaLabel ?? t('topNav.clearSearch');
   const { className: formClassName = '', ...restFormProps } = formProps || {};
+  // 缺省补一个稳定 id：满足浏览器 autofill 对 id/name 的要求（DevTools 表单审计）
+  const { id: inputId, ...restInputProps } = inputProps || {};
   const content: ReactNode = (
     <>
       <Icon name="search" size={iconSize} className="mr-2 shrink-0 text-on-surface-variant" />
       <input
         ref={inputRef}
         type="text"
-        {...inputProps}
+        {...restInputProps}
+        id={inputId ?? autoInputId}
         placeholder={placeholder}
         className={`${SEARCH_INPUT_CLASS} ${inputClassName}`}
       />

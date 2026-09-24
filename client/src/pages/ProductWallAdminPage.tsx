@@ -844,6 +844,7 @@ export default function ProductWallAdminPage() {
                 {t('productWall.management.rejectReasonLabel')}
               </span>
               <textarea
+                name="reject-reason"
                 value={rejectReason}
                 onChange={(event) => setRejectReason(event.target.value)}
                 rows={3}
@@ -912,6 +913,7 @@ export default function ProductWallAdminPage() {
                 {t('productWall.management.categoryNameLabel')}
               </span>
               <input
+                name="category-name-draft"
                 value={categoryNameDraft}
                 onChange={(event) => setCategoryNameDraft(event.target.value)}
                 autoFocus

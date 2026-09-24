@@ -1354,6 +1354,7 @@ export default function SelectionPage() {
                   <div className="flex flex-col sm:flex-row gap-2">
                     <div className="relative flex-1">
                       <input
+                        name="manual-drafts"
                         value={manualDrafts[field] ?? specs[field] ?? ''}
                         onChange={(e) => setManualDrafts((prev) => ({ ...prev, [field]: e.target.value }))}
                         placeholder={colDef?.placeholder || t('selectionPage.manualPlaceholder', { field: fieldLabel })}

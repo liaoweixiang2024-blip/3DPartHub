@@ -165,6 +165,7 @@ export default function ColorSchemeSettings({ settings, updateSetting }: ColorSc
               <div className="flex items-center gap-2">
                 <span className="text-xs text-on-surface-variant">主色调：</span>
                 <input
+                  name="custom-primary"
                   type="color"
                   value={customPrimary}
                   onChange={(event) => setCustomPrimary(event.target.value)}
@@ -214,6 +215,7 @@ export default function ColorSchemeSettings({ settings, updateSetting }: ColorSc
                                 return (
                                   <div key={colorKey} className="flex min-w-0 items-center gap-1.5">
                                     <input
+                                      name="value"
                                       type="color"
                                       value={value || '#888888'}
                                       onChange={(event) => updateCustomColor(mode, colorKey, event.target.value)}
@@ -223,6 +225,7 @@ export default function ColorSchemeSettings({ settings, updateSetting }: ColorSc
                                       {colorKey}
                                     </span>
                                     <input
+                                      name="value"
                                       type="text"
                                       value={value}
                                       onChange={(event) => updateCustomColor(mode, colorKey, event.target.value)}
