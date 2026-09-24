@@ -1,7 +1,7 @@
 {
   "name": "3dparthub-client",
   "private": true,
-  "version": "4.9.6",
+  "version": "4.9.7",
   "type": "module",
   "browserslist": [
     "Edge >= 100",
@@ -13,7 +13,7 @@
   "scripts": {
     "dev": "vite",
     "dev:local": "vite --host 127.0.0.1 --port 5173 --strictPort",
-    "build": "vite build",
+    "build": "vite build && node scripts/strip-static-comments.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.test.json",
     "test": "node --import tsx --test --test-force-exit $(find src -name '*.test.ts')",
     "lint": "eslint .",

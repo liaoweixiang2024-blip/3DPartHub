@@ -11,6 +11,7 @@ import {
   getContactPhone,
   getContactAddress,
 } from '../../lib/publicSettings';
+import { isSafeUrl } from '../../lib/sanitizeHtml';
 import Icon from './Icon';
 
 const HomeFooter = memo(function HomeFooter() {
@@ -83,17 +84,20 @@ const HomeFooter = memo(function HomeFooter() {
                 className="flex max-w-md flex-wrap items-center gap-x-3 gap-y-1 md:justify-end"
               >
                 <span className="text-[10px] font-medium text-on-surface-variant/35">{t('home.footerLinks')}</span>
-                {footerLinks.map((link, i) => (
-                  <a
-                    key={`${link.label}-${i}`}
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] leading-5 text-on-surface-variant/50 underline-offset-4 transition-colors hover:text-primary hover:underline"
-                  >
-                    {link.label}
-                  </a>
-                ))}
+                {footerLinks.map((link, i) =>
+                  // 后台可配的 url 在渲染前校验协议，拦截 javascript: 之类的危险协议
+                  isSafeUrl(link.url) ? (
+                    <a
+                      key={`${link.label}-${i}`}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] leading-5 text-on-surface-variant/50 underline-offset-4 transition-colors hover:text-primary hover:underline"
+                    >
+                      {link.label}
+                    </a>
+                  ) : null,
+                )}
               </nav>
             )}
           </div>

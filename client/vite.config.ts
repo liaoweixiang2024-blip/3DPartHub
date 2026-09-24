@@ -78,8 +78,36 @@ function devHeadFragmentPlugin(): Plugin {
   };
 }
 
+/**
+ * Build-only: strip comments from the emitted index.html so they don't show up in
+ * view-source on production. Vite passes index.html through verbatim — HTML comments
+ * and inline <script> bodies (not bundled, not minified) keep every source comment.
+ * SSI directives (<!--# ... -->) are preserved: nginx executes them at serve time.
+ * Source comments stay in index.html for developers; only the artifact is cleaned.
+ */
+function stripIndexHtmlCommentsPlugin(): Plugin {
+  return {
+    name: 'strip-index-html-comments',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        return html
+          // 1) HTML 注释（负向前瞻保住 <!--# SSI 指令；只吞掉紧跟的一个换行，保留后续行自身缩进）
+          .replace(/[ \t]*<!--(?!#)[\s\S]*?-->\n?/g, '')
+          // 2) 内联 <script>（无 src，不参与打包压缩）里的整行 // 注释；
+          //    只匹配行首缩进后的 //，不会误伤字符串里的 "//"
+          .replace(/(<script(?![^>]*\bsrc\b)[^>]*>)([\s\S]*?)(<\/script>)/g, (_m, open: string, body: string, close: string) => {
+            const cleaned = body.replace(/^[ \t]*\/\/[^\n]*$\n?/gm, '');
+            return `${open}${cleaned}${close}`;
+          });
+      },
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), devHeadFragmentPlugin()],
+  plugins: [react(), tailwindcss(), devHeadFragmentPlugin(), stripIndexHtmlCommentsPlugin()],
   assetsInclude: ['**/*.wasm'],
   build: {
     sourcemap: false,

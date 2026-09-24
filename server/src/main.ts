@@ -15,6 +15,7 @@ import { getAllSettings, getSetting, initDefaultSettings } from './lib/settings.
 import { cloudFirstStatic } from './lib/staticServe.js';
 import { logStorageMode } from './lib/storageProvider.js';
 import { getVerifiedRequestUser } from './middleware/auth.js';
+import { requireBrowseAccess } from './middleware/browseAccess.js';
 import { autoAudit } from './middleware/autoAudit.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { ipGuard } from './middleware/ipGuard.js';
@@ -93,8 +94,10 @@ app.use(
   }),
 );
 
-// Trust nginx proxy — needed for express-rate-limit with X-Forwarded-For
-app.set('trust proxy', 1);
+// Trust nginx proxy — needed for express-rate-limit with X-Forwarded-For.
+// 可用 TRUST_PROXY=0 关闭：若应用端口绕过 nginx 直连公网，固定信任 1 跳会让
+// 攻击者伪造 X-Forwarded-For 为每个请求换个 req.ip，绕过全部按 IP 的限流与锁定
+app.set('trust proxy', process.env.TRUST_PROXY === '0' ? false : 1);
 
 // Response compression (filter out small responses already compressed by nginx)
 app.use(compression({ threshold: 512 }));
@@ -225,6 +228,8 @@ app.use('/api/models/upload', uploadLimiter);
 app.use('/api/temp-preview/upload', uploadLimiter);
 app.use('/api/upload', uploadLimiter);
 app.use('/api/batch', uploadLimiter);
+// 用户投稿型上传（非管理员走审核流）也要限流，不能只靠全站 apiLimiter
+app.use('/api/product-wall/upload', uploadLimiter);
 app.get('/api/models', searchLimiter);
 app.get('/api/search', searchLimiter);
 app.post('/api/downloads/model-token', tokenGenLimiter);
@@ -384,6 +389,8 @@ app.use(batchDownloadsRouter);
 // Model count — must be registered before modelsRouter to avoid /api/models/:id catching "count"
 app.get('/api/models/count', async (req, res) => {
   try {
+    // 与 /api/models 同一道浏览门槛：未登录浏览开关开启时匿名不可探测模型总量
+    if (!(await requireBrowseAccess(req, res))) return;
     const { cacheGetOrSet, TTL, resolveCacheTtl } = await import('./lib/cache.js');
     const mod = await import('./lib/prisma.js');
     const { MODEL_STATUS } = await import('./services/modelStatus.js');

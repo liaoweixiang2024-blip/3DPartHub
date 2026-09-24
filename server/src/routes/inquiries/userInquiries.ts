@@ -574,6 +574,20 @@ export function createUserInquiriesRouter() {
     //（降级/禁用后旧 token 仍带着 ADMIN 字样会绕过下面的属主检查）
     let userId = tokenPayload?.userId ?? null;
     let role = tokenPayload?.role ?? null;
+    if (tokenPayload) {
+      // download_token 分支同理：token 里的 role/账号状态是签发时快照（TTL 5 分钟），
+      // 降级/禁用后的旧 token 不得继续凭 ADMIN 快照通过属主检查——以查库为准
+      const snapshot = await prisma.user.findUnique({
+        where: { id: tokenPayload.userId },
+        select: { role: true, disabled: true },
+      });
+      if (!snapshot || snapshot.disabled) {
+        userId = null;
+        role = null;
+      } else {
+        role = snapshot.role;
+      }
+    }
     if (!userId) {
       try {
         const verified = await getVerifiedRequestUser(req);

@@ -50,7 +50,11 @@ function parseIds(value: unknown): string[] {
 
 function escapeCsvField(value: unknown): string {
   const str = value == null ? '' : String(value);
-  return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  // 公式注入防护：= + - @ Tab CR 开头的值在 Excel 里会当公式执行（用户把「公司」设成
+  // =HYPERLINK(...) 或 =cmd|... 时，管理员打开导出表即中招）——前置单引号强制为文本，
+  // 与客户端 safeSpreadsheetText 策略一致
+  const guarded = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+  return /[",\n\r]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded;
 }
 
 function nowSeconds(): number {

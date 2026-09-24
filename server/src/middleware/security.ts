@@ -104,7 +104,7 @@ async function shouldSkipForAuthenticatedAdmin(req: Request) {
   }
 }
 
-function createLimiter(prefix: string, options: LimiterOptions) {
+export function createLimiter(prefix: string, options: LimiterOptions) {
   const { skipAuthenticatedAdmin = false, skip, ...rateLimitOptions } = options;
 
   return rateLimit({

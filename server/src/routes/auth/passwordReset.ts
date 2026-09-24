@@ -7,6 +7,7 @@ import {
   consumePasswordResetToken,
 } from '../../lib/captcha.js';
 import { sendPasswordResetEmail } from '../../lib/email.js';
+import { revokeAllTokensBefore } from '../../lib/jwt.js';
 import { logger } from '../../lib/logger.js';
 import { hashPassword } from '../../lib/password.js';
 import { prisma } from '../../lib/prisma.js';
@@ -126,6 +127,9 @@ export function createPasswordResetRouter() {
       where: { id: userId },
       data: { passwordHash, mustChangePassword: false },
     });
+    // 与「个人设置改密码」策略一致：重置成功即吊销该用户全部既有令牌——
+    // 否则攻击者若已偷到会话 cookie，受害者重置密码也踢不掉他
+    await revokeAllTokensBefore(userId, Math.floor(Date.now() / 1000) + 1);
 
     res.json({ message: '密码重置成功' });
   });

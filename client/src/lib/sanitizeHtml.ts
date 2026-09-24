@@ -150,7 +150,7 @@ function sanitizeStyle(value: string): string {
     .join('; ');
 }
 
-function isSafeUrl(value: string): boolean {
+export function isSafeUrl(value: string): boolean {
   const trimmed = Array.from(value.trim())
     .filter((char) => {
       const code = char.charCodeAt(0);

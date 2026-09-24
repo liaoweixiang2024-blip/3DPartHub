@@ -16,6 +16,7 @@ import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getUsernamePolicy, validateRegisterUsername } from '../lib/authValidation';
 import { getErrorMessage } from '../lib/errorNotifications';
 import { useResolvedPublicInterfaceTheme } from '../lib/interfaceThemePreference';
+import { isSameSitePath } from '../lib/modelReturnPath';
 import { useFeatureFlags, usePublicSettings } from '../lib/publicSettings';
 import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -62,9 +63,12 @@ export default function LoginPage() {
   const [apiError, setApiError] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  // 回跳来源优先级：路由 state.from > ?redirect= 查询参数（全局 401 拦截器跳转时携带）> 首页
-  const from =
-    (location.state as LoginLocationState | null)?.from || new URLSearchParams(location.search).get('redirect') || '/';
+  // 回跳来源优先级：路由 state.from > ?redirect= 查询参数（全局 401 拦截器跳转时携带）> 首页。
+  // redirect 来自 URL query，任何人都可构造 /login?redirect=https://evil.com —— 必须过
+  // 站内路径白名单（以 / 开头且非 // 与 /\ 开头），否则登录成功即开放重定向
+  const stateFrom = (location.state as LoginLocationState | null)?.from;
+  const redirectQuery = new URLSearchParams(location.search).get('redirect');
+  const from = [stateFrom, redirectQuery].find((value) => value && isSameSitePath(value)) || '/';
   const login = useAuthStore((s) => s.login);
   const [allowRegister, setAllowRegister] = useState(true);
   const isDesktop = useMediaQuery('(min-width: 768px)');

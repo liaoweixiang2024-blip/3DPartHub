@@ -34,6 +34,8 @@ export function normalizeArchiveEntryLine(line: string): string | null {
 export function isUnsafeBackupArchiveEntry(entry: string): boolean {
   const normalized = entry.trim().replace(/\\/g, '/').replace(/^\.\//, '');
   if (!normalized || normalized.includes('\0')) return true;
+  // 参数注入：条目名以 - 开头会被 tar 当作选项解析（如 --checkpoint / --use-compress-program）
+  if (normalized.startsWith('-')) return true;
   if (normalized.startsWith('/') || /^[a-zA-Z]:\//.test(normalized) || isAbsolute(normalized)) return true;
   return normalized.split('/').some((part) => part === '..');
 }

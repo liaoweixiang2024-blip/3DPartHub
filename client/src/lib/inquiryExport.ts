@@ -10,7 +10,8 @@ function formatExportTimestamp() {
 
 function safeSpreadsheetText(value: unknown) {
   const text = String(value ?? '');
-  return /^[=+\-@]/.test(text) ? `'${text}` : text;
+  // OWASP 公式注入前缀全集：= + - @ 以及 Tab/CR 开头同样会被 Excel 当公式/引用解析
+  return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
 }
 
 function formatDateTime(value?: string | null) {

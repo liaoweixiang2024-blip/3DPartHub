@@ -24,7 +24,11 @@ function escapeHtml(value: unknown): string {
 }
 
 function renderTemplate(source: string, vars: TemplateVars): string {
-  return source.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_match, key: string) => escapeHtml(vars[key]));
+  // 变量统一先剥换行再转义：该函数同时渲染 subject（邮件头），CRLF 一旦进入即头注入
+  // （当前模板变量暂无换行需求，未来加用户文本变量也天然免疫）
+  return source.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_match, key: string) =>
+    escapeHtml(String(vars[key] ?? '').replace(/[\r\n]+/g, ' ')),
+  );
 }
 
 function normalizeSiteUrl(value: unknown): string {

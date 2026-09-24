@@ -5,6 +5,7 @@ import type { ColumnDef, SelectionProduct, SelectionComponent } from '../../api/
 import { openDocumentUrl } from '../../lib/browserDownload';
 import { copyText } from '../../lib/clipboard';
 import { downloadKitList, formatKitList } from '../../lib/kitList';
+import { isSafeUrl } from '../../lib/sanitizeHtml';
 import Icon from '../shared/Icon';
 import SafeImage from '../shared/SafeImage';
 import { useToast } from '../shared/Toast';
@@ -43,7 +44,10 @@ export function ResultCard({
   const { t } = useTranslation();
   const comps = (product.isKit && product.components ? product.components : []) as SelectionComponent[];
   const specCols = columns.filter((c) => !c.hideInResults);
-  const catalogPdf = product.categoryCatalogPdf;
+  // 服务端配置的 PDF/目录 URL 进 iframe src / 新窗口 document.write 前统一过协议白名单，
+  // 不安全的（javascript:/data: 等）一律按不存在处理
+  const catalogPdf =
+    product.categoryCatalogPdf && isSafeUrl(product.categoryCatalogPdf) ? product.categoryCatalogPdf : null;
   const isCatalogImage = catalogPdf && /\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(catalogPdf);
   const [showCatalog, setShowCatalog] = useState(true);
   const { toast } = useToast();
@@ -236,14 +240,14 @@ export function ResultCard({
             <span>{selected ? t('selectionResult.addedInquiry') : t('selectionResult.addInquiry')}</span>
           </button>
         )}
-        {product.categoryCatalogPdf && (
+        {catalogPdf && (
           <a
-            href={product.categoryCatalogPdf}
+            href={catalogPdf}
             target="_blank"
             rel="noopener"
             onClick={(event) => {
               event.preventDefault();
-              openDocumentUrl(product.categoryCatalogPdf!, { title: t('selectionResult.productCatalog') });
+              openDocumentUrl(catalogPdf, { title: t('selectionResult.productCatalog') });
             }}
             className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
           >
@@ -251,7 +255,7 @@ export function ResultCard({
             <span>{t('selectionResult.catalog')}</span>
           </a>
         )}
-        {product.pdfUrl && (
+        {product.pdfUrl && isSafeUrl(product.pdfUrl) && (
           <a
             href={product.pdfUrl}
             target="_blank"

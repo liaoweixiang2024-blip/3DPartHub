@@ -3755,7 +3755,7 @@ async function inspectBackupArchive(id: string, archive: string, originalName: s
       const metaLocations = ['_backup_db/meta.json', 'meta.json'];
       for (const loc of metaLocations) {
         try {
-          execFileSync('tar', ['xzf', readableArchive, '-C', tmpDir, loc], {
+          execFileSync('tar', ['xzf', readableArchive, '-C', tmpDir, '--', loc], {
             stdio: 'pipe',
             timeout: ARCHIVE_META_TIMEOUT_MS,
           });
@@ -4979,7 +4979,7 @@ async function validatePlainBackupArchive(
 
 function readArchiveManifest(archive: string): BackupManifest | null {
   try {
-    const raw = execFileSync('tar', ['xOzf', archive, BACKUP_MANIFEST_ENTRY], {
+    const raw = execFileSync('tar', ['xOzf', archive, '--', BACKUP_MANIFEST_ENTRY], {
       stdio: 'pipe',
       timeout: ARCHIVE_META_TIMEOUT_MS,
       // manifest 含备份包全部文件清单，大备份包（上万文件）序列化后远超默认 1MB
@@ -5001,7 +5001,7 @@ async function inspectArchiveDatabase(
   return new Promise((resolve, reject) => {
     const hash = createHash('sha256');
     let size = 0;
-    const proc = spawn('tar', ['xOzf', archive, databaseEntry], { timeout: ARCHIVE_META_TIMEOUT_MS });
+    const proc = spawn('tar', ['xOzf', archive, '--', databaseEntry], { timeout: ARCHIVE_META_TIMEOUT_MS });
     let stderr = '';
     const failTimer = setTimeout(() => {
       proc.kill('SIGKILL');
@@ -6022,7 +6022,8 @@ async function extractMultipleArchiveEntries(archive: string, destination: strin
   if (entries.length === 0) return;
 
   return new Promise((resolve, reject) => {
-    const args = ['xzf', archive, '-C', destination, ...entries];
+    // '--' 终止选项解析：条目名即使以 - 开头也不会被 tar 当作选项（参数注入）
+    const args = ['xzf', archive, '-C', destination, '--', ...entries];
     const proc = spawn('tar', args, { timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
     let stderr = '';
     proc.stderr?.on('data', (chunk: Buffer) => {
@@ -6041,7 +6042,7 @@ async function extractMultipleArchiveEntries(archive: string, destination: strin
 
 function extractArchiveEntryAsync(archive: string, destination: string, entry: string): Promise<boolean> {
   try {
-    execFileSync('tar', ['xzf', archive, '-C', destination, entry], {
+    execFileSync('tar', ['xzf', archive, '-C', destination, '--', entry], {
       stdio: 'pipe',
       timeout: ARCHIVE_EXTRACT_TIMEOUT_MS,
     });
@@ -6227,7 +6228,7 @@ function extractCommandError(err: unknown): string {
 
 function extractArchiveEntry(archive: string, destination: string, entry: string): boolean {
   try {
-    execFileSync('tar', ['xzf', archive, '-C', destination, entry], {
+    execFileSync('tar', ['xzf', archive, '-C', destination, '--', entry], {
       stdio: 'pipe',
       timeout: ARCHIVE_EXTRACT_TIMEOUT_MS,
     });
@@ -6245,7 +6246,7 @@ function isArchiveEntryMissing(err: unknown): boolean {
 
 function archiveContainsEntry(archive: string, entry: string): boolean {
   try {
-    execFileSync('tar', ['tzf', archive, entry], {
+    execFileSync('tar', ['tzf', archive, '--', entry], {
       stdio: 'pipe',
       timeout: ARCHIVE_LIST_TIMEOUT_MS,
     });

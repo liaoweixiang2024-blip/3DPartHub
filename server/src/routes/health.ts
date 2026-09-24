@@ -9,6 +9,7 @@ import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { conversionQueue } from '../lib/queue.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { createLimiter } from '../middleware/security.js';
 import { requireRole } from '../middleware/rbac.js';
 
 const router = Router();
@@ -153,15 +154,24 @@ router.get('/api/health/deep', authMiddleware, requireRole('ADMIN'), async (_req
   });
 });
 
-router.post('/api/health/web-vitals', express.json(), (req, res) => {
-  const metric = req.body;
-  if (metric?.name && typeof metric.value === 'number') {
+// 匿名上报端点：必须有专属限流和字段白名单，否则可被用来灌日志/注入任意日志字段
+const WEB_VITAL_NAMES = new Set(['CLS', 'FCP', 'INP', 'LCP', 'TTFB']);
+const webVitalsLimiter = createLimiter('web-vitals', {
+  windowMs: 60 * 1000,
+  limit: 60,
+  max: 60,
+  message: { detail: '上报过于频繁' },
+});
+
+router.post('/api/health/web-vitals', webVitalsLimiter, express.json({ limit: '4kb' }), (req, res) => {
+  const metric = req.body as { name?: unknown; value?: unknown; rating?: unknown; url?: unknown };
+  if (typeof metric?.name === 'string' && WEB_VITAL_NAMES.has(metric.name) && Number.isFinite(metric.value)) {
     logger.info(
       {
         webVital: metric.name,
-        value: metric.value,
-        rating: metric.rating,
-        url: metric.url,
+        value: metric.value as number,
+        rating: typeof metric.rating === 'string' ? metric.rating.slice(0, 24) : undefined,
+        url: typeof metric.url === 'string' ? metric.url.slice(0, 200) : undefined,
       },
       'Web Vitals metric received',
     );
