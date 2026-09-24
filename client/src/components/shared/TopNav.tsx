@@ -58,6 +58,7 @@ import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry'
 import BrandMark from './BrandMark';
 import { useBrowseGate } from './BrowseLoginLock';
 import Icon from './Icon';
+import PasswordChangeDialog from './PasswordChangeDialog';
 import { loadNotificationPanel, scheduleNotificationPanelPreload } from './preloadNotificationPanel';
 import { checkProtectedAccess } from './ProtectedLink';
 import SearchField from './SearchField';
@@ -236,12 +237,11 @@ function UserMenu({
   const userMenuButtonClass = `top-nav-user-menu-button flex items-center gap-2 cursor-pointer ${compactButtonClass} ${
     isCompact ? '' : 'ml-2'
   }`;
-  // 悬停开合只绑定给真正能悬停的指针：触屏点击会先派发合成 mouseenter 再 click，
-  // 若同时绑 hover + click 切换，菜单会被「开了又立刻关上」，触屏端永远打不开
-  const canHover = useMediaQuery('(hover: hover) and (pointer: fine)');
+  // 修改密码：从菜单原地弹窗（portal 渲染），不跳页
+  const [pwdOpen, setPwdOpen] = useState(false);
 
   const featureFlags = useFeatureFlags();
-  const menuItems = [
+  const menuItems: Array<{ label: string; icon: string; path: string; action?: () => void }> = [
     {
       label: t('nav.profile'),
       icon: 'person',
@@ -251,7 +251,8 @@ function UserMenu({
     {
       label: t('auth.changePassword'),
       icon: 'lock',
-      path: '/profile?tab=security',
+      path: '/profile?tab=security', // 仅供路由预加载；点击走 action 原地弹窗
+      action: () => setPwdOpen(true),
     },
     ...(featureFlags.downloads ? [{ label: t('nav.downloads'), icon: 'download', path: '/downloads' }] : []),
     ...(featureFlags.shares ? [{ label: t('nav.myShares'), icon: 'share', path: '/my-shares' }] : []),
@@ -275,12 +276,19 @@ function UserMenu({
     );
   }
 
+  // 悬停开合只认真实鼠标（pointerenter 自带 pointerType）：触屏点击派发的是 'touch'，
+  // 不触发 hover 开合（否则会被随后的 click 切换立即关上）；触摸屏为主指针的设备上
+  // 媒体查询 (hover:hover) 不可靠，按事件来源判断则插鼠标 hover 照常工作
   return (
     <div
       className="top-nav-user-menu relative"
       ref={ref}
-      onMouseEnter={canHover ? () => setOpen(true) : undefined}
-      onMouseLeave={canHover ? () => setOpen(false) : undefined}
+      onPointerEnter={(e) => {
+        if (e.pointerType === 'mouse') setOpen(true);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === 'mouse') setOpen(false);
+      }}
     >
       <button
         onClick={() => setOpen(!open)}
@@ -317,6 +325,10 @@ function UserMenu({
                   key={item.label}
                   onClick={() => {
                     setOpen(false);
+                    if (item.action) {
+                      item.action();
+                      return;
+                    }
                     const result = checkProtectedAccess(item.path, settings);
                     if (result.action === 'dialog') {
                       onLoginRequired(result.reason, result.returnUrl);
@@ -362,6 +374,8 @@ function UserMenu({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
     </div>
   );
 }
