@@ -100,19 +100,19 @@ export default function ThreadSizeResults({
   return (
     <div
       key={`${showInitialDataLoading ? 'loading' : showGuide ? 'guide' : visibleTab}:${showMeasurementResults ? 'measurement' : showDataError ? 'error' : showDatabaseEmpty ? 'database-empty' : showNoResults ? 'empty' : 'results'}`}
-      className="admin-tab-panel min-h-0 flex-1 overflow-hidden"
+      className="admin-tab-panel"
     >
       {showInitialDataLoading && (
-        <section className="flex h-full min-h-[320px]">
-          <div className="flex h-full w-full items-center justify-center">
+        <section className="flex min-h-[320px]">
+          <div className="flex w-full items-center justify-center">
             <span className="text-xs text-on-surface-variant/60">{t('threadSize.loadingDots')}</span>
           </div>
         </section>
       )}
 
       {!showInitialDataLoading && showGuide && (
-        <section className="h-full overflow-y-auto overflow-x-hidden md:overflow-hidden">
-          <div className="grid min-h-full gap-2 md:h-full md:min-h-0 md:grid-rows-[auto_minmax(0,1fr)] md:gap-3">
+        <section>
+          <div className="grid gap-2 md:gap-3">
             <div className="rounded-xl border border-outline-variant/12 bg-surface-container-low p-3 md:p-4">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-container/70">
                 {t('threadSize.guide.eyebrow')}
@@ -136,7 +136,7 @@ export default function ThreadSizeResults({
               </div>
             </div>
 
-            <div className="grid min-h-0 grid-cols-1 items-start gap-2 min-[390px]:grid-cols-2 md:grid-cols-4 md:gap-3">
+            <div className="grid grid-cols-1 items-start gap-2 min-[390px]:grid-cols-2 md:grid-cols-4 md:gap-3">
               {guideGroups.map((group) => (
                 <div
                   key={group.title}
@@ -173,7 +173,7 @@ export default function ThreadSizeResults({
 
       {/* ── Measurement Results ── */}
       {!showInitialDataLoading && showMeasurementResults && (
-        <section className="h-full">
+        <section>
           <div className={TABLE_CARD}>
             <div className={TABLE_HEADER}>
               <div className="min-w-0 flex-1">
@@ -271,7 +271,7 @@ export default function ThreadSizeResults({
 
       {/* ── Thread Results ── */}
       {!showInitialDataLoading && showTechnicalResults && visibleTab === 'thread' && (
-        <section className="h-full">
+        <section>
           <div className={TABLE_CARD}>
             <ThreadTableScroll>
               <table className={`${TABLE_BASE} min-w-[1260px]`}>
@@ -319,7 +319,7 @@ export default function ThreadSizeResults({
 
       {/* ── Pipe Results ── */}
       {!showInitialDataLoading && showTechnicalResults && visibleTab === 'pipe' && (
-        <section className="h-full">
+        <section>
           <div className={TABLE_CARD}>
             <ThreadTableScroll>
               <table className={`${TABLE_BASE} min-w-[760px]`}>
@@ -357,7 +357,7 @@ export default function ThreadSizeResults({
 
       {/* ── Hose Results ── */}
       {!showInitialDataLoading && showTechnicalResults && visibleTab === 'hose' && (
-        <section className="h-full">
+        <section>
           <div className={TABLE_CARD}>
             <ThreadTableScroll>
               <table className={`${TABLE_BASE} min-w-[1180px]`}>
@@ -411,7 +411,7 @@ export default function ThreadSizeResults({
 
       {/* ── Fitting Results ── */}
       {!showInitialDataLoading && showTechnicalResults && visibleTab === 'fitting' && (
-        <section className="h-full">
+        <section>
           <div className={TABLE_CARD}>
             <ThreadTableScroll>
               <table className={`${TABLE_BASE} min-w-[1320px]`}>
@@ -462,7 +462,7 @@ export default function ThreadSizeResults({
 
       {/* ── Database Status ── */}
       {!showInitialDataLoading && (showDataError || showDatabaseEmpty) && (
-        <section className="flex h-full items-center justify-center overflow-y-auto px-4 py-10 text-center">
+        <section className="flex min-h-[360px] items-center justify-center px-4 py-10 text-center">
           <div className="max-w-sm">
             <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center text-on-surface-variant/35">
               <Icon name={showDataError ? 'error' : 'database'} size={30} />
@@ -481,7 +481,7 @@ export default function ThreadSizeResults({
 
       {/* ── No Results ── */}
       {!showInitialDataLoading && showNoResults && (
-        <section className="flex h-full items-center justify-center overflow-y-auto px-4 py-10 text-center">
+        <section className="flex min-h-[360px] items-center justify-center px-4 py-10 text-center">
           <div className="max-w-sm">
             <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center text-on-surface-variant/35">
               <Icon name="search_off" size={30} />

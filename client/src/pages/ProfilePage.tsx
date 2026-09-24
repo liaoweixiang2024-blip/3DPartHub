@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
 import { authApi } from '../api/auth';
 import { listShares, type ShareLink } from '../api/shares';
@@ -687,6 +687,13 @@ function DesktopContent() {
   const [pwdOpen, setPwdOpen] = useState(false);
   const [emailChangeOpen, setEmailChangeOpen] = useState(false);
   const [usernameError, setUsernameError] = useState<string | undefined>(undefined);
+  // 顶栏用户菜单「修改密码」入口：/profile?tab=security → 直接弹修改密码弹窗
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('tab') !== 'security') return;
+    setPwdOpen(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -1029,6 +1036,8 @@ function DesktopContent() {
           <NotificationPrefs />
         </section>
       </div>
+      {/* 弹窗须留在 PageBody 内（PageBody 承接壳层内容宽度约束；
+          PageBody 动画终态已是 transform: none，不会影响 fixed 弹窗全屏定位） */}
       <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
       <EmailChangeDialog
         open={emailChangeOpen}
@@ -1048,6 +1057,13 @@ function MobileContent() {
   const featureFlags = useFeatureFlags();
   const [pwdOpen, setPwdOpen] = useState(false);
   const [emailChangeOpen, setEmailChangeOpen] = useState(false);
+  // 顶栏用户菜单「修改密码」入口：/profile?tab=security → 直接弹修改密码弹窗
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('tab') !== 'security') return;
+    setPwdOpen(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -1087,7 +1103,10 @@ function MobileContent() {
       toast(t('profile.phoneInvalid'), 'error');
       return;
     }
-    const payload = { ...formData, phone: normalizePhone(formData.phone) };
+    // 邮箱不随资料保存修改（换绑走独立的两步验证流程），payload 里剔除
+    const { email: _ignoredEmail, ...rest } = formData;
+    void _ignoredEmail;
+    const payload = { ...rest, phone: normalizePhone(formData.phone) };
     setSaving(true);
     try {
       const updated = await authApi.updateProfile(payload);
@@ -1216,13 +1235,15 @@ function MobileContent() {
               <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
                 {t('profile.email')}
               </label>
+              {/* 邮箱是登录凭证，不随资料保存修改（服务端忽略 email 字段）——换绑走下方「换绑邮箱」两步验证流程 */}
               <input
                 name="email"
                 value={formData.email}
-                onChange={handleFieldChange}
-                className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
+                readOnly
+                className="w-full bg-surface-container-lowest/60 text-on-surface-variant border border-outline-variant/30 px-3 py-2 text-sm rounded-md cursor-default select-text"
                 type="email"
               />
+              <span className="text-[10px] text-on-surface-variant/50">{t('profile.emailReadonlyHint')}</span>
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
@@ -1269,13 +1290,10 @@ function MobileContent() {
               <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
                 {t('profile.address')}
               </label>
-              <input
-                name="address"
-                value={formData.address}
-                onChange={handleFieldChange}
-                className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
-                type="text"
-                placeholder={t('profile.addressPlaceholder')}
+              {/* 与桌面端/注册页同款省市区三级联动；回显已有地址（老数据反查不出时保留在详细框） */}
+              <RegionSelect
+                initialAddress={formData.address}
+                onChange={(value) => setFormData((prev) => ({ ...prev, address: value }))}
               />
             </div>
             <div className="flex flex-col gap-1">
@@ -1366,6 +1384,21 @@ function MobileContent() {
           <Icon name="chevron_right" size={20} className="text-on-surface/30" />
         </button>
 
+        {/* Email rebinding (与桌面端同款两步验证流程) */}
+        <button
+          onClick={() => setEmailChangeOpen(true)}
+          className="w-full flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3 text-left"
+        >
+          <div className="flex shrink-0 items-center gap-3">
+            <Icon name="sync_alt" size={20} className="text-on-surface/50" />
+            <span className="text-sm text-on-surface">{t('profile.emailChange')}</span>
+          </div>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-xs text-on-surface-variant">{user?.email || '-'}</span>
+            <Icon name="chevron_right" size={20} className="shrink-0 text-on-surface/30" />
+          </div>
+        </button>
+
         {/* My Inquiries */}
         {featureFlags.inquiry && (
           <button
@@ -1388,6 +1421,7 @@ function MobileContent() {
         {/* My shares */}
         {featureFlags.shares && <MobileSharesMenu />}
 
+        {/* 弹窗留在 PageBody 内即可全屏定位（动画终态 transform: none，不再产生包含块） */}
         <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
         <EmailChangeDialog
           open={emailChangeOpen}

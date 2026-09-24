@@ -23,6 +23,8 @@ interface AdminManagementPageProps {
   toolbar?: ReactNode;
   /** 工具栏吸顶：内容滚动时固定在顶部（如前台图库的分类筛选行） */
   toolbarSticky?: boolean;
+  /** 标题卡+工具栏整块吸顶：滚动时标题不消失，与菜单一起冻结（如螺纹工具页） */
+  headerSticky?: boolean;
   children: ReactNode;
   className?: string;
   contentClassName?: string;
@@ -279,31 +281,54 @@ export function AdminManagementPage({
   stats,
   toolbar,
   toolbarSticky,
+  headerSticky,
   children,
   className,
   contentClassName,
 }: AdminManagementPageProps) {
+  const heroNode = (
+    <AdminPageHero
+      title={title}
+      meta={meta}
+      description={description}
+      actions={actions}
+      headerNavigation={headerNavigation}
+      stats={stats}
+    />
+  );
+  const statsNode = stats?.length ? <AdminStatsGrid stats={stats} /> : null;
+  const toolbarNode = toolbar ? (
+    <AdminToolbar className={toolbarSticky ? 'sticky top-0 z-20 !rounded-t-none shadow-sm' : undefined}>
+      {toolbar}
+    </AdminToolbar>
+  ) : null;
+
   return (
     <div
-      style={toolbarSticky ? { height: 'auto', flexShrink: 0 } : undefined}
+      style={toolbarSticky || headerSticky ? { height: 'auto', flexShrink: 0 } : undefined}
       className={['app-page flex h-full min-h-0 flex-col gap-3 md:gap-4', className].filter(Boolean).join(' ')}
     >
-      <AdminPageHero
-        title={title}
-        meta={meta}
-        description={description}
-        actions={actions}
-        headerNavigation={headerNavigation}
-        stats={stats}
-      />
-      {stats?.length ? <AdminStatsGrid stats={stats} /> : null}
-      {toolbar ? (
-        <AdminToolbar className={toolbarSticky ? 'sticky top-0 z-20 !rounded-t-none shadow-sm' : undefined}>
-          {toolbar}
-        </AdminToolbar>
-      ) : null}
+      {headerSticky ? (
+        /* 整块冻结：背景与滚动容器底色一致（移动端 surface / 桌面 surface-dim），
+           盖住卡片间隙防止滚动内容透出；z-40 压过表头粘性层的 20/30 */
+        <div className="sticky top-0 z-40 flex flex-col gap-3 bg-surface pb-3 shadow-sm md:gap-4 md:bg-surface-dim md:pb-4">
+          {heroNode}
+          {statsNode}
+          {toolbarNode}
+        </div>
+      ) : (
+        <>
+          {heroNode}
+          {statsNode}
+          {toolbarNode}
+        </>
+      )}
       <div
-        className={['app-page-content flex flex-col', toolbarSticky ? null : 'min-h-0 flex-1', contentClassName]
+        className={[
+          'app-page-content flex flex-col',
+          toolbarSticky || headerSticky ? null : 'min-h-0 flex-1',
+          contentClassName,
+        ]
           .filter(Boolean)
           .join(' ')}
       >

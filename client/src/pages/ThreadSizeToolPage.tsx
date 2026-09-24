@@ -385,15 +385,11 @@ export default function ThreadSizeToolPage() {
   };
 
   return (
-    <AdminPageShell
-      desktopContentClassName="app-public-tool-shell app-thread-size-shell"
-      mobileMainClassName="overflow-hidden"
-      mobileContentClassName="h-full min-h-0 !pb-[4.5rem]"
-    >
+    <AdminPageShell desktopContentClassName="app-public-tool-shell app-thread-size-shell">
       <AdminManagementPage
         title={t('threadSize.title')}
         description={t('threadSize.description')}
-        className="app-public-tool-page app-public-tool-page-thread-size"
+        className="app-public-tool-page app-public-tool-page-thread-size !h-auto"
         actions={
           isAdmin ? (
             <button
@@ -445,12 +441,12 @@ export default function ThreadSizeToolPage() {
             </div>
           </div>
         }
-        contentClassName="overflow-hidden"
+        contentClassName="overflow-visible"
+        toolbarSticky
       >
-        <AdminContentPanel
-          scroll
-          className="h-full flex min-h-0 flex-col overflow-hidden rounded-none border-0 bg-transparent"
-        >
+        {/* 与产品图库同款：表格行随页面自然滚动（任意位置滑动都滚页面），标题卡离场、
+            搜索+分类菜单吸顶冻结；表体只保留横向滚动 + 冻结首列 */}
+        <AdminContentPanel className="app-thread-size-panel rounded-none border-0 bg-transparent">
           {showInitialDataLoading && <ThreadSizeLoadingState />}
           {!showInitialDataLoading && (
             <ThreadSizeResults

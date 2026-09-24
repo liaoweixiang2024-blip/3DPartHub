@@ -7,19 +7,21 @@ import { useEffect, useRef, type MouseEvent, type ReactNode } from 'react';
 import { type ThreadSizeScrollPosition } from './threadSizeData';
 
 // ── Table style constants ────────────────────────────────────────────
+// 页面流模式：表格行随页面滚动（搜索+分类菜单的吸顶冻结由页面层负责），容器只管横向滚动；
+// 首列 sticky left 依旧生效；表头不做纵向冻结（sticky 无法穿透横向滚动容器，纵向随页面走）。
 
 export const TABLE_SCROLL =
-  'min-h-0 flex-1 max-w-full overflow-auto border-y border-outline-variant/10 overscroll-contain [touch-action:none] md:border-x';
+  'w-full max-w-full overflow-x-auto border-y border-outline-variant/10 overscroll-x-contain [touch-action:pan-y] md:border-x';
 export const TABLE_BASE =
   'min-w-full border-separate border-spacing-0 text-left text-[13px] md:text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap [&_td:not(:last-child)]:border-r [&_td:not(:last-child)]:border-outline-variant/8 [&_th:not(:last-child)]:border-r [&_th:not(:last-child)]:border-outline-variant/10';
 export const TABLE_HEAD = 'text-on-surface';
-export const TABLE_CARD = 'flex h-full min-h-0 flex-col overflow-hidden bg-transparent';
+export const TABLE_CARD = 'flex flex-col bg-transparent';
 export const TABLE_TH =
-  'sticky top-0 z-20 select-none bg-surface-container-low px-4 py-3 text-xs font-bold tracking-wide text-on-surface shadow-sticky [touch-action:pan-y] md:text-[13px]';
+  'select-none bg-surface-container-low px-4 py-3 text-xs font-bold tracking-wide text-on-surface shadow-sticky md:text-[13px]';
 export const TABLE_FIRST_TH =
-  'sticky left-0 top-0 z-30 select-none bg-surface-container-low px-4 py-3 text-xs font-bold tracking-wide text-on-surface shadow-[1px_0_0_rgba(0,0,0,0.08),0_1px_0_rgba(0,0,0,0.08)] [touch-action:pan-y] md:text-[13px]';
+  'sticky left-0 z-30 select-none bg-surface-container-low px-4 py-3 text-xs font-bold tracking-wide text-on-surface shadow-[1px_0_0_rgba(0,0,0,0.08),0_1px_0_rgba(0,0,0,0.08)] md:text-[13px]';
 export const TABLE_FIRST_TD =
-  'sticky left-0 z-10 select-none bg-surface px-4 py-3 font-semibold shadow-[1px_0_0_rgba(0,0,0,0.05)] [touch-action:pan-y]';
+  'sticky left-0 z-10 select-none bg-surface px-4 py-3 font-semibold shadow-[1px_0_0_rgba(0,0,0,0.05)]';
 export const TABLE_FIRST_WIDTH = 'w-28 min-w-28 max-w-28 md:w-36 md:min-w-36 md:max-w-36';
 export const TABLE_FIRST_TEXT = 'block max-w-full truncate';
 export const TABLE_FIRST_BADGE = 'inline-block max-w-full truncate align-middle';
@@ -37,11 +39,12 @@ function clampScroll(value: number, max: number) {
 }
 
 // ── Scroll helper (exposed for parent) ──────────────────────────────
+// 页面流模式下纵向位置属于页面滚动，只记忆/恢复横向偏移
 
 export function getTableScrollPosition(event?: MouseEvent<HTMLTableRowElement>): ThreadSizeScrollPosition | null {
   const scrollNode = event?.currentTarget.closest('[data-thread-size-scroll="primary"]') as HTMLElement | null;
   if (!scrollNode) return null;
-  return { top: scrollNode.scrollTop, left: scrollNode.scrollLeft };
+  return { top: 0, left: scrollNode.scrollLeft };
 }
 
 // ── Component ────────────────────────────────────────────────────────
@@ -56,8 +59,6 @@ export default function ThreadTableScroll({ children }: { children: ReactNode })
     let startX = 0;
     let startY = 0;
     let startScrollLeft = 0;
-    let startScrollTop = 0;
-    let verticalOnlyTarget = false;
     let lockedAxis: 'vertical' | 'horizontal' | null = null;
 
     const handleTouchStart = (event: TouchEvent) => {
@@ -66,11 +67,7 @@ export default function ThreadTableScroll({ children }: { children: ReactNode })
       startX = touch.clientX;
       startY = touch.clientY;
       startScrollLeft = node.scrollLeft;
-      startScrollTop = node.scrollTop;
       lockedAxis = null;
-      const target = event.target instanceof Element ? event.target : null;
-      const cell = target?.closest('td, th') as HTMLTableCellElement | null;
-      verticalOnlyTarget = Boolean(cell?.closest('thead') || cell?.cellIndex === 0);
     };
 
     const handleTouchMove = (event: TouchEvent) => {
@@ -82,22 +79,17 @@ export default function ThreadTableScroll({ children }: { children: ReactNode })
       const dy = touch.clientY - startY;
       const absX = Math.abs(dx);
       const absY = Math.abs(dy);
-      if (event.cancelable) event.preventDefault();
 
       if (!lockedAxis) {
         if (absX < TABLE_TOUCH_LOCK_THRESHOLD && absY < TABLE_TOUCH_LOCK_THRESHOLD) return;
-        lockedAxis = verticalOnlyTarget || absY >= absX - 2 ? 'vertical' : 'horizontal';
+        // 纵向意图：不拦截，交还浏览器原生滚动（页面滚动 → 吸顶菜单冻结）
+        lockedAxis = absY >= absX - 2 ? 'vertical' : 'horizontal';
       }
 
-      if (lockedAxis === 'vertical') {
-        const maxScrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
-        node.scrollLeft = startScrollLeft;
-        node.scrollTop = clampScroll(startScrollTop - dy, maxScrollTop);
-        return;
-      }
+      if (lockedAxis === 'vertical') return;
 
+      if (event.cancelable) event.preventDefault();
       const maxScrollLeft = Math.max(0, node.scrollWidth - node.clientWidth);
-      node.scrollTop = startScrollTop;
       node.scrollLeft = clampScroll(startScrollLeft - dx, maxScrollLeft);
     };
 

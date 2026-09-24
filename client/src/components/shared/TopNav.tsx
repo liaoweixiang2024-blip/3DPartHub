@@ -236,6 +236,9 @@ function UserMenu({
   const userMenuButtonClass = `top-nav-user-menu-button flex items-center gap-2 cursor-pointer ${compactButtonClass} ${
     isCompact ? '' : 'ml-2'
   }`;
+  // 悬停开合只绑定给真正能悬停的指针：触屏点击会先派发合成 mouseenter 再 click，
+  // 若同时绑 hover + click 切换，菜单会被「开了又立刻关上」，触屏端永远打不开
+  const canHover = useMediaQuery('(hover: hover) and (pointer: fine)');
 
   const featureFlags = useFeatureFlags();
   const menuItems = [
@@ -276,8 +279,8 @@ function UserMenu({
     <div
       className="top-nav-user-menu relative"
       ref={ref}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseEnter={canHover ? () => setOpen(true) : undefined}
+      onMouseLeave={canHover ? () => setOpen(false) : undefined}
     >
       <button
         onClick={() => setOpen(!open)}

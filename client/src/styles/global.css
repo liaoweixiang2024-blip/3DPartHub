@@ -469,6 +469,11 @@ a,
   animation: fade-in 0.3s ease-out;
 }
 
+/* 动画只用 backwards 填充（不能用 both/forwards）：
+   ① fill: forwards 会把终态 transform 永久留在元素上——即便 to 写 transform: none，
+      Chromium 的补间引擎也会以单位矩阵填充，computed transform 永远 ≠ none；
+   ② 非 none transform 会让后代 position:fixed 弹窗改以该元素为包含块（弹窗随内容框定位而非全屏居中）。
+   backwards 只在延迟/播放期间锁定起始帧，结束后回到基础样式（transform 无 → 无包含块），且 to 帧与基础样式一致，收尾无缝。 */
 @keyframes app-page-section-in {
   from {
     opacity: 0;
@@ -476,16 +481,16 @@ a,
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
 .app-page-section-in {
-  animation: app-page-section-in 180ms cubic-bezier(0.2, 0, 0, 1) both;
+  animation: app-page-section-in 180ms cubic-bezier(0.2, 0, 0, 1) backwards;
 }
 
 .app-page-section-in-delayed {
-  animation: app-page-section-in 220ms cubic-bezier(0.2, 0, 0, 1) 40ms both;
+  animation: app-page-section-in 220ms cubic-bezier(0.2, 0, 0, 1) 40ms backwards;
 }
 
 .app-page {
