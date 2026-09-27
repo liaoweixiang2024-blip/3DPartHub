@@ -1253,6 +1253,13 @@ export default function SelectionPage() {
     const isManual = isManualColumn(colDef);
     const isPreset = isPresetColumn(colDef);
     const isAutoSelected = autoSelectedFields.has(field);
+    // 数值填写列：有内容但不是合法数字（如 "1." / "."）时拦截提交并提示
+    const manualDraftValue = String(manualDrafts[field] ?? specs[field] ?? '');
+    const manualNumberInvalid =
+      isManual &&
+      colDef?.valueType === 'number' &&
+      manualDraftValue.trim() !== '' &&
+      !/^\d+(\.\d+)?$/.test(manualDraftValue.trim());
 
     if (isCompleted) {
       return (
@@ -1347,6 +1354,7 @@ export default function SelectionPage() {
                   className="space-y-3"
                   onSubmit={(e) => {
                     e.preventDefault();
+                    if (manualNumberInvalid) return;
                     const value = normalizeManualValue(colDef, manualDrafts[field] ?? specs[field] ?? '');
                     if (value) pickVal(field, value);
                   }}
@@ -1356,9 +1364,19 @@ export default function SelectionPage() {
                       <input
                         name="manual-drafts"
                         value={manualDrafts[field] ?? specs[field] ?? ''}
-                        onChange={(e) => setManualDrafts((prev) => ({ ...prev, [field]: e.target.value }))}
+                        onChange={(e) => {
+                          // 数值列只保留数字和一个小数点，其余输入即时丢弃
+                          const next =
+                            colDef?.valueType === 'number'
+                              ? e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1')
+                              : e.target.value;
+                          setManualDrafts((prev) => ({ ...prev, [field]: next }));
+                        }}
+                        inputMode={colDef?.valueType === 'number' ? 'decimal' : undefined}
                         placeholder={colDef?.placeholder || t('selectionPage.manualPlaceholder', { field: fieldLabel })}
-                        className="w-full rounded-xl border border-outline-variant/20 bg-surface-container px-3 sm:px-4 py-2.5 pr-12 text-sm text-on-surface outline-none focus:border-primary-container transition-colors"
+                        className={`w-full rounded-xl border bg-surface-container px-3 sm:px-4 py-2.5 pr-12 text-sm text-on-surface outline-none focus:border-primary-container transition-colors ${
+                          manualNumberInvalid ? 'border-error/60' : 'border-outline-variant/20'
+                        }`}
                       />
                       {colDef?.suffix && (
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant">
@@ -1368,13 +1386,17 @@ export default function SelectionPage() {
                     </div>
                     <button
                       type="submit"
-                      disabled={!String(manualDrafts[field] ?? specs[field] ?? '').trim()}
+                      disabled={!String(manualDrafts[field] ?? specs[field] ?? '').trim() || manualNumberInvalid}
                       className="rounded-xl bg-primary-container px-4 py-2.5 text-sm font-bold text-on-primary disabled:opacity-40"
                     >
                       {t('common.confirm')}
                     </button>
                   </div>
-                  <p className="text-xs text-on-surface-variant">{t('selectionPage.manualNote')}</p>
+                  {manualNumberInvalid ? (
+                    <p className="text-xs text-error">{t('selectionPage.manualNumberInvalid')}</p>
+                  ) : (
+                    <p className="text-xs text-on-surface-variant">{t('selectionPage.manualNote')}</p>
+                  )}
                 </form>
               ) : isPreset ? (
                 <div className="flex flex-wrap gap-2">
@@ -2392,7 +2414,7 @@ export default function SelectionPage() {
       <AdminPageShell
         mobileMainRef={mobileMainRef}
         mobileMainClassName="min-h-0"
-        mobileContentClassName={`flex min-h-full flex-col gap-3 px-3 py-3 ${hideMobileBottomNav ? 'pb-3' : 'pb-20'}`}
+        mobileContentClassName={`flex min-h-full flex-col gap-3 px-3 py-3 ${hideMobileBottomNav ? 'pb-3' : 'pb-safe-nav'}`}
         hideMobileBottomNav={hideMobileBottomNav}
       >
         <AdminManagementPage
@@ -2400,6 +2422,9 @@ export default function SelectionPage() {
           description={shellDescription}
           actions={shellActions}
           toolbar={selectionToolbar}
+          /* 移动端标题+工具栏整块吸顶（标题固定不下滚；向导阶段搜索框也常驻）；
+             桌面端标题本就在滚动容器外，无需吸顶 */
+          headerSticky={!isDesktop}
           className="app-public-tool-page app-public-tool-page-selection !h-auto min-h-full flex flex-col gap-3"
           contentClassName="flex flex-col"
         >

@@ -47,7 +47,7 @@ function ProjectDetailLoadingState() {
   const { t } = useTranslation();
 
   return (
-    <AdminPageShell mobileContentClassName="p-4 pb-20">
+    <AdminPageShell mobileContentClassName="p-4 pb-safe-nav">
       <div className="mx-auto flex min-h-[360px] w-full max-w-6xl">
         <PageRefreshIndicator label={t('projects.detailLoading')} />
       </div>
@@ -185,7 +185,7 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <AdminPageShell mobileContentClassName="p-4 pb-20">
+    <AdminPageShell mobileContentClassName="p-4 pb-safe-nav">
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center gap-2 text-sm mb-4 overflow-x-auto scrollbar-hidden">
           <Link to="/" className="text-on-surface-variant hover:text-on-surface shrink-0">

@@ -29,7 +29,7 @@ export function createSelectionAdminProductsRouter() {
   router.post('/api/admin/selections/products', authMiddleware, async (req: AuthRequest, res) => {
     if (!adminOnly(req, res)) return;
     try {
-      const { categoryId, name, modelNo, specs, image, pdfUrl, sortOrder, isKit, components } = req.body;
+      const { categoryId, name, modelNo, specs, image, pdfUrl, sortOrder, isKit, hidden, components } = req.body;
       if (!categoryId || !name) {
         res.status(400).json({ detail: '分类 ID 和产品名称不能为空' });
         return;
@@ -45,6 +45,7 @@ export function createSelectionAdminProductsRouter() {
           pdfUrl,
           sortOrder: sortOrder ?? 0,
           isKit: isKit ?? false,
+          hidden: hidden ?? false,
           components: components ?? undefined,
         },
       });
@@ -61,7 +62,7 @@ export function createSelectionAdminProductsRouter() {
     if (!adminOnly(req, res)) return;
     try {
       const id = req.params.id as string;
-      const { name, modelNo, specs, image, pdfUrl, sortOrder, isKit, components } = req.body;
+      const { name, modelNo, specs, image, pdfUrl, sortOrder, isKit, hidden, components } = req.body;
       const data: Prisma.SelectionProductUpdateInput = {};
       if (modelNo !== undefined) data.modelNo = modelNo;
       if (name !== undefined) {
@@ -76,6 +77,7 @@ export function createSelectionAdminProductsRouter() {
       if (pdfUrl !== undefined) data.pdfUrl = pdfUrl;
       if (sortOrder !== undefined) data.sortOrder = sortOrder;
       if (isKit !== undefined) data.isKit = isKit;
+      if (hidden !== undefined) data.hidden = Boolean(hidden);
       if (components !== undefined) data.components = components;
 
       const product = await prisma.selectionProduct.update({

@@ -43,6 +43,8 @@ export function ResultCard({
   const expanded = expandedKits.has(product.id);
   const { t } = useTranslation();
   const comps = (product.isKit && product.components ? product.components : []) as SelectionComponent[];
+  // 子零件附加参数列（批量导入表头自动识别，如「编码」）：取清单中出现过的 key 并集，作为表格附加列
+  const compSpecKeys = [...new Set(comps.flatMap((c) => Object.keys(c.specs || {})))];
   const specCols = columns.filter((c) => !c.hideInResults);
   // 服务端配置的 PDF/目录 URL 进 iframe src / 新窗口 document.write 前统一过协议白名单，
   // 不安全的（javascript:/data: 等）一律按不存在处理
@@ -176,6 +178,11 @@ export function ResultCard({
                       <th className="px-2 py-1.5 text-right font-medium whitespace-nowrap">
                         {t('selectionResult.qty')}
                       </th>
+                      {compSpecKeys.map((key) => (
+                        <th key={key} className="px-2 py-1.5 text-left font-medium whitespace-nowrap">
+                          {key}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
@@ -185,6 +192,11 @@ export function ResultCard({
                         <td className="px-2 py-1.5 text-on-surface whitespace-nowrap">{c.name}</td>
                         <td className="px-2 py-1.5 text-on-surface-variant whitespace-nowrap">{c.modelNo || '—'}</td>
                         <td className="px-2 py-1.5 text-right text-on-surface whitespace-nowrap">{c.qty}</td>
+                        {compSpecKeys.map((key) => (
+                          <td key={key} className="px-2 py-1.5 text-on-surface-variant whitespace-nowrap">
+                            {c.specs?.[key] || '—'}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>

@@ -238,7 +238,7 @@ export function AdminPageShell({
       >
         <div
           className={mergeClassName(
-            `flex flex-col px-4 py-4 ${hideMobileBottomNav ? '' : 'pb-20'}`,
+            `flex flex-col px-4 py-4 ${hideMobileBottomNav ? '' : 'pb-safe-nav'}`,
             mobileContentClassName,
           )}
         >
@@ -294,7 +294,7 @@ export function AdminPageShell({
       >
         <div
           className={mergeClassName(
-            `flex min-h-full flex-col px-4 py-4 ${hideMobileBottomNav ? '' : 'pb-20'}`,
+            `flex min-h-full flex-col px-4 py-4 ${hideMobileBottomNav ? '' : 'pb-safe-nav'}`,
             mobileContentClassName,
           )}
         >

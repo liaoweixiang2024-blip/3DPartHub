@@ -1102,7 +1102,7 @@ export default function AuditLogPage() {
   return (
     <AdminPageShell
       mobileMainClassName="min-h-0 overflow-hidden"
-      mobileContentClassName="flex h-full min-h-0 flex-col px-4 py-4 pb-20"
+      mobileContentClassName="flex h-full min-h-0 flex-col px-4 py-4 pb-safe-nav"
     >
       <AuditLogContent />
     </AdminPageShell>

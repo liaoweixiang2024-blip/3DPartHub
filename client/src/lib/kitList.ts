@@ -26,12 +26,24 @@ export function formatKitList(
   components: SelectionComponent[],
   title = getKitListTitle(null, product),
 ) {
+  // 子零件附加参数列（批量导入表头识别，如「编码」）：与选型页清单表同列序输出
+  const specKeys = [...new Set(components.flatMap((c) => Object.keys(c.specs || {})))];
+  const header = ['序号', '名称', '型号', '数量', ...specKeys].join('\t');
+  const rows = components.map((item, index) =>
+    [
+      index + 1,
+      item.name || '',
+      item.modelNo || '',
+      item.qty ?? 1,
+      ...specKeys.map((key) => item.specs?.[key] ?? ''),
+    ].join('\t'),
+  );
   const lines = [
     `${title}：${product.modelNo || product.name || ''}`,
     product.name && product.name !== product.modelNo ? `名称：${product.name}` : '',
     '',
-    '序号\t名称\t型号\t数量',
-    ...components.map((item, index) => [index + 1, item.name || '', item.modelNo || '', item.qty ?? 1].join('\t')),
+    header,
+    ...rows,
   ].filter((line) => line !== '');
   return lines.join('\n');
 }

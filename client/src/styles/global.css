@@ -334,6 +334,13 @@ a,
   scrollbar-width: none;
 }
 
+/* 移动端滚动内容底部安全留白：固定底栏（min-h-14=3.5rem）+ env 安全区。
+   替代各页的 pb-20（5rem）：iPhone 全面屏手势条 34px 会让底栏实际高 90px，
+   固定 80px 留白盖不住，最后一项内容被导航压住 ~10px。 */
+.pb-safe-nav {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+
 .micro-glass {
   background-color: color-mix(in srgb, var(--color-surface) 85%, transparent);
   backdrop-filter: blur(12px);

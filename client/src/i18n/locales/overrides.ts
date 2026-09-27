@@ -3019,6 +3019,7 @@ export const jaJPMajorFormsTranslation: TranslationMap = {
     manualInput: '手動入力',
     manualNote:
       'カスタム値は固定在庫を絞り込みません。問い合わせ送信時に仕様へ書き込まれ、モデルのプレースホルダを置き換えます。',
+    manualNumberInvalid: '有効な数値を入力してください（小数点可）。例: 1.5',
     manualPlaceholder: '{{field}}を入力',
     matching: '照合中',
     modelCount: '{{count}} モデル',
@@ -3376,6 +3377,7 @@ export const koKRMajorFormsTranslation: TranslationMap = {
     manualInput: '수동 입력',
     manualNote:
       '사용자 지정 값은 고정 재고를 필터링하지 않습니다. 문의 제출 시 사양에 기록되고 모델 자리표시자를 대체합니다.',
+    manualNumberInvalid: '유효한 숫자를 입력해 주세요 (소수점 가능). 예: 1.5',
     manualPlaceholder: '{{field}} 입력',
     matching: '매칭 중',
     modelCount: '{{count}}개 모델',
@@ -3744,6 +3746,7 @@ export const deDEMajorFormsTranslation: TranslationMap = {
     manualInput: 'Manuelle Eingabe',
     manualNote:
       'Benutzerdefinierte Werte filtern festen Bestand nicht. Sie werden beim Senden der Anfrage in Spezifikationen geschrieben und ersetzen Modellplatzhalter.',
+    manualNumberInvalid: 'Bitte geben Sie eine gültige Zahl ein (Dezimalstellen erlaubt), z. B. 1.5',
     manualPlaceholder: '{{field}} eingeben',
     matching: 'Abgleich läuft',
     modelCount: '{{count}} Modelle',
@@ -5382,7 +5385,7 @@ export const jaJPAccessTranslation: TranslationMap = {
     loadFailedDesc: '稍後に再試行するか、ログイン状態を確認してください',
     loading: '招待コードを読み込み中',
     revokeFail: '失効に失敗しました',
-    adminDescription: 'すべての招待コードと紹介関係（誰が誰を・どのコードで招待したか）の一覧',
+    adminDescription: '全招待コードの発行・使用・失効状況と紹介関係の総覧',
   },
   profile: {
     emailReadonlyHint: 'メールアドレスはログイン情報のため、変更には再認証が必要です',
@@ -5642,7 +5645,7 @@ export const koKRAccessTranslation: TranslationMap = {
     loadFailedDesc: '잠시 후 다시 시도하거나 로그인 상태를 확인하세요.',
     loading: '초대 코드 불러오는 중',
     revokeFail: '철회에 실패했습니다',
-    adminDescription: '모든 초대 코드와 추천 관계(누가 누구를·어떤 코드로 초대했는지) 현황',
+    adminDescription: '전체 초대 코드의 발급·사용·철회 현황과 추천 관계 총괄',
   },
   profile: {
     emailReadonlyHint: '이메일은 로그인 자격 증명이라 변경 시 재인증이 필요합니다',
@@ -6006,7 +6009,8 @@ export const deDEAccessTranslation: TranslationMap = {
     loadFailedDesc: 'Bitte später erneut versuchen oder den Anmeldestatus prüfen.',
     loading: 'Einladungscodes werden geladen',
     revokeFail: 'Widerrufen fehlgeschlagen',
-    adminDescription: 'Übersicht aller Einladungscodes und Werbebeziehungen (wer hat wen mit welchem Code eingeladen)',
+    adminDescription:
+      'Übersicht über Ausstellung, Nutzung und Widerruf aller Einladungscodes sowie der Werbebeziehungen',
   },
   profile: {
     emailReadonlyHint: 'E-Mail ist ein Anmeldemerkmal — Änderungen erfordern eine erneute Verifizierung',

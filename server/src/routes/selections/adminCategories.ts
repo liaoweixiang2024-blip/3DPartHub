@@ -28,6 +28,7 @@ export function createSelectionAdminCategoriesRouter() {
         groupImage,
         groupImageFit,
         kind,
+        hidden,
         catalogPdf,
         catalogShared,
         optionCatalogs,
@@ -62,6 +63,7 @@ export function createSelectionAdminCategoriesRouter() {
           groupImage,
           groupImageFit,
           kind,
+          hidden: hidden ?? false,
           catalogPdf: catalogPdf || null,
           catalogShared: catalogShared ?? false,
           optionCatalogs: optionCatalogs || null,
@@ -100,6 +102,7 @@ export function createSelectionAdminCategoriesRouter() {
         groupImage,
         groupImageFit,
         kind,
+        hidden,
         catalogPdf,
         catalogShared,
         optionCatalogs,
@@ -132,6 +135,7 @@ export function createSelectionAdminCategoriesRouter() {
         data.groupImageFit = groupImageFit;
       }
       if (kind !== undefined) data.kind = kind;
+      if (hidden !== undefined) data.hidden = Boolean(hidden);
       if (catalogPdf !== undefined) data.catalogPdf = catalogPdf || null;
       if (catalogShared !== undefined) data.catalogShared = Boolean(catalogShared);
       if (optionCatalogs !== undefined) data.optionCatalogs = optionCatalogs || null;

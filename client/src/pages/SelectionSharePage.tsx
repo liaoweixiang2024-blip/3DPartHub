@@ -132,6 +132,8 @@ function ShareResultCard({
   const comps = (
     displayProduct.isKit && displayProduct.components ? displayProduct.components : []
   ) as SelectionComponent[];
+  // 子零件附加参数列（批量导入表头识别，如「编码」）：与选型页清单表同列展示
+  const compSpecKeys = [...new Set(comps.flatMap((c) => Object.keys(c.specs || {})))];
   const kitListTitle = getKitListTitle(optionOrder || null, displayProduct);
   const [copiedList, setCopiedList] = useState(false);
   const handleCopyKitList = async () => {
@@ -213,6 +215,11 @@ function ShareResultCard({
                   <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">{t('selectionShare.name')}</th>
                   <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">{t('selectionShare.modelNo')}</th>
                   <th className="px-2 py-1.5 text-right font-medium whitespace-nowrap">{t('selectionShare.qty')}</th>
+                  {compSpecKeys.map((key) => (
+                    <th key={key} className="px-2 py-1.5 text-left font-medium whitespace-nowrap">
+                      {key}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -222,6 +229,11 @@ function ShareResultCard({
                     <td className="px-2 py-1.5 text-on-surface whitespace-nowrap">{c.name}</td>
                     <td className="px-2 py-1.5 text-on-surface-variant whitespace-nowrap">{c.modelNo || '—'}</td>
                     <td className="px-2 py-1.5 text-right text-on-surface whitespace-nowrap">{c.qty}</td>
+                    {compSpecKeys.map((key) => (
+                      <td key={key} className="px-2 py-1.5 text-on-surface-variant whitespace-nowrap">
+                        {c.specs?.[key] || '—'}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>

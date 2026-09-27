@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import { invitesApi, type AdminInviteItem } from '../api/invites';
@@ -8,6 +9,7 @@ import {
   AdminManagementPage,
 } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -21,23 +23,16 @@ function formatDate(value: string | null): string {
   return new Date(value).toLocaleString();
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
-  return (
-    <div className="flex flex-col rounded-lg border border-outline-variant/15 bg-surface-container-high px-4 py-2.5">
-      <span className={`text-lg font-bold ${tone}`}>{value}</span>
-      <span className="text-xs text-on-surface-variant">{label}</span>
-    </div>
-  );
-}
-
 export default function InviteAdminPage() {
   const { t } = useTranslation();
   useDocumentTitle(t('invites.adminTitle'));
   const { data, error, isLoading, mutate } = useSWR<AdminInviteItem[]>('/admin/invites', () => invitesApi.adminList());
+  const [statusFilter, setStatusFilter] = useState('');
   const items = data ?? [];
   const activeCount = items.filter((i) => i.status === 'active').length;
   const usedCount = items.filter((i) => i.status === 'used').length;
   const revokedCount = items.filter((i) => i.status === 'revoked').length;
+  const filteredItems = statusFilter ? items.filter((i) => i.status === statusFilter) : items;
 
   if (isLoading) {
     return (
@@ -70,21 +65,31 @@ export default function InviteAdminPage() {
         meta={t('invites.count', { count: items.length })}
         description={t('invites.adminDescription')}
       >
-        <div className="mb-4 flex flex-wrap gap-3">
-          <Stat label={t('invites.status.active')} value={activeCount} tone="text-primary" />
-          <Stat label={t('invites.status.used')} value={usedCount} tone="text-on-surface-variant" />
-          <Stat label={t('invites.status.revoked')} value={revokedCount} tone="text-error" />
-        </div>
+        {/* 状态分组与用户管理页同款 tab：计数即筛选 */}
+        <ResponsiveSectionTabs
+          tabs={[
+            { value: '', label: '全部', count: items.length, icon: 'card_giftcard' },
+            { value: 'active', label: t('invites.status.active'), count: activeCount, icon: 'hourglass_empty' },
+            { value: 'used', label: t('invites.status.used'), count: usedCount, icon: 'check_circle' },
+            { value: 'revoked', label: t('invites.status.revoked'), count: revokedCount, icon: 'block' },
+          ]}
+          value={statusFilter}
+          onChange={setStatusFilter}
+          mobileTitle="邀请码状态"
+          countUnit="个"
+        />
 
         {items.length === 0 ? (
+          <AdminEmptyState icon="card_giftcard" title={t('invites.emptyTitle')} description={t('invites.emptyDesc')} />
+        ) : filteredItems.length === 0 ? (
           <AdminEmptyState
             icon="card_giftcard"
-            title={t('invites.emptyTitle')}
-            description={t('invites.adminDescription')}
+            title="该状态下暂无邀请码"
+            description="切换上方状态分类查看其他邀请码。"
           />
         ) : (
-          <div className="flex flex-col gap-2 pb-20">
-            {items.map((item) => (
+          <div className="flex flex-col gap-2 pt-3">
+            {filteredItems.map((item) => (
               <div
                 key={item.id}
                 className="flex flex-col gap-1.5 rounded-lg border border-outline-variant/15 bg-surface-container-high px-3 py-2.5"

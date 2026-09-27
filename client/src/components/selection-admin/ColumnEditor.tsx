@@ -63,6 +63,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
       delete current.required;
       delete current.placeholder;
       delete current.suffix;
+      delete current.valueType;
       if (!current.presetOptions) current.presetOptions = [];
     } else if (mode === 'displayOnly') {
       current.displayOnly = true;
@@ -73,11 +74,13 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
       delete current.autoSelectSingle;
       delete current.skipWhenNoOptions;
       delete current.required;
+      delete current.valueType;
     } else {
       delete current.inputType;
       delete current.displayOnly;
       delete current.placeholder;
       delete current.suffix;
+      delete current.valueType;
     }
     next[i] = current;
     onChange(next);
@@ -128,12 +131,13 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
       <div className="overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low shadow-sm">
         <div className="hidden grid-cols-[36px_44px_minmax(150px,1.1fr)_minmax(170px,1.1fr)_76px_118px_104px_40px] items-center gap-2 border-b border-outline-variant/10 bg-surface-container-high px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant md:grid">
           <span />
-          <span>顺序</span>
-          <span>数据字段</span>
-          <span>页面名称</span>
-          <span>单位</span>
-          <span>类型</span>
-          <span>设置</span>
+          {/* 表头文字按下方控件的内边距内缩，视觉上与输入框文字对齐（输入框 13px / 下拉与按钮 9px / 序号徽标 8px） */}
+          <span className="pl-2">顺序</span>
+          <span className="pl-[13px]">数据字段</span>
+          <span className="pl-[13px]">页面名称</span>
+          <span className="pl-[13px]">单位</span>
+          <span className="pl-[9px]">类型</span>
+          <span className="pl-[9px]">设置</span>
           <span />
         </div>
 
@@ -373,6 +377,21 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                           </label>
                         </>
                       )}
+                      <label>
+                        <span className="mb-1 block text-[10px] text-on-surface-variant">填写内容</span>
+                        <select
+                          name="value-type"
+                          disabled={mode !== 'manual'}
+                          value={col.valueType === 'number' ? 'number' : 'text'}
+                          onChange={(e) =>
+                            updateCol(i, 'valueType', e.target.value === 'number' ? 'number' : undefined)
+                          }
+                          className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
+                        >
+                          <option value="text">任意文字</option>
+                          <option value="number">仅数字（可小数）</option>
+                        </select>
+                      </label>
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">输入提示</span>
                         <input

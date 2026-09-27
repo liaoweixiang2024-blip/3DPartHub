@@ -90,19 +90,25 @@ router.get('/api/selection-shares/:token', async (req: Request, res: Response) =
       });
 
     const [category, products] = await Promise.all([
-      prisma.selectionCategory.findUnique({
-        where: { slug: share.categorySlug },
+      // 隐藏分类连带其分享一起下线（404），与公开选型页不可见口径一致
+      prisma.selectionCategory.findFirst({
+        where: { slug: share.categorySlug, hidden: false },
       }),
       (async () => {
         const ids = share.productIds as string[];
         return ids.length > 0
           ? await prisma.selectionProduct.findMany({
-              where: { id: { in: ids } },
+              where: { id: { in: ids }, hidden: false },
               orderBy: { sortOrder: 'asc' },
             })
           : [];
       })(),
     ]);
+
+    if (!category) {
+      res.status(404).json({ detail: '分享不存在' });
+      return;
+    }
 
     // Auto-match models (fuzzy, prefer primary version)
     const { selectionEnableMatch } = await getBusinessConfig();

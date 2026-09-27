@@ -225,7 +225,9 @@ export function AdminEmptyState({ icon, title, description, action, className }:
   return (
     <div
       className={mergeClassName(
-        'flex min-h-[360px] flex-1 flex-col items-center justify-center px-4 py-16 text-center md:min-h-[420px]',
+        // 绝对定位铺满内容区、顶部按视口比例锚定：位置不受上方 tabs/工具栏（流内兄弟）与
+        // 描述文案行数影响，全站切换页面时空状态图标位置固定一致（内容区已挂 relative）
+        'absolute inset-0 flex min-h-[360px] flex-col items-center justify-start px-4 pt-[16dvh] text-center',
         className,
       )}
     >
@@ -325,7 +327,7 @@ export function AdminManagementPage({
       )}
       <div
         className={[
-          'app-page-content flex flex-col',
+          'app-page-content relative flex flex-col',
           toolbarSticky || headerSticky ? null : 'min-h-0 flex-1',
           contentClassName,
         ]

@@ -119,7 +119,7 @@ export default function LegalPage() {
   );
 
   return (
-    <AdminPageShell desktopContentClassName="p-6" mobileContentClassName="px-4 py-4 pb-20">
+    <AdminPageShell desktopContentClassName="p-6" mobileContentClassName="px-4 py-4 pb-safe-nav">
       <AdminManagementPage
         title={activeTitle}
         description={t('legal.description')}

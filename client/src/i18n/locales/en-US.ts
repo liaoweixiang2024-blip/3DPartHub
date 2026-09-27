@@ -679,7 +679,7 @@ export const enUS: { translation: TranslationMap } = {
         revoked: 'Revoked',
         used: 'Used',
       },
-      adminDescription: 'Overview of all invite codes and referral relationships (who invited whom, which code)',
+      adminDescription: 'Site-wide overview of invite code issuance, usage, revocation, and referral relationships',
       adminTitle: 'Invite Codes',
       creator: 'Inviter',
       title: 'My Invites',
@@ -1450,6 +1450,7 @@ export const enUS: { translation: TranslationMap } = {
       manualInput: 'Manual input',
       manualNote:
         'Custom values do not filter fixed inventory. They will be written into specs and replace model placeholders when submitting an inquiry.',
+      manualNumberInvalid: 'Please enter a valid number (decimals allowed), e.g. 1.5',
       manualPlaceholder: 'Enter {{field}}',
       matching: 'Matching',
       modelCount: '{{count}} models',

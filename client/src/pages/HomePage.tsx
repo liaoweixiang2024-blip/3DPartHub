@@ -1162,7 +1162,7 @@ export default function HomePage() {
             </span>
           </div>
         )}
-        <div className="p-3 space-y-3 pb-20 min-h-full flex flex-col">
+        <div className="p-3 space-y-3 pb-safe-nav min-h-full flex flex-col">
           <AnnouncementBanner />
           {/* Header with filter button (visible when not scrolled) */}
           <div ref={titleRowRef} className="flex items-center justify-between">

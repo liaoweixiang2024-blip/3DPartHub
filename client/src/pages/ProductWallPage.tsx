@@ -497,7 +497,7 @@ export default function ProductWallPage() {
   return (
     <AdminPageShell
       desktopContentClassName="app-public-tool-shell app-product-wall-shell p-6"
-      mobileContentClassName="px-4 py-4 pb-20"
+      mobileContentClassName="px-4 py-4 pb-safe-nav"
     >
       <div className="relative" onPaste={handlePaste}>
         <AdminManagementPage

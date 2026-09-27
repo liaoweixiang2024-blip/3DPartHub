@@ -203,7 +203,7 @@ export default function MyInvitesPage() {
             }
           />
         ) : (
-          <div className="flex flex-col gap-2 pb-20">
+          <div className="flex flex-col gap-2">
             {items.map((item) => (
               <InviteRow key={item.id} item={item} origin={origin} onRevoke={() => setRevokeId(item.id)} />
             ))}

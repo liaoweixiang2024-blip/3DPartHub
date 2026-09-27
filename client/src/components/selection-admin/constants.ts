@@ -6,3 +6,6 @@ export const SELECTION_ICON_BUTTON_EDIT =
   'grid h-8 w-8 shrink-0 place-items-center rounded-md border border-primary-container/15 bg-primary-container/10 text-primary-container transition-colors hover:bg-primary-container/15';
 export const SELECTION_ICON_BUTTON_DELETE =
   'grid h-8 w-8 shrink-0 place-items-center rounded-md border border-error/20 bg-error/10 text-error transition-colors hover:bg-error/16';
+/** 已激活态图标按钮（隐藏中）：中性底色区分于编辑主色 */
+export const SELECTION_ICON_BUTTON_ACTIVE =
+  'grid h-8 w-8 shrink-0 place-items-center rounded-md border border-outline-variant/20 bg-surface-container-high/70 text-on-surface-variant transition-colors hover:bg-surface-container-high';

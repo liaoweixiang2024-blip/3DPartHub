@@ -295,23 +295,24 @@ function TrendPanel({ data }: { data: DownloadAdminStats['dailyStats'] }) {
       </div>
       {/* 列必须撑满图表高度（不能靠容器 items-end 收缩）：轨道的 flex 高度、柱子的
           height:% 都依赖父级有确定高度，否则整列塌成 padding、柱子恒为 0。
-          数字行固定高度（0 下载也渲染空行），保证所有柱子基线对齐 */}
+          数字骑在柱顶上（绝对定位跟随柱高），轨道 pt-4 给最高柱的数字留头部空间 */}
       <div className="mt-4 flex h-72 gap-1.5 rounded-xl border border-outline-variant/8 bg-surface px-3 pb-3 pt-5 sm:gap-2">
         {data.map((item) => {
           const hasData = item.downloads > 0;
           const height = Math.max(4, Math.round((item.downloads / maxDownloads) * 100));
           return (
-            <div key={item.date} className="group flex h-full min-w-0 flex-1 flex-col items-center gap-1">
-              <span className="flex h-4 w-full shrink-0 items-center justify-center text-[10px] font-medium leading-none tabular-nums text-on-surface-variant">
-                {hasData ? item.downloads : ''}
-              </span>
-              <div className="flex min-h-0 w-full flex-1 items-end rounded-lg bg-surface-container-high/55 px-1 pt-2">
+            <div key={item.date} className="group flex h-full min-w-0 flex-1 flex-col items-center gap-2">
+              <div className="flex min-h-0 w-full flex-1 items-end rounded-lg bg-surface-container-high/55 px-1 pt-4">
                 {hasData ? (
                   <div
-                    className="w-full rounded-t bg-primary-container/85 transition-all group-hover:bg-primary-container"
+                    className="relative w-full rounded-t bg-primary-container/85 transition-all group-hover:bg-primary-container"
                     style={{ height: `${height}%` }}
                     title={`${item.date}: ${item.downloads} 次 · ${formatBytes(item.bytes)}`}
-                  />
+                  >
+                    <span className="absolute inset-x-0 -top-4 text-center text-[10px] font-medium leading-none tabular-nums text-on-surface-variant">
+                      {item.downloads}
+                    </span>
+                  </div>
                 ) : null}
               </div>
               <span className="hidden shrink-0 text-[10px] tabular-nums text-on-surface-variant sm:block">
@@ -439,7 +440,7 @@ function TopModelsPanel({ models }: { models: DownloadAdminStats['topModels'] })
   );
 }
 
-/** 来源徽章：批量打包标注渠道；分享下载由「X 的分享」归因文本表达（避免三段重复） */
+/** 来源徽章：批量打包标注渠道；分享下载由图标 + 创建者用户名归因（图标已表意，不再写"分享"字样） */
 function DownloadSourceBadge({ source }: { source: string }) {
   if (source !== 'batch') return null;
   return (
@@ -450,12 +451,12 @@ function DownloadSourceBadge({ source }: { source: string }) {
 }
 
 function RecentDownloadRow({ item }: { item: DownloadAdminRecord }) {
-  // 分享下载：下载者固定是匿名访客，行内只保留一段归因（谁的分享），不再叠加用户名+徽章
+  // 分享下载：下载者固定是匿名访客；分享图标已表意，行内只显示分享创建者用户名
   const actor =
     item.source === 'share' ? (
       <span className="inline-flex min-w-0 items-center gap-1">
         <Icon name="share" size={12} />
-        <span className="truncate">{item.shared_by ? `${item.shared_by} 的分享` : '分享链接下载'}</span>
+        <span className="truncate">{item.shared_by || '分享访客'}</span>
       </span>
     ) : (
       <>
@@ -671,7 +672,7 @@ export default function DownloadAdminPage() {
     <AdminPageShell
       desktopContentClassName="min-h-0 overflow-hidden"
       mobileMainClassName="min-h-0 overflow-hidden"
-      mobileContentClassName="flex h-full min-h-0 flex-col px-4 py-4 pb-20"
+      mobileContentClassName="flex h-full min-h-0 flex-col px-4 py-4 pb-safe-nav"
     >
       <Content />
     </AdminPageShell>

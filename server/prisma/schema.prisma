@@ -552,6 +552,7 @@ model SelectionCategory {
   groupImage     String?            @map("group_image")
   groupImageFit  String?            @map("group_image_fit")
   kind           String?            @default("product")
+  hidden         Boolean            @default(false) @map("hidden")
   catalogPdf     String?            @map("catalog_pdf")
   catalogShared  Boolean            @default(false) @map("catalog_shared")
   optionCatalogs Json?              @map("option_catalogs")
@@ -581,6 +582,7 @@ model SelectionProduct {
   category   SelectionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   isKit      Boolean @default(false) @map("is_kit")
+  hidden     Boolean @default(false) @map("hidden")
   components Json?
 
   @@index([categoryId])

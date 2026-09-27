@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import type { Prisma } from '@prisma/client';
+import { Router, type Request } from 'express';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
 import { cacheGetOrSet, resolveCacheTtl, TTL } from '../../lib/cache.js';
 import { logger } from '../../lib/logger.js';
@@ -7,6 +8,7 @@ import { prisma } from '../../lib/prisma.js';
 import { numericValue, optionalString, stringArray } from '../../lib/requestValidation.js';
 import { normalizeSearchParam, searchCacheToken } from '../../lib/searchQuery.js';
 import { getAllSettings } from '../../lib/settings.js';
+import { getVerifiedRequestUser, type AuthRequest } from '../../middleware/auth.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
 
 /** 选型缓存 TTL：读后台 cache_selection_ttl_seconds（秒），非法回退 TTL.SELECTION_*。 */
@@ -53,6 +55,7 @@ type SelectionProductPayloadInput = {
   categoryId: string;
   categoryCatalogPdf?: string | null;
   components?: unknown;
+  hidden?: boolean | null;
   id: string;
   image?: string | null;
   isKit?: boolean | null;
@@ -80,6 +83,7 @@ function selectionProductPayload(
     unit: p.unit,
     sortOrder: p.sortOrder,
     isKit: p.isKit,
+    hidden: p.hidden ?? false,
     components: p.components,
     categoryCatalogPdf: p.categoryCatalogPdf ?? null,
     matchedModelId: matched?.id ?? null,
@@ -87,25 +91,43 @@ function selectionProductPayload(
   };
 }
 
-function selectionSearchWhere(categoryId: string, search: string) {
+function selectionSearchWhere(categoryId: string, search: string, includeHidden = false) {
+  const base: Prisma.SelectionProductWhereInput = includeHidden ? { categoryId } : { categoryId, hidden: false };
   return search
     ? {
-        categoryId,
+        ...base,
         OR: [
           { name: { contains: search, mode: 'insensitive' as const } },
           { modelNo: { contains: search, mode: 'insensitive' as const } },
         ],
       }
-    : { categoryId };
+    : base;
 }
 
-function selectionSpecsWhere(categoryId: string, specs: Record<string, string>, manualFields: Set<string>) {
+function selectionSpecsWhere(
+  categoryId: string,
+  specs: Record<string, string>,
+  manualFields: Set<string>,
+  includeHidden = false,
+) {
   const filters = Object.entries(specs)
     .filter(([key]) => !manualFields.has(key))
     .map(([key, value]) => ({
       specs: { path: [key], equals: value },
     }));
-  return filters.length ? { AND: [{ categoryId }, ...filters] } : { categoryId };
+  const base: Prisma.SelectionProductWhereInput = includeHidden ? { categoryId } : { categoryId, hidden: false };
+  return filters.length ? { AND: [base, ...filters] } : base;
+}
+
+/** 管理端带 include_hidden=1 拉全量（含隐藏）数据：独立于浏览门槛校验管理员身份，命中时跳过缓存 */
+async function wantsHiddenIncluded(req: Request): Promise<boolean> {
+  if (req.query?.include_hidden !== '1') return false;
+  try {
+    const verified = await getVerifiedRequestUser(req as AuthRequest);
+    return verified?.payload.role === 'ADMIN';
+  } catch {
+    return false;
+  }
 }
 
 function specsRecord(value: unknown): Record<string, unknown> {
@@ -145,7 +167,10 @@ export function createSelectionPublicRouter() {
 
       const cacheKey = `cache:selections:search:${cacheKeyPart(search)}:${page}:${pageSize}`;
       const { value: result } = await cacheGetOrSet(cacheKey, await selectionCacheTtl(), async () => {
-        const where = {
+        // 隐藏产品不出现在全局搜索；隐藏分类下的产品一并排除
+        const where: Prisma.SelectionProductWhereInput = {
+          hidden: false,
+          category: { hidden: false },
           OR: [
             { name: { contains: search, mode: 'insensitive' as const } },
             { modelNo: { contains: search, mode: 'insensitive' as const } },
@@ -191,7 +216,8 @@ export function createSelectionPublicRouter() {
         };
       });
 
-      res.set('Cache-Control', 'public, max-age=30');
+      // 同 categories：搜索结果不落浏览器缓存，隐藏产品/分类即时从搜索消失
+      res.set('Cache-Control', 'no-store');
       res.json(result || { items: [], total: 0, page: 1, pageSize, query: search });
     } catch (err) {
       logger.error({ err }, '[Selections] Global search error');
@@ -203,41 +229,62 @@ export function createSelectionPublicRouter() {
   router.get('/api/selections/categories', async (req, res) => {
     if (!(await requireBrowseAccess(req, res, 'require_login_selection'))) return;
     try {
+      const includeHidden = await wantsHiddenIncluded(req);
+      type CategoryRowWithCount = Prisma.SelectionCategoryGetPayload<{
+        include: { _count: { select: { products: true } } };
+      }>;
+      const mapRows = (rows: CategoryRowWithCount[]) =>
+        rows.map((c) => ({
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          description: c.description,
+          icon: c.icon,
+          sortOrder: c.sortOrder,
+          columns: c.columns,
+          image: c.image,
+          optionImages: c.optionImages,
+          optionOrder: c.optionOrder,
+          groupId: c.groupId,
+          groupName: c.groupName,
+          groupIcon: c.groupIcon,
+          groupImage: c.groupImage,
+          groupImageFit: c.groupImageFit,
+          kind: c.kind,
+          hidden: c.hidden,
+          catalogPdf: c.catalogPdf,
+          catalogShared: c.catalogShared,
+          optionCatalogs: c.optionCatalogs,
+          productCount: c._count.products,
+        }));
+
+      // 管理端拉全量（含隐藏）：绕过缓存，保证开关即时生效
+      if (includeHidden) {
+        const rows = await prisma.selectionCategory.findMany({
+          orderBy: { sortOrder: 'asc' },
+          include: { _count: { select: { products: true } } },
+        });
+        res.json(mapRows(rows));
+        return;
+      }
+
       const { value: categories, hit } = await cacheGetOrSet(
         'cache:selections:categories',
         await selectionCacheTtl(),
         async () => {
           const rows = await prisma.selectionCategory.findMany({
+            where: { hidden: false },
             orderBy: { sortOrder: 'asc' },
             include: { _count: { select: { products: true } } },
           });
-          return rows.map((c) => ({
-            id: c.id,
-            name: c.name,
-            slug: c.slug,
-            description: c.description,
-            icon: c.icon,
-            sortOrder: c.sortOrder,
-            columns: c.columns,
-            image: c.image,
-            optionImages: c.optionImages,
-            optionOrder: c.optionOrder,
-            groupId: c.groupId,
-            groupName: c.groupName,
-            groupIcon: c.groupIcon,
-            groupImage: c.groupImage,
-            groupImageFit: c.groupImageFit,
-            kind: c.kind,
-            catalogPdf: c.catalogPdf,
-            catalogShared: c.catalogShared,
-            optionCatalogs: c.optionCatalogs,
-            productCount: c._count.products,
-          }));
+          return mapRows(rows);
         },
         { lockTtlMs: 10_000, waitTimeoutMs: 5_000, pollMs: 50 },
       );
       res.set('X-Cache', hit ? 'HIT' : 'MISS');
-      res.set('Cache-Control', 'public, max-age=120');
+      // 不允许浏览器本地缓存：隐藏/恢复开关后旧列表会在 max-age 窗口内"回放"（恢复后仍不显示）。
+      // 服务端已有 Redis 缓存（管理端写操作即时失效），浏览器层只留 no-store。
+      res.set('Cache-Control', 'no-store');
       res.json(categories);
     } catch (err) {
       logger.error({ err }, '[Selections] List categories error');
@@ -291,8 +338,9 @@ export function createSelectionPublicRouter() {
         cacheKey,
         await selectionCacheTtl(),
         async () => {
-          const category = await prisma.selectionCategory.findUnique({
-            where: { slug },
+          // 隐藏分类对公开选型向导不可见（404），隐藏产品经 where 过滤不参与选型
+          const category = await prisma.selectionCategory.findFirst({
+            where: { slug, hidden: false },
             select: { id: true, columns: true },
           });
           if (!category) return null;
@@ -438,6 +486,7 @@ export function createSelectionPublicRouter() {
       }
 
       res.set('X-Cache', hit ? 'HIT' : 'MISS');
+      res.set('Cache-Control', 'no-store');
       res.json(result);
     } catch (err) {
       logger.error({ err }, '[Selections] Filter products error');
@@ -453,7 +502,8 @@ export function createSelectionPublicRouter() {
       const { value: category, hit } = await cacheGetOrSet(
         `cache:selections:category:${cacheKeyPart(slug)}`,
         await selectionCacheTtl(),
-        () => prisma.selectionCategory.findUnique({ where: { slug } }),
+        // 隐藏分类对公开访问 404
+        () => prisma.selectionCategory.findFirst({ where: { slug, hidden: false } }),
         { lockTtlMs: 10_000, waitTimeoutMs: 5_000, pollMs: 50 },
       );
       if (!category) {
@@ -461,6 +511,7 @@ export function createSelectionPublicRouter() {
         return;
       }
       res.set('X-Cache', hit ? 'HIT' : 'MISS');
+      res.set('Cache-Control', 'no-store');
       res.json({
         id: category.id,
         name: category.name,
@@ -508,11 +559,37 @@ export function createSelectionPublicRouter() {
         searchCacheToken(search),
       ].join(':');
 
+      const includeHidden = await wantsHiddenIncluded(req);
+
+      // 管理端拉全量（含隐藏产品，含隐藏分类下的产品）：绕过缓存
+      if (includeHidden) {
+        const category = await prisma.selectionCategory.findUnique({ where: { slug }, select: { id: true } });
+        if (!category) {
+          res.status(404).json({ detail: '分类不存在' });
+          return;
+        }
+        const where = selectionSearchWhere(category.id, search, true);
+        const [total, items] = await Promise.all([
+          prisma.selectionProduct.count({ where }),
+          prisma.selectionProduct.findMany({
+            where,
+            orderBy: { sortOrder: 'asc' },
+            skip: (page - 1) * pageSize,
+            take: pageSize,
+          }),
+        ]);
+        res.json({ total, page, pageSize, items: items.map((p) => selectionProductPayload(p)) });
+        return;
+      }
+
       const { value: result, hit } = await cacheGetOrSet(
         cacheKey,
         await selectionCacheTtl(),
         async () => {
-          const category = await prisma.selectionCategory.findUnique({ where: { slug }, select: { id: true } });
+          const category = await prisma.selectionCategory.findFirst({
+            where: { slug, hidden: false },
+            select: { id: true },
+          });
           if (!category) return null;
 
           const where = selectionSearchWhere(category.id, search);
@@ -548,6 +625,7 @@ export function createSelectionPublicRouter() {
         return;
       }
       res.set('X-Cache', hit ? 'HIT' : 'MISS');
+      res.set('Cache-Control', 'no-store');
       res.json(result);
     } catch (err) {
       logger.error({ err }, '[Selections] List products error');

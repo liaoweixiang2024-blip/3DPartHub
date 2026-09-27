@@ -29,11 +29,14 @@ import {
   SELECTION_TOOLBAR_BUTTON_SECONDARY,
   SELECTION_ICON_BUTTON_EDIT,
   SELECTION_ICON_BUTTON_DELETE,
+  SELECTION_ICON_BUTTON_ACTIVE,
 } from '../components/selection-admin/constants';
 import { ProductGeneratorModal } from '../components/selection-admin/ProductGeneratorModal';
 import { SelectionToolbarButtonContent, ToolbarMoreMenu } from '../components/selection-admin/SelectionAdminToolbar';
 import {
   getApiErrorMessage,
+  normalizeImportCell,
+  parseCsvRows,
   readProductImportRows,
   safeSpreadsheetText,
   cleanProductName,
@@ -72,6 +75,7 @@ import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { openDocumentUrl } from '../lib/browserDownload';
 import { getBusinessConfig } from '../lib/businessConfig';
+import { parseKitComponentLines } from '../lib/kitImport';
 import { KIT_LIST_TITLE_OPTION_KEY } from '../lib/kitList';
 import { smartSortOptions } from '../lib/selectionSort';
 
@@ -79,53 +83,6 @@ type Tab = 'categories' | 'products';
 const PRODUCT_MODEL_HEADERS = ['型号编号', '型号', 'modelNo', 'modelno', 'ModelNo'];
 const PRODUCT_NAME_HEADERS = ['名称', '产品名称', 'name', 'Name'];
 const SELECTION_CATEGORY_GRID_COLUMNS = 'minmax(220px,1.4fr) minmax(120px,0.8fr) 92px 92px 80px 104px';
-
-// 解析批量导入的子零件文本：每行「零件名 型号 数量」，制表符（Excel 直接粘贴）、
-// 逗号或连续空格均可作分隔符；两列时第二列为纯数字按「型号 数量」、否则按「零件名 型号」；
-// 单列视为型号（数量 1）。返回解析结果与无法识别的行号（1 起）。
-function parseKitComponentLines(text: string): { items: SelectionComponent[]; badLines: number[] } {
-  const items: SelectionComponent[] = [];
-  const badLines: number[] = [];
-  text.split(/\r?\n/).forEach((rawLine, idx) => {
-    const line = rawLine.trim();
-    if (!line || line.startsWith('#')) return;
-    let tokens: string[];
-    if (line.includes('\t')) tokens = line.split('\t');
-    else if (line.includes(',')) tokens = line.split(',');
-    else if (/\s{2,}/.test(line)) tokens = line.split(/\s{2,}/);
-    else tokens = line.split(' ');
-    tokens = tokens.map((token) => token.trim()).filter(Boolean);
-    if (!tokens.length) return;
-
-    let name = '';
-    let modelNo = '';
-    let qty = 1;
-    if (tokens.length >= 3) {
-      const parsed = parseInt(tokens[2], 10);
-      if (!Number.isFinite(parsed) || parsed < 1) {
-        badLines.push(idx + 1);
-        return;
-      }
-      name = tokens[0];
-      modelNo = tokens[1];
-      qty = parsed;
-    } else if (tokens.length === 2) {
-      if (/^\d+$/.test(tokens[1])) {
-        modelNo = tokens[0];
-        name = tokens[0];
-        qty = parseInt(tokens[1], 10);
-      } else {
-        name = tokens[0];
-        modelNo = tokens[1];
-      }
-    } else {
-      modelNo = tokens[0];
-      name = tokens[0];
-    }
-    items.push({ name, modelNo, qty, specs: {} });
-  });
-  return { items, badLines };
-}
 
 // ========== Content ==========
 function Content() {
@@ -208,6 +165,9 @@ function Content() {
   // 套件子零件批量导入（粘贴文本解析）
   const [kitImportOpen, setKitImportOpen] = useState(false);
   const [kitImportText, setKitImportText] = useState('');
+  // 子零件附加参数列（导入时表头自动识别，如「编码」）：取现有清单里出现过的 key 并集，
+  // 行编辑器按此渲染对应输入框，导入带了哪些附加列这里就能编辑哪些
+  const kitSpecKeys = [...new Set(prodForm.components.flatMap((c) => Object.keys(c.specs || {})))];
   const [batchParsed, setBatchParsed] = useState<Array<{
     name: string;
     modelNo?: string;
@@ -282,7 +242,10 @@ function Content() {
   const [optDragActive, setOptDragActive] = useState(false);
   const productTableScrollRef = useRef<HTMLDivElement | null>(null);
 
-  const { data: categories = [], mutate: mutateCats } = useSWR('selections/categories', getSelectionCategories);
+  // 管理端拉全量（含隐藏分类）：独立 SWR key，避免污染公开选型页的 categories 缓存
+  const { data: categories = [], mutate: mutateCats } = useSWR('selections/categories-admin', () =>
+    getSelectionCategories({ includeHidden: true }),
+  );
 
   const patchGroupCategoryCache = useCallback(
     (
@@ -362,13 +325,13 @@ function Content() {
     return () => window.removeEventListener('paste', handleGlobalGroupCoverPaste, true);
   }, [manageGroupCatsId, saveManagedGroupCoverFile, showGroupModal]);
 
-  // Products for selected category
+  // Products for selected category（含隐藏产品，便于管理端看到/恢复）
   const { data: productsData, mutate: mutateProds } = useSWR(
     selectedCatId ? `selections/admin/products/${selectedCatId}` : null,
     async () => {
       const cat = categories.find((c) => c.id === selectedCatId);
       if (!cat) return null;
-      return getSelectionProducts(cat.slug, 1, 5000);
+      return getSelectionProducts(cat.slug, 1, 5000, '', { includeHidden: true });
     },
   );
 
@@ -491,6 +454,32 @@ function Content() {
         return;
       }
       toast(getApiErrorMessage(err, '删除失败'), 'error');
+    }
+  }
+
+  /* 隐藏开关：开启后分类/产品不再出现在公开选型页、不参与选型（管理端仍可见可编辑，方便配置好再上线） */
+  async function toggleCatHidden(cat: SelectionCategory) {
+    const next = !cat.hidden;
+    try {
+      await updateCategory(cat.id, { hidden: next });
+      mutateCats();
+      toast(next ? `「${cat.name}」已隐藏（公开选型页不显示）` : `「${cat.name}」已恢复显示`, 'success');
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, '操作失败'), 'error');
+    }
+  }
+
+  async function toggleProdHidden(p: SelectionProduct) {
+    const next = !p.hidden;
+    try {
+      await updateProduct(p.id, { hidden: next });
+      mutateProds();
+      toast(
+        next ? `「${p.modelNo || p.name}」已隐藏（不参与选型）` : `「${p.modelNo || p.name}」已恢复参与选型`,
+        'success',
+      );
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, '操作失败'), 'error');
     }
   }
 
@@ -683,6 +672,48 @@ function Content() {
     } finally {
       setBatchImporting(false);
     }
+  }
+
+  /* 子零件导入：读取 .xlsx / .csv 表格 → 制表符文本，交给 parseKitComponentLines（表头驱动解析） */
+  async function handleKitImportFile(file: File) {
+    try {
+      if (file.size > 5 * 1024 * 1024) throw new Error('文件不能超过 5MB');
+      const lowerName = file.name.toLowerCase();
+      let rows: unknown[][];
+      if (lowerName.endsWith('.csv')) {
+        rows = parseCsvRows(await file.text());
+      } else if (lowerName.endsWith('.xlsx')) {
+        const { readSheet } = await import('read-excel-file/browser');
+        rows = (await readSheet(file)) as unknown[][];
+      } else {
+        throw new Error('仅支持 .xlsx / .csv 文件');
+      }
+      const lines = rows
+        .map((row) => row.map((cell) => normalizeImportCell(cell)))
+        .filter((cells) => cells.some(Boolean))
+        .map((cells) => cells.join('\t'));
+      if (lines.length === 0) throw new Error('文件中没有数据');
+      setKitImportText(lines.join('\n'));
+      toast(`已读取 ${file.name}，请核对下方解析结果`, 'success');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : '文件解析失败，请确认是有效的 .xlsx / .csv 文件', 'error');
+    }
+  }
+
+  async function downloadKitImportTemplate() {
+    const { default: writeXlsxFile } = await import('write-excel-file/browser');
+    const rows: SheetData = [
+      [
+        { value: '名称', fontWeight: 'bold' as const },
+        { value: '型号', fontWeight: 'bold' as const },
+        { value: '编码', fontWeight: 'bold' as const },
+        { value: '数量', fontWeight: 'bold' as const },
+      ],
+      [{ value: '弯头接头' }, { value: 'PC4-M5' }, { value: 'KAC-001' }, { value: 2 }],
+      [{ value: 'PC4-0.5' }, { value: '' }, { value: 'KAC-002' }, { value: 4 }],
+    ];
+    await writeXlsxFile(rows, { sheet: '子零件导入模板' }).toFile('kit_components_import_template.xlsx');
+    toast('已下载子零件导入模板', 'success');
   }
 
   function handleExcelFile(file: File) {
@@ -1210,7 +1241,7 @@ function Content() {
     >
       {/* ===== Categories Tab ===== */}
       {tab === 'categories' && (
-        <div key="categories-panel" className="admin-tab-panel space-y-3">
+        <div key="categories-panel" className="admin-tab-panel flex min-h-0 flex-1 flex-col gap-3">
           {catFilter === 'empty' && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
               <Icon name="warning" size={14} className="text-amber-500 shrink-0" />
@@ -1235,7 +1266,7 @@ function Content() {
                 </div>
               );
             return (
-              <div className="overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low">
                 <AdminGridHeader columns={SELECTION_CATEGORY_GRID_COLUMNS} className="gap-3 px-4">
                   <span>分类名称</span>
                   <span>分组</span>
@@ -1244,7 +1275,8 @@ function Content() {
                   <span>排序</span>
                   <span className="text-right">操作</span>
                 </AdminGridHeader>
-                <div className="max-h-[calc(100vh-280px)] overflow-y-auto selection-scrollbarless">
+                {/* 仅列表自身滚动（桌面 flex 占满剩余高度；移动端随页面滚动，无内嵌滚动） */}
+                <div className="selection-scrollbarless md:min-h-0 md:flex-1 md:overflow-y-auto">
                   {filtered.map((cat) => (
                     <div
                       key={cat.id}
@@ -1256,7 +1288,15 @@ function Content() {
                             <Icon name={cat.icon || 'inventory_2'} size={15} />
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span className={`block ${ADMIN_ROW_TITLE_CLASS}`}>{cat.name}</span>
+                            <span className={`flex items-center gap-1.5 ${ADMIN_ROW_TITLE_CLASS}`}>
+                              <span className="truncate">{cat.name}</span>
+                              {cat.hidden ? (
+                                <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-surface-container-high px-1.5 py-0.5 text-[9px] font-medium text-on-surface-variant/70">
+                                  <Icon name="visibility_off" size={10} />
+                                  隐藏
+                                </span>
+                              ) : null}
+                            </span>
                             <span className="mt-0.5 block truncate text-[10px] text-on-surface-variant sm:hidden">
                               /{cat.slug}
                             </span>
@@ -1283,6 +1323,14 @@ function Content() {
                         {cat.sortOrder}
                       </span>
                       <div className="flex shrink-0 items-center justify-end gap-2 pt-0.5 md:gap-1 md:pt-0">
+                        <button
+                          onClick={() => void toggleCatHidden(cat)}
+                          className={cat.hidden ? SELECTION_ICON_BUTTON_ACTIVE : SELECTION_ICON_BUTTON_EDIT}
+                          data-tooltip-ignore
+                          aria-label={cat.hidden ? '恢复分类显示' : '隐藏分类'}
+                        >
+                          <Icon name={cat.hidden ? 'visibility_off' : 'visibility'} size={14} />
+                        </button>
                         <button
                           onClick={() => openEditCat(cat)}
                           className={SELECTION_ICON_BUTTON_EDIT}
@@ -1328,7 +1376,7 @@ function Content() {
 
       {/* ===== Products Tab ===== */}
       {tab === 'products' && (
-        <div key="products-panel" className="admin-tab-panel space-y-3">
+        <div key="products-panel" className="admin-tab-panel flex min-h-0 flex-1 flex-col gap-3">
           {/* Category selector */}
           <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-3">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
@@ -1438,7 +1486,7 @@ function Content() {
           </div>
 
           {selectedCatId && activeCat && (
-            <>
+            <div className="flex min-h-0 flex-1 flex-col gap-3">
               {/* Products table */}
               {productsLoading ? (
                 <div className="min-h-[320px] overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low">
@@ -1498,12 +1546,20 @@ function Content() {
                           return (
                             <div
                               key={p.id}
-                              className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-3 shadow-sm"
+                              className={`rounded-xl border border-outline-variant/10 bg-surface-container-low p-3 shadow-sm ${
+                                p.hidden ? 'opacity-55' : ''
+                              }`}
                             >
                               <div className="flex items-start gap-2">
                                 <div className="min-w-0 flex-1">
-                                  <div className="text-sm font-bold leading-snug text-on-surface break-words">
-                                    {title}
+                                  <div className="flex flex-wrap items-center gap-1.5 text-sm font-bold leading-snug text-on-surface break-words">
+                                    <span>{title}</span>
+                                    {p.hidden ? (
+                                      <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-surface-container-high px-1.5 py-0.5 text-[9px] font-medium text-on-surface-variant/70">
+                                        <Icon name="visibility_off" size={10} />
+                                        隐藏
+                                      </span>
+                                    ) : null}
                                   </div>
                                   {subtitle && (
                                     <div className="mt-0.5 text-xs leading-snug text-on-surface-variant break-words">
@@ -1512,6 +1568,14 @@ function Content() {
                                   )}
                                 </div>
                                 <div className="flex shrink-0 items-center gap-1">
+                                  <button
+                                    onClick={() => void toggleProdHidden(p)}
+                                    className={p.hidden ? SELECTION_ICON_BUTTON_ACTIVE : SELECTION_ICON_BUTTON_EDIT}
+                                    data-tooltip-ignore
+                                    aria-label={p.hidden ? '恢复产品参与选型' : '隐藏产品（不参与选型）'}
+                                  >
+                                    <Icon name={p.hidden ? 'visibility_off' : 'visibility'} size={14} />
+                                  </button>
                                   <button
                                     onClick={() => openEditProd(p)}
                                     className={SELECTION_ICON_BUTTON_EDIT}
@@ -1567,11 +1631,22 @@ function Content() {
                           );
                         })}
                       </div>
+                      {hasMoreProducts && (
+                        <div className="md:hidden">
+                          <InfiniteLoadTrigger
+                            hasMore={hasMoreProducts}
+                            isLoading={false}
+                            onLoadMore={loadMoreProducts}
+                            buttonless
+                            idleLabel={null}
+                          />
+                        </div>
+                      )}
 
                       <div
                         ref={productTableScrollRef}
                         onScroll={handleProductTableScroll}
-                        className="hidden max-h-[calc(100vh-280px)] overflow-auto rounded-xl border border-outline-variant/15 selection-scrollbarless md:block"
+                        className="hidden min-h-0 flex-1 overflow-auto rounded-xl border border-outline-variant/15 selection-scrollbarless md:block"
                       >
                         <AdminTable>
                           <thead className={ADMIN_TABLE_HEAD_CLASS}>
@@ -1587,7 +1662,7 @@ function Content() {
                           </thead>
                           <tbody>
                             {visibleProducts.map((p) => (
-                              <AdminTableBodyRow key={p.id}>
+                              <AdminTableBodyRow key={p.id} className={p.hidden ? 'opacity-55' : undefined}>
                                 {productColumns.map((col) => (
                                   <AdminTableCell key={col.key} className="whitespace-nowrap px-3 py-2.5">
                                     {(p.specs as Record<string, string>)[col.key] ?? '—'}
@@ -1595,6 +1670,14 @@ function Content() {
                                 ))}
                                 <AdminTableCell className="px-3 py-2.5 text-right">
                                   <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      onClick={() => void toggleProdHidden(p)}
+                                      className={p.hidden ? SELECTION_ICON_BUTTON_ACTIVE : SELECTION_ICON_BUTTON_EDIT}
+                                      data-tooltip-ignore
+                                      aria-label={p.hidden ? '恢复产品参与选型' : '隐藏产品（不参与选型）'}
+                                    >
+                                      <Icon name={p.hidden ? 'visibility_off' : 'visibility'} size={13} />
+                                    </button>
                                     <button
                                       onClick={() => openEditProd(p)}
                                       className={SELECTION_ICON_BUTTON_EDIT}
@@ -1634,18 +1717,19 @@ function Content() {
                             ))}
                           </tbody>
                         </AdminTable>
+                        <InfiniteLoadTrigger
+                          hasMore={hasMoreProducts}
+                          isLoading={false}
+                          onLoadMore={loadMoreProducts}
+                          buttonless
+                          idleLabel={null}
+                        />
                       </div>
-                      <InfiniteLoadTrigger
-                        hasMore={hasMoreProducts}
-                        isLoading={false}
-                        onLoadMore={loadMoreProducts}
-                        buttonless
-                      />
                     </>
                   )}
                 </>
               )}
-            </>
+            </div>
           )}
 
           {!selectedCatId && (
@@ -1818,9 +1902,6 @@ function Content() {
                 </div>
                 <div>
                   <label className="text-xs text-on-surface-variant mb-1 block">封面图</label>
-                  <p className="mb-1.5 text-[10px] leading-relaxed text-on-surface-variant">
-                    用于前台选型大类/子类列表，推荐 1600×800 或 1200×600，比例 2:1，主体居中并保留少量边距。
-                  </p>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                     <input
                       name="image"
@@ -1853,7 +1934,10 @@ function Content() {
                       </span>
                     </label>
                   </div>
-                  <p className="text-[10px] text-on-surface-variant mt-0.5">
+                  <p className="mt-1 text-[10px] leading-relaxed text-on-surface-variant">
+                    用于前台选型大类/子类列表，推荐 1600×800 或 1200×600，比例 2:1，主体居中并保留少量边距。
+                  </p>
+                  <p className="mt-0.5 text-[10px] leading-relaxed text-on-surface-variant">
                     支持截图后 Ctrl+V 粘贴上传；过小图片会在前台大图区域显得模糊。
                   </p>
                   {catForm.image && (
@@ -2110,42 +2194,70 @@ function Content() {
                     </div>
                     {prodForm.components.map((comp, i) => (
                       <div key={i} className="flex items-start gap-2 bg-surface-container-high/50 rounded-lg p-2">
-                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          <input
-                            name="name"
-                            value={comp.name}
-                            onChange={(e) => {
-                              const next = [...prodForm.components];
-                              next[i] = { ...next[i], name: e.target.value };
-                              setProdForm({ ...prodForm, components: next });
-                            }}
-                            placeholder="零件名"
-                            className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
-                          />
-                          <input
-                            name="model-no"
-                            value={comp.modelNo || ''}
-                            onChange={(e) => {
-                              const next = [...prodForm.components];
-                              next[i] = { ...next[i], modelNo: e.target.value };
-                              setProdForm({ ...prodForm, components: next });
-                            }}
-                            placeholder="型号"
-                            className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
-                          />
-                          <input
-                            name="qty"
-                            type="number"
-                            min={1}
-                            value={comp.qty}
-                            onChange={(e) => {
-                              const next = [...prodForm.components];
-                              next[i] = { ...next[i], qty: Math.max(1, parseInt(e.target.value) || 1) };
-                              setProdForm({ ...prodForm, components: next });
-                            }}
-                            placeholder="数量"
-                            className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
-                          />
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <input
+                              name="name"
+                              value={comp.name}
+                              onChange={(e) => {
+                                const next = [...prodForm.components];
+                                next[i] = { ...next[i], name: e.target.value };
+                                setProdForm({ ...prodForm, components: next });
+                              }}
+                              placeholder="零件名"
+                              className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                            />
+                            <input
+                              name="model-no"
+                              value={comp.modelNo || ''}
+                              onChange={(e) => {
+                                const next = [...prodForm.components];
+                                next[i] = { ...next[i], modelNo: e.target.value };
+                                setProdForm({ ...prodForm, components: next });
+                              }}
+                              placeholder="型号"
+                              className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                            />
+                            <input
+                              name="qty"
+                              type="number"
+                              min={1}
+                              value={comp.qty}
+                              onChange={(e) => {
+                                const next = [...prodForm.components];
+                                next[i] = { ...next[i], qty: Math.max(1, parseInt(e.target.value) || 1) };
+                                setProdForm({ ...prodForm, components: next });
+                              }}
+                              placeholder="数量"
+                              className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                            />
+                          </div>
+                          {kitSpecKeys.length > 0 && (
+                            <div
+                              className="grid gap-2"
+                              style={{
+                                gridTemplateColumns: `repeat(${Math.min(kitSpecKeys.length, 4)}, minmax(0, 1fr))`,
+                              }}
+                            >
+                              {kitSpecKeys.map((key) => (
+                                <input
+                                  key={key}
+                                  name={`comp-spec-${key}`}
+                                  value={comp.specs?.[key] || ''}
+                                  onChange={(e) => {
+                                    const next = [...prodForm.components];
+                                    next[i] = {
+                                      ...next[i],
+                                      specs: { ...(next[i].specs || {}), [key]: e.target.value },
+                                    };
+                                    setProdForm({ ...prodForm, components: next });
+                                  }}
+                                  placeholder={key}
+                                  className="bg-surface-container-lowest text-on-surface-variant text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                                />
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <button
                           type="button"
@@ -2194,10 +2306,37 @@ function Content() {
             <div className="shrink-0">
               <h2 className="text-base font-bold text-on-surface">批量导入子零件</h2>
               <p className="mt-1 text-xs text-on-surface-variant leading-relaxed">
-                每行一条，列之间用制表符（Excel 直接粘贴）、逗号或空格分隔：
+                每行一条，列之间用制表符（Excel 直接粘贴）、逗号或连续空格分隔，也可直接导入 .xlsx / .csv 表格文件。
                 <br />
-                「零件名 + 型号 + 数量」三列，或「型号 + 数量」两列，或仅「型号」（数量默认 1）
+                <span className="font-bold text-on-surface">推荐带表头：</span>首行写列名（名称、型号、数量 +
+                任意附加列如「编码」），列序任意、列数不限，附加列会显示在子零件清单和导出里。
+                <br />
+                不带表头则按位置解析：「零件名 型号 数量」，或「型号 数量」，或仅「型号」（数量默认 1）。
               </p>
+            </div>
+            <div className="shrink-0 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void downloadKitImportTemplate()}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg"
+              >
+                <Icon name="download" size={13} />
+                下载模板（.xlsx）
+              </button>
+              <label className="inline-flex cursor-pointer items-center gap-1 px-2.5 py-1.5 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg">
+                <Icon name="upload_file" size={13} />
+                导入表格文件
+                <input
+                  type="file"
+                  accept=".xlsx,.csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (file) void handleKitImportFile(file);
+                  }}
+                />
+              </label>
             </div>
             <textarea
               name="kit-import-text"
@@ -2205,7 +2344,7 @@ function Content() {
               onChange={(e) => setKitImportText(e.target.value)}
               rows={8}
               spellCheck={false}
-              placeholder={'弯头接头\tPC4-M5\t2\nPC4-0.5\t4\nPC6-1'}
+              placeholder={'名称\t型号\t编码\t数量\n弯头接头\tPC4-M5\tKAC-001\t2\nPC4-0.5\t\tKAC-002\t4'}
               className="flex-1 min-h-32 w-full resize-none bg-surface-container-lowest text-on-surface text-sm rounded-lg px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container font-mono"
             />
             {(() => {

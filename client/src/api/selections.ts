@@ -7,6 +7,8 @@ export interface ColumnDef {
   unit: string;
   sortType?: 'thread' | 'numeric' | 'default';
   inputType?: 'select' | 'manual' | 'preset';
+  /** manual 列的填写校验：'number' = 仅数字（可小数）；缺省 = 任意文字 */
+  valueType?: 'number';
   presetOptions?: string[];
   dependsOn?: { field: string; minIndex: number };
   optionDisplay?: 'auto' | 'text' | 'image';
@@ -39,6 +41,8 @@ export interface SelectionCategory {
   groupImage?: string | null;
   groupImageFit?: 'cover' | 'contain' | null;
   kind?: string | null;
+  /** 隐藏的分类不显示在公开选型页、不参与选型（仅管理端可见） */
+  hidden?: boolean;
   catalogPdf?: string | null;
   catalogShared?: boolean;
   optionCatalogs?: Record<string, Record<string, string>> | null;
@@ -63,6 +67,8 @@ export interface SelectionProduct {
   unit?: string | null;
   sortOrder: number;
   isKit: boolean;
+  /** 隐藏的产品不显示在公开选型页、不参与选型（仅管理端可见） */
+  hidden?: boolean;
   components?: SelectionComponent[] | null;
   matchedModelId?: string | null;
   matchedModelThumbnail?: string | null;
@@ -87,8 +93,10 @@ export interface SelectionFilterResult {
 
 // ========== Public API ==========
 
-export async function getSelectionCategories(): Promise<SelectionCategory[]> {
-  const res = await client.get('/selections/categories');
+export async function getSelectionCategories(options: { includeHidden?: boolean } = {}): Promise<SelectionCategory[]> {
+  const res = await client.get('/selections/categories', {
+    params: { include_hidden: options.includeHidden ? '1' : undefined },
+  });
   return unwrapResponse(res);
 }
 
@@ -129,7 +137,7 @@ export async function getSelectionProducts(
   page = 1,
   pageSize = 100,
   search = '',
-  options: { includeMatch?: boolean } = {},
+  options: { includeMatch?: boolean; includeHidden?: boolean } = {},
 ): Promise<{ total: number; page: number; pageSize: number; items: SelectionProduct[] }> {
   const res = await client.get(`/selections/categories/${slug}/products`, {
     params: {
@@ -137,6 +145,7 @@ export async function getSelectionProducts(
       page_size: pageSize,
       search: search || undefined,
       include_match: options.includeMatch === false ? '0' : undefined,
+      include_hidden: options.includeHidden ? '1' : undefined,
     },
   });
   return unwrapResponse(res);
@@ -207,6 +216,7 @@ export async function updateCategory(
     groupIcon: string | null;
     groupImage: string | null;
     groupImageFit: 'cover' | 'contain' | null;
+    hidden: boolean;
   }>,
 ): Promise<SelectionCategory> {
   const res = await client.put(`/admin/selections/categories/${id}`, data);
@@ -260,6 +270,7 @@ export async function updateProduct(
     pdfUrl: string;
     sortOrder: number;
     isKit: boolean;
+    hidden: boolean;
     components: SelectionComponent[];
   }>,
 ): Promise<SelectionProduct> {
