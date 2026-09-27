@@ -1956,6 +1956,7 @@ export const enUS: { translation: TranslationMap } = {
     browserDownload: {
       batchZipFailed: 'Batch download failed',
       chooseShareTarget: 'Choose "Save to Files" or a share target',
+      chooseShareTargetAndroid: 'Pick a share target to send the file, or tap "Direct download" to save it',
       createDrawingTokenFailed: 'Failed to create drawing access token',
       createTokenFailed: 'Failed to create download token',
       documentFallback: 'If the drawing does not appear, tap “Open”; when finished, tap “Exit”.',
@@ -1970,6 +1971,7 @@ export const enUS: { translation: TranslationMap } = {
       pdfDrawing: 'PDF Drawing',
       preparingDownload: 'Preparing download...',
       saveOrShare: 'Save to Files / Share',
+      shareFile: 'Share',
       shareFailed: 'Could not open the share panel, tap “Direct download” instead',
     },
     language: {

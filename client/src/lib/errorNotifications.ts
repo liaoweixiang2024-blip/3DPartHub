@@ -111,6 +111,20 @@ export function isRateLimitError(error: unknown): error is AxiosError {
   return axios.isAxiosError(error) && error.response?.status === 429;
 }
 
+/** 浏览门槛 401（匿名访问被「需登录浏览」拦截，模型/选型/模型预览三处）。
+ *  唯一正确的承接是页面级锁屏/登录引导（BrowseLoginLock），弹错误 toast 只会和锁屏重复打扰。 */
+export function isBrowseLoginRequiredError(error: unknown): boolean {
+  if (!axios.isAxiosError(error) || error.response?.status !== 401) return false;
+  const data = error.response.data as { code?: unknown; detail?: unknown } | undefined;
+  if (!data || typeof data !== 'object') return false;
+  return (
+    data.code === 'LOGIN_REQUIRED_BROWSE' ||
+    data.detail === '需要登录后才能浏览模型' ||
+    data.detail === '需要登录后才能浏览选型' ||
+    data.detail === '需要登录后才能查看模型预览'
+  );
+}
+
 export function getRateLimitRetrySeconds(error: unknown) {
   if (!isRateLimitError(error)) return null;
 
@@ -229,6 +243,10 @@ function isMutedScriptErrorValue(error: unknown): boolean {
 }
 
 export function notifyGlobalError(error: unknown, fallback?: string, type: ErrorToastType = 'error') {
+  // 浏览门槛 401 静默：client.ts 拦截器已静默拒绝，这里兜住其余漏斗
+  // （SWR 全局 onError / unhandledrejection），由页面锁屏统一承接，不再弹右上角 toast
+  if (isBrowseLoginRequiredError(error)) return;
+
   // 脱敏错误对用户是噪音（用户无法据此做任何事），静默吞掉不上 toast。
   // 典型场景：iOS Safari 点系统分享/添加主屏幕 → 页面挂起恢复时 WebGL 抛错。
   // 注意：必须在「原始错误」上判断——getErrorMessage 会把 Script error 替换成

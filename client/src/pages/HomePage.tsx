@@ -43,7 +43,7 @@ import { MobileDrawer } from '../components/home/MobileDrawer';
 import { ProductCard } from '../components/home/ProductCard';
 import { ProductCardMobile } from '../components/home/ProductCardMobile';
 import AuthModal from '../components/shared/AuthModal';
-import BrowseLoginLock from '../components/shared/BrowseLoginLock';
+import BrowseLoginLock, { useBrowseGate } from '../components/shared/BrowseLoginLock';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
@@ -72,8 +72,6 @@ import { useResolvedPublicInterfaceTheme } from '../lib/interfaceThemePreference
 import { cacheModelDetailTitle } from '../lib/modelDetailTitleCache';
 import {
   usePublicSettings,
-  getCachedPublicSettings,
-  getPublicSettingsSnapshot,
   getContactEmail,
   getContactPhone,
   getContactAddress,
@@ -156,19 +154,9 @@ export default function HomePage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'ADMIN';
-  // 浏览门槛判定：有缓存的公开设置时同步初始化（避免匿名首访先发请求再吃 401）；
-  // 未判定前不发起会被拦截的列表/分类请求，杜绝闪一排「需要登录」提示
-  const initialBrowseGate = (() => {
-    const snapshot = getPublicSettingsSnapshot();
-    if (!snapshot || typeof snapshot.require_login_browse !== 'boolean') {
-      return { resolved: false, blocked: false };
-    }
-    const auth = useAuthStore.getState();
-    const blocked = snapshot.require_login_browse === true && auth.hasHydrated && !auth.isAuthenticated;
-    return { resolved: true, blocked };
-  })();
-  const [browseBlocked, setBrowseBlocked] = useState(initialBrowseGate.blocked);
-  const [browseGateResolved, setBrowseGateResolved] = useState(initialBrowseGate.resolved);
+  // 浏览门槛：订阅公开设置（同步初值来自本地缓存快照，匿名首访不会先发请求再吃 401；
+  // 访客带着旧缓存、管理员刚开门槛时，后台刷新完成后这里自动重算，锁屏能接管页面）
+  const { blocked: browseBlocked, dataReady: browseGateResolved } = useBrowseGate('require_login_browse');
   const [restoreVisualLocked, setRestoreVisualLocked] = useState(() =>
     Boolean(initialHomeState?.restoreKey && getPendingHomeRestoreKey() === initialHomeState.restoreKey),
   );
@@ -178,25 +166,6 @@ export default function HomePage() {
   const [deletingModel, setDeletingModel] = useState(false);
   const [listRefreshPending, setListRefreshPending] = useState(false);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      // 登录用户不受浏览门槛限制
-      setBrowseBlocked(false);
-      setBrowseGateResolved(true);
-      return;
-    }
-    getCachedPublicSettings()
-      .then((s) => {
-        setBrowseBlocked(s.require_login_browse === true);
-        setBrowseGateResolved(true);
-      })
-      .catch(() => {
-        // 设置拉不到时按不限制处理，保证页面可用
-        setBrowseBlocked(false);
-        setBrowseGateResolved(true);
-      });
-  }, [isAuthenticated]);
 
   // 门槛未判定/被拦截时不发请求（发出去也只会 401）
   const browseDataReady = browseGateResolved && !browseBlocked;

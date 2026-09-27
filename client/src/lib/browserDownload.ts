@@ -28,12 +28,23 @@ function shouldIsolateDownloadNavigation() {
   return isIosLikeDevice() && isStandaloneApp();
 }
 
+/** 移动端主屏应用（iOS/Android）下载统一走「分享/保存」操作卡：
+ *  iOS PWA 是技术必需（无下载管理器，直接下载会挂起）；Android PWA 是产品选择——
+ *  一步直达系统分享面板（可直接发微信等），「直接下载」仍保留为卡片按钮。
+ *  微信内置浏览器排除（window.open 受限，走 blob+share 兜底链）。 */
+function shouldUseShareTargetDownload() {
+  return isStandaloneApp() && isMobileLikeBrowser() && !isWeChatBrowser();
+}
+
 function shouldUseBlobDownloadNavigation() {
-  return shouldIsolateDownloadNavigation() || (isWeChatBrowser() && isMobileLikeBrowser());
+  return (
+    shouldIsolateDownloadNavigation() || shouldUseShareTargetDownload() || (isWeChatBrowser() && isMobileLikeBrowser())
+  );
 }
 
 export function shouldUseIsolatedBrowserDownload() {
-  return shouldIsolateDownloadNavigation();
+  // 批量打包下载与单文件下载保持同一分流：移动端主屏应用走 blob+操作卡，浏览器走原生下载
+  return shouldIsolateDownloadNavigation() || shouldUseShareTargetDownload();
 }
 
 type PreparedDownloadWindow = Window | null | undefined;
@@ -126,7 +137,7 @@ function closePreparedWindow(win: PreparedDownloadWindow) {
 }
 
 function openPreparedDownloadWindow(): PreparedDownloadWindow {
-  if (!shouldIsolateDownloadNavigation()) return null;
+  if (!shouldIsolateDownloadNavigation() && !shouldUseShareTargetDownload()) return null;
   const win = window.open('', '_blank');
   if (win) {
     try {
@@ -228,11 +239,20 @@ async function shareBlobFile(blob: Blob, fileName: string) {
  * 表现为卡死在“请选择存储到文件…”提示页。此页把浮层本身渲染成保存/分享操作页，
  * 分享调用改在该聚焦窗口内先自动尝试一次，失败/挂起时用户仍可点按钮手动触发（手势+聚焦，最可靠）。
  */
-function buildShareTargetHtml(fileName: string, fileSize: number) {
+function buildShareTargetHtml(fileName: string, fileSize: number, androidLike = false) {
   const name = escapeHtml(fileName || 'download');
   const size = escapeHtml(formatFileSize(fileSize));
-  const hint = escapeHtml(tDownload('browserDownload.chooseShareTarget', '请选择“存储到文件”或分享目标'));
-  const saveLabel = escapeHtml(tDownload('browserDownload.saveOrShare', '保存到文件 / 分享'));
+  // iOS 分享面板有「存储到文件」接收方；安卓面板没有——文案按平台区分，避免误导
+  const hint = escapeHtml(
+    androidLike
+      ? tDownload('browserDownload.chooseShareTargetAndroid', '选择分享目标发送文件，或点“直接下载”保存到手机')
+      : tDownload('browserDownload.chooseShareTarget', '请选择“存储到文件”或分享目标'),
+  );
+  const saveLabel = escapeHtml(
+    androidLike
+      ? tDownload('browserDownload.shareFile', '分享')
+      : tDownload('browserDownload.saveOrShare', '保存到文件 / 分享'),
+  );
   const directLabel = escapeHtml(tDownload('browserDownload.directDownload', '直接下载'));
   const failText = escapeHtml(tDownload('browserDownload.shareFailed', '无法打开分享面板，请点“直接下载”重试'));
   const exitLabel = escapeHtml(tDownload('browserDownload.exit', '退出'));
@@ -248,7 +268,7 @@ function presentShareTargetWindow(
   try {
     const doc = win.document;
     doc.open();
-    doc.write(buildShareTargetHtml(fileName, blob.size));
+    doc.write(buildShareTargetHtml(fileName, blob.size, !isIosLikeDevice()));
     doc.close();
   } catch {
     // Cross-context windows may not expose document writes; fall back to navigation download.

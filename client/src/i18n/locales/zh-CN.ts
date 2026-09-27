@@ -1944,6 +1944,7 @@ export const zhCN: { translation: TranslationMap } = {
     browserDownload: {
       batchZipFailed: '打包下载失败',
       chooseShareTarget: '请选择“存储到文件”或分享目标',
+      chooseShareTargetAndroid: '选择分享目标发送文件，或点“直接下载”保存到手机',
       createDrawingTokenFailed: '创建图纸访问令牌失败',
       createTokenFailed: '创建下载令牌失败',
       documentFallback: '如果图纸没有显示，点右上角“打开”；完成后点左上角“退出”。',
@@ -1958,6 +1959,7 @@ export const zhCN: { translation: TranslationMap } = {
       pdfDrawing: 'PDF 图纸',
       preparingDownload: '正在准备下载...',
       saveOrShare: '保存到文件 / 分享',
+      shareFile: '分享',
       shareFailed: '无法打开分享面板，请点“直接下载”重试',
     },
     language: {

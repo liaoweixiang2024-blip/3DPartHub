@@ -267,6 +267,7 @@ export const jaJPTranslation: TranslationMap = {
   browserDownload: {
     batchZipFailed: '一括ダウンロードに失敗しました',
     chooseShareTarget: '「ファイルに保存」または共有先を選択してください',
+    chooseShareTargetAndroid: '共有先を選んでファイルを送信、または「直接ダウンロード」で保存してください',
     createDrawingTokenFailed: '図面アクセス用トークンの作成に失敗しました',
     createTokenFailed: 'ダウンロードトークンの作成に失敗しました',
     documentFallback: '図面が表示されない場合は「開く」をタップしてください。完了後は「終了」をタップします。',
@@ -531,6 +532,7 @@ export const koKRTranslation: TranslationMap = {
   browserDownload: {
     batchZipFailed: '일괄 다운로드 실패',
     chooseShareTarget: '“파일에 저장” 또는 공유 대상을 선택하세요',
+    chooseShareTargetAndroid: '공유 대상을 선택해 파일을 보내거나, “직접 다운로드”로 저장하세요',
     createDrawingTokenFailed: '도면 접근 토큰 생성에 실패했습니다',
     createTokenFailed: '다운로드 토큰 생성에 실패했습니다',
     documentFallback: '도면이 표시되지 않으면 “열기”를 누르세요. 완료 후 “나가기”를 누릅니다.',
@@ -749,6 +751,7 @@ export const deDETranslation: TranslationMap = {
   browserDownload: {
     batchZipFailed: 'Batch-Download fehlgeschlagen',
     chooseShareTarget: 'Wählen Sie „In Dateien sichern“ oder ein Freigabeziel',
+    chooseShareTargetAndroid: 'Wählen Sie ein Freigabeziel zum Senden oder tippen Sie auf „Direktdownload“ zum Sichern',
     createDrawingTokenFailed: 'Zeichnungszugriffstoken konnte nicht erstellt werden',
     createTokenFailed: 'Download-Token konnte nicht erstellt werden',
     documentFallback: 'Wenn die Zeichnung nicht angezeigt wird, tippen Sie auf „Öffnen“; danach auf „Beenden“.',

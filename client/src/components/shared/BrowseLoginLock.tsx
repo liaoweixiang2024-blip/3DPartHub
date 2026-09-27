@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getCachedPublicSettings, getPublicSettingsSnapshot } from '../../lib/publicSettings';
+import { usePublicSettings } from '../../lib/publicSettings';
 import { useAuthStore } from '../../stores/useAuthStore';
 import Icon from './Icon';
 import { useAuthEntry } from './useAuthEntry';
@@ -58,33 +57,19 @@ export default function BrowseLoginLock({ scope = 'models' }: { scope?: 'models'
 
 /**
  * 浏览门槛判定 hook（require_login_browse=模型列表 / require_login_selection=选型页，两开关独立）：
- * 有缓存的公开设置时同步初始化（匿名首访不会先发请求再吃 401），
- * 否则异步补拉最新设置。dataReady=false 表示门槛未判定/被拦截，页面应暂停受门槛约束的请求。
+ * 同步初值来自 SWR 的 publicSettings fallback（本地缓存快照，匿名首访不会先发请求再吃 401）。
+ * 订阅 usePublicSettings 而非一次性读取：访客带着旧缓存（管理员刚开门槛）时，
+ * 后台刷新完成后这里自动重算，锁屏能真正接管页面而不是停留在按旧缓存放行的空状态。
+ * dataReady=false 表示门槛未判定/被拦截，页面应暂停受门槛约束的请求。
  */
 export function useBrowseGate(settingKey: 'require_login_browse' | 'require_login_selection' = 'require_login_browse') {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const [state, setState] = useState(() => {
-    const snapshot = getPublicSettingsSnapshot();
-    if (!snapshot || typeof snapshot[settingKey] !== 'boolean') {
-      return { resolved: false, blocked: false };
-    }
-    const auth = useAuthStore.getState();
-    const blocked = snapshot[settingKey] === true && auth.hasHydrated && !auth.isAuthenticated;
-    return { resolved: true, blocked };
-  });
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
+  const { settings } = usePublicSettings();
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      setState((prev) => (prev.resolved && !prev.blocked ? prev : { resolved: true, blocked: false }));
-      return;
-    }
-    getCachedPublicSettings()
-      .then((s) => setState({ resolved: true, blocked: s[settingKey] === true }))
-      .catch(() => setState({ resolved: true, blocked: false }));
-  }, [isAuthenticated, settingKey]);
+  const gateValue = settings?.[settingKey];
+  const resolved = typeof gateValue === 'boolean' && hasHydrated;
+  const blocked = resolved && gateValue === true && !isAuthenticated;
 
-  return {
-    blocked: state.resolved && state.blocked,
-    dataReady: state.resolved && !state.blocked,
-  };
+  return { blocked, dataReady: resolved && !blocked };
 }

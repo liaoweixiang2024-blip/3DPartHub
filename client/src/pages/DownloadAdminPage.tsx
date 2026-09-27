@@ -294,18 +294,25 @@ function TrendPanel({ data }: { data: DownloadAdminStats['dailyStats'] }) {
         <MetricMini label="区间体积" value={formatBytes(totalBytes)} icon="storage" />
       </div>
       {/* 列必须撑满图表高度（不能靠容器 items-end 收缩）：轨道的 flex 高度、柱子的
-          height:% 都依赖父级有确定高度，否则整列塌成 padding、柱子恒为 0 */}
+          height:% 都依赖父级有确定高度，否则整列塌成 padding、柱子恒为 0。
+          数字行固定高度（0 下载也渲染空行），保证所有柱子基线对齐 */}
       <div className="mt-4 flex h-72 gap-1.5 rounded-xl border border-outline-variant/8 bg-surface px-3 pb-3 pt-5 sm:gap-2">
         {data.map((item) => {
-          const height = Math.max(6, Math.round((item.downloads / maxDownloads) * 100));
+          const hasData = item.downloads > 0;
+          const height = Math.max(4, Math.round((item.downloads / maxDownloads) * 100));
           return (
-            <div key={item.date} className="group flex h-full min-w-0 flex-1 flex-col items-center gap-2">
-              <div className="flex min-h-0 w-full flex-1 items-end rounded-lg bg-surface-container-high/55 px-1 pt-3">
-                <div
-                  className="w-full rounded-t bg-primary-container/85 transition-all group-hover:bg-primary-container"
-                  style={{ height: `${height}%` }}
-                  title={`${item.date}: ${item.downloads} 次 · ${formatBytes(item.bytes)}`}
-                />
+            <div key={item.date} className="group flex h-full min-w-0 flex-1 flex-col items-center gap-1">
+              <span className="flex h-4 w-full shrink-0 items-center justify-center text-[10px] font-medium leading-none tabular-nums text-on-surface-variant">
+                {hasData ? item.downloads : ''}
+              </span>
+              <div className="flex min-h-0 w-full flex-1 items-end rounded-lg bg-surface-container-high/55 px-1 pt-2">
+                {hasData ? (
+                  <div
+                    className="w-full rounded-t bg-primary-container/85 transition-all group-hover:bg-primary-container"
+                    style={{ height: `${height}%` }}
+                    title={`${item.date}: ${item.downloads} 次 · ${formatBytes(item.bytes)}`}
+                  />
+                ) : null}
               </div>
               <span className="hidden shrink-0 text-[10px] tabular-nums text-on-surface-variant sm:block">
                 {item.date.slice(5)}

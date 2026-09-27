@@ -233,7 +233,13 @@ export function patchPublicSettings(patch: Partial<SystemSettings>): Partial<Sys
 
 export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>> {
   const now = Date.now();
-  if (cache && now - fetchedAt < TTL) return cache;
+  if (cache && now - fetchedAt < TTL) {
+    // TTL 内也排一次空闲刷新（每页加载最多一次、requestIdleCallback 里执行）：
+    // 管理员刚改设置（如开启「需登录浏览」）时，带着旧缓存的访客在本次访问内
+    // 就能拿到新设置，页面级锁屏得以接管，而不是停在按旧缓存放行的空状态
+    schedulePublicSettingsRefresh();
+    return cache;
+  }
 
   // Try localStorage first for instant hydration
   if (!cache) {

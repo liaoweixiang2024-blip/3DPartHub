@@ -8,7 +8,7 @@ import { GlobalPageRefreshIndicator } from './components/shared/PageRefreshFallb
 import RouteProgress from './components/shared/RouteProgress';
 import { ToastProvider } from './components/shared/Toast';
 import { i18n } from './i18n';
-import { isRateLimitError, notifyGlobalError } from './lib/errorNotifications';
+import { isBrowseLoginRequiredError, isRateLimitError, notifyGlobalError } from './lib/errorNotifications';
 import { motionDuration, motionEase } from './lib/motion';
 import { getPublicSettingsSnapshot } from './lib/publicSettings';
 import Router from './router';
@@ -23,7 +23,8 @@ export default function App() {
         dedupingInterval: 5000,
         focusThrottleInterval: 10000,
         revalidateOnFocus: false,
-        shouldRetryOnError: (error) => !isRateLimitError(error),
+        // 浏览门槛 401 重试必然再 401（锁屏承接即可），不浪费请求
+        shouldRetryOnError: (error) => !isRateLimitError(error) && !isBrowseLoginRequiredError(error),
         onError: (error) => {
           if (isRateLimitError(error)) return;
           notifyGlobalError(error, i18n.t('app.dataLoadFailed'));
