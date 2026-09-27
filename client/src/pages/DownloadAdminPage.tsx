@@ -40,7 +40,7 @@ const TAB_META: Record<DownloadStatsTab, { label: string; icon: string; title: s
     label: '下载趋势',
     icon: 'data_usage',
     title: '近 14 天下载趋势',
-    description: '按登录用户下载记录统计，展示每日下载量和文件体积。',
+    description: '按全部下载事件统计（含未登录与分享下载），展示每日下载量和文件体积。',
   },
   formats: {
     label: '格式分布',
@@ -58,7 +58,7 @@ const TAB_META: Record<DownloadStatsTab, { label: string; icon: string; title: s
     label: '下载记录',
     icon: 'schedule',
     title: '最近下载记录',
-    description: '展示最近产生的用户下载历史和文件信息。',
+    description: '展示最近产生的下载事件和文件信息（含未登录与分享下载）。',
   },
 };
 
@@ -203,7 +203,7 @@ function SummaryCards({ stats }: { stats: DownloadAdminStats }) {
     {
       label: '下载记录',
       value: formatNumber(summary.historyRecords),
-      hint: '登录用户历史',
+      hint: '全部下载事件',
       icon: 'schedule',
       accentClassName: 'bg-blue-500/10 text-blue-500',
     },
@@ -231,7 +231,7 @@ function SummaryCards({ stats }: { stats: DownloadAdminStats }) {
     {
       label: '文件体积',
       value: formatBytes(downloadedBytes),
-      hint: '历史记录合计',
+      hint: '全部事件合计',
       icon: 'storage',
       accentClassName: 'bg-purple-500/10 text-purple-500',
     },
@@ -293,19 +293,21 @@ function TrendPanel({ data }: { data: DownloadAdminStats['dailyStats'] }) {
         />
         <MetricMini label="区间体积" value={formatBytes(totalBytes)} icon="storage" />
       </div>
-      <div className="mt-4 flex h-72 items-end gap-1.5 rounded-xl border border-outline-variant/8 bg-surface px-3 pb-3 pt-5 sm:gap-2">
+      {/* 列必须撑满图表高度（不能靠容器 items-end 收缩）：轨道的 flex 高度、柱子的
+          height:% 都依赖父级有确定高度，否则整列塌成 padding、柱子恒为 0 */}
+      <div className="mt-4 flex h-72 gap-1.5 rounded-xl border border-outline-variant/8 bg-surface px-3 pb-3 pt-5 sm:gap-2">
         {data.map((item) => {
           const height = Math.max(6, Math.round((item.downloads / maxDownloads) * 100));
           return (
-            <div key={item.date} className="group flex min-w-0 flex-1 flex-col items-center gap-2">
-              <div className="flex h-full w-full items-end rounded-lg bg-surface-container-high/55 px-1 pt-3">
+            <div key={item.date} className="group flex h-full min-w-0 flex-1 flex-col items-center gap-2">
+              <div className="flex min-h-0 w-full flex-1 items-end rounded-lg bg-surface-container-high/55 px-1 pt-3">
                 <div
                   className="w-full rounded-t bg-primary-container/85 transition-all group-hover:bg-primary-container"
                   style={{ height: `${height}%` }}
                   title={`${item.date}: ${item.downloads} 次 · ${formatBytes(item.bytes)}`}
                 />
               </div>
-              <span className="hidden text-[10px] tabular-nums text-on-surface-variant sm:block">
+              <span className="hidden shrink-0 text-[10px] tabular-nums text-on-surface-variant sm:block">
                 {item.date.slice(5)}
               </span>
             </div>
@@ -430,7 +432,34 @@ function TopModelsPanel({ models }: { models: DownloadAdminStats['topModels'] })
   );
 }
 
+/** 来源徽章：批量打包标注渠道；分享下载由「X 的分享」归因文本表达（避免三段重复） */
+function DownloadSourceBadge({ source }: { source: string }) {
+  if (source !== 'batch') return null;
+  return (
+    <span className="inline-flex shrink-0 items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-500">
+      批量
+    </span>
+  );
+}
+
 function RecentDownloadRow({ item }: { item: DownloadAdminRecord }) {
+  // 分享下载：下载者固定是匿名访客，行内只保留一段归因（谁的分享），不再叠加用户名+徽章
+  const actor =
+    item.source === 'share' ? (
+      <span className="inline-flex min-w-0 items-center gap-1">
+        <Icon name="share" size={12} />
+        <span className="truncate">{item.shared_by ? `${item.shared_by} 的分享` : '分享链接下载'}</span>
+      </span>
+    ) : (
+      <>
+        <span className="inline-flex min-w-0 items-center gap-1">
+          <Icon name="person" size={12} />
+          <span className="truncate">{item.username}</span>
+        </span>
+        <DownloadSourceBadge source={item.source} />
+      </>
+    );
+
   return (
     <Link
       to={`/model/${item.model_id}`}
@@ -444,10 +473,7 @@ function RecentDownloadRow({ item }: { item: DownloadAdminRecord }) {
           {item.model_name}
         </p>
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-on-surface-variant">
-          <span className="inline-flex min-w-0 items-center gap-1">
-            <Icon name="person" size={12} />
-            <span className="truncate">{item.username}</span>
-          </span>
+          {actor}
           <span className="inline-flex items-center gap-1">
             <Icon name="inventory_2" size={12} />
             {(item.format || item.model_format || 'model').toUpperCase()}

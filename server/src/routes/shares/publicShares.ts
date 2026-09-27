@@ -6,6 +6,7 @@ import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
 import { cacheDel, cacheGetOrSet, resolveCacheTtl, TTL, redis } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
 import { createProtectedResourceToken } from '../../lib/downloadTokenStore.js';
+import { logger } from '../../lib/logger.js';
 import { modelDownloadFileName, modelDownloadSourceName } from '../../lib/modelDownloadName.js';
 import { prisma } from '../../lib/prisma.js';
 import { getAllSettings, getSetting } from '../../lib/settings.js';
@@ -460,6 +461,28 @@ export function createPublicSharesRouter() {
 
     // Invalidate the cached share info so the remaining-download count stays accurate.
     await cacheDel(`cache:share:info:${token}`);
+
+    // 分享下载同样计入全局统计：写下载事件流水 + 递增模型下载次数。
+    // 统计失败不阻断下载本身（上方限额计数已独立完成）。
+    try {
+      await prisma.$transaction([
+        prisma.downloadEvent.create({
+          data: {
+            modelId: share.modelId,
+            format: target.record?.format || model.originalFormat || model.format || 'unknown',
+            fileSize: target.record?.fileSize || 0,
+            source: 'share',
+            shareId: share.id,
+          },
+        }),
+        prisma.model.update({
+          where: { id: share.modelId },
+          data: { downloadCount: { increment: 1 } },
+        }),
+      ]);
+    } catch (err) {
+      logger.warn({ err, shareId: share.id }, '[shares] Failed to record share download event');
+    }
 
     sendAcceleratedFile(req, res, {
       filePath: target.filePath,

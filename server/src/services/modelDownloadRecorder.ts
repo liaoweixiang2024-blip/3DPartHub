@@ -6,7 +6,7 @@ export class DailyDownloadLimitError extends Error {
   }
 }
 
-type DownloadRecorderPrisma = Pick<PrismaClient, '$transaction' | 'model' | 'download'>;
+type DownloadRecorderPrisma = Pick<PrismaClient, '$transaction' | 'model' | 'download' | 'downloadEvent'>;
 type DownloadRecorderTransaction = Prisma.TransactionClient;
 
 export type ModelDownloadRecordOptions = {
@@ -16,6 +16,7 @@ export type ModelDownloadRecordOptions = {
   fileSize: number;
   dailyLimit: number;
   noRecord: boolean;
+  source?: string;
 };
 
 export type QueuedModelDownloadRecord = {
@@ -23,6 +24,7 @@ export type QueuedModelDownloadRecord = {
   modelId: string;
   format: string;
   fileSize: number;
+  source?: string;
 };
 
 export function shouldRecordDownloadSynchronously(options: ModelDownloadRecordOptions): boolean {
@@ -38,9 +40,15 @@ export async function recordModelDownload(prisma: DownloadRecorderPrisma, option
   if (shouldSkipDownloadRecord(options)) return;
 
   if (!userId) {
-    await prisma.model.update({
-      where: { id: modelId },
-      data: { downloadCount: { increment: 1 } },
+    // 匿名下载也打事件点（统计/趋势需要），只是不写用户历史表
+    await prisma.$transaction(async (tx: DownloadRecorderTransaction) => {
+      await tx.downloadEvent.create({
+        data: { modelId, userId: null, format, fileSize, source: options.source ?? 'model' },
+      });
+      await tx.model.update({
+        where: { id: modelId },
+        data: { downloadCount: { increment: 1 } },
+      });
     });
     return;
   }
@@ -69,6 +77,13 @@ export async function recordModelDownload(prisma: DownloadRecorderPrisma, option
         where: { userId_modelId_format: { userId, modelId, format } },
         create: { userId, modelId, format, fileSize },
         update: { createdAt: new Date(), fileSize },
+      });
+    }
+
+    if (!noRecord) {
+      // 事件流水不去重：每次下载一行，供统计/趋势使用
+      await tx.downloadEvent.create({
+        data: { modelId, userId, format, fileSize, source: options.source ?? 'model' },
       });
     }
 
@@ -110,6 +125,16 @@ export async function recordQueuedModelDownloads(prisma: DownloadRecorderPrisma,
         update: { createdAt: new Date(), fileSize: item.fileSize },
       });
     }
+    // 事件流水不去重、匿名也记：一条队列记录一行事件
+    await tx.downloadEvent.createMany({
+      data: records.map((record) => ({
+        modelId: record.modelId,
+        userId: record.userId ?? null,
+        format: record.format,
+        fileSize: record.fileSize,
+        source: record.source ?? 'model',
+      })),
+    });
     for (const [modelId, count] of increments) {
       await tx.model.update({
         where: { id: modelId },

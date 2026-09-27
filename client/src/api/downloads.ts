@@ -56,10 +56,13 @@ export interface DownloadAdminStats {
     model_name: string;
     model_format: string;
     thumbnail_url: string | null;
-    user_id: string;
+    user_id: string | null;
     username: string;
     format: string;
     file_size: number;
+    source: string;
+    /** 分享下载的归因：分享创建者用户名（分享/用户已删除时为 null） */
+    shared_by: string | null;
     created_at: string;
   }>;
   formatStats: Array<{

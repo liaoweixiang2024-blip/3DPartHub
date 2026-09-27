@@ -3,12 +3,15 @@ import test from 'node:test';
 import {
   DailyDownloadLimitError,
   recordModelDownload,
+  recordQueuedModelDownloads,
   shouldRecordDownloadSynchronously,
   shouldSkipDownloadRecord,
 } from './modelDownloadRecorder.js';
 
 function createPrismaMock(existingDownloadCount = 0) {
   const calls: string[] = [];
+  const eventCreateArgs: Array<Record<string, unknown>>[] = [];
+  const eventCreateManyArgs: Array<{ data: Array<Record<string, unknown>> }> = [];
   const tx = {
     $queryRaw: async () => {
       calls.push('lock');
@@ -23,6 +26,16 @@ function createPrismaMock(existingDownloadCount = 0) {
         calls.push('download.upsert');
       },
     },
+    downloadEvent: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        calls.push('downloadEvent.create');
+        eventCreateArgs.push([args.data]);
+      },
+      createMany: async (args: { data: Array<Record<string, unknown>> }) => {
+        calls.push('downloadEvent.createMany');
+        eventCreateManyArgs.push(args);
+      },
+    },
     model: {
       update: async () => {
         calls.push('tx.model.update');
@@ -31,12 +44,9 @@ function createPrismaMock(existingDownloadCount = 0) {
   };
   return {
     calls,
+    eventCreateArgs,
+    eventCreateManyArgs,
     prisma: {
-      model: {
-        update: async () => {
-          calls.push('model.update');
-        },
-      },
       $transaction: async (fn: (txArg: typeof tx) => Promise<void>) => {
         calls.push('transaction');
         await fn(tx);
@@ -45,8 +55,8 @@ function createPrismaMock(existingDownloadCount = 0) {
   };
 }
 
-test('increments anonymous model download count without creating a download record', async () => {
-  const { prisma, calls } = createPrismaMock();
+test('records an anonymous download event without creating a user history record', async () => {
+  const { prisma, calls, eventCreateArgs } = createPrismaMock();
 
   await recordModelDownload(prisma, {
     modelId: 'm1',
@@ -56,11 +66,19 @@ test('increments anonymous model download count without creating a download reco
     noRecord: false,
   });
 
-  assert.deepEqual(calls, ['model.update']);
+  assert.deepEqual(calls, ['transaction', 'downloadEvent.create', 'tx.model.update']);
+  assert.equal(eventCreateArgs.length, 1);
+  assert.deepEqual(eventCreateArgs[0][0], {
+    modelId: 'm1',
+    userId: null,
+    format: 'glb',
+    fileSize: 100,
+    source: 'model',
+  });
 });
 
 test('records authenticated downloads inside a transaction', async () => {
-  const { prisma, calls } = createPrismaMock(1);
+  const { prisma, calls, eventCreateArgs } = createPrismaMock(1);
 
   await recordModelDownload(prisma, {
     userId: 'u1',
@@ -71,11 +89,41 @@ test('records authenticated downloads inside a transaction', async () => {
     noRecord: false,
   });
 
-  assert.deepEqual(calls, ['transaction', 'lock', 'count', 'download.upsert', 'tx.model.update']);
+  assert.deepEqual(calls, [
+    'transaction',
+    'lock',
+    'count',
+    'download.upsert',
+    'downloadEvent.create',
+    'tx.model.update',
+  ]);
+  assert.deepEqual(eventCreateArgs[0][0], {
+    modelId: 'm1',
+    userId: 'u1',
+    format: 'glb',
+    fileSize: 100,
+    source: 'model',
+  });
+});
+
+test('passes source through to the download event', async () => {
+  const { prisma, eventCreateArgs } = createPrismaMock();
+
+  await recordModelDownload(prisma, {
+    userId: 'u1',
+    modelId: 'm1',
+    format: 'glb',
+    fileSize: 100,
+    dailyLimit: 0,
+    noRecord: false,
+    source: 'favorites',
+  });
+
+  assert.equal(eventCreateArgs[0][0].source, 'favorites');
 });
 
 test('still records authenticated download when noRecord is true and daily limit is enabled', async () => {
-  const { prisma, calls } = createPrismaMock(1);
+  const { prisma, calls, eventCreateArgs } = createPrismaMock(1);
 
   await recordModelDownload(prisma, {
     userId: 'u1',
@@ -86,7 +134,9 @@ test('still records authenticated download when noRecord is true and daily limit
     noRecord: true,
   });
 
+  // 历史行仍要写（限额计数依赖），但事件流水不写（noRecord=内部重下，不打统计）
   assert.deepEqual(calls, ['transaction', 'lock', 'count', 'download.upsert', 'tx.model.update']);
+  assert.equal(eventCreateArgs.length, 0);
 });
 
 test('skips authenticated download record when noRecord is true and no daily limit is configured', async () => {
@@ -102,6 +152,33 @@ test('skips authenticated download record when noRecord is true and no daily lim
   });
 
   assert.deepEqual(calls, []);
+});
+
+test('flushes queued records: history deduped, one event per record including anonymous', async () => {
+  const { prisma, calls, eventCreateManyArgs } = createPrismaMock();
+
+  await recordQueuedModelDownloads(prisma, [
+    { userId: 'u1', modelId: 'm1', format: 'glb', fileSize: 100 },
+    { userId: 'u1', modelId: 'm1', format: 'glb', fileSize: 100 },
+    { userId: null, modelId: 'm2', format: 'stp', fileSize: 200 },
+  ]);
+
+  assert.deepEqual(calls, [
+    'transaction',
+    'download.upsert',
+    'downloadEvent.createMany',
+    'tx.model.update',
+    'tx.model.update',
+  ]);
+  assert.equal(eventCreateManyArgs.length, 1);
+  assert.equal(eventCreateManyArgs[0].data.length, 3);
+  assert.deepEqual(eventCreateManyArgs[0].data[2], {
+    modelId: 'm2',
+    userId: null,
+    format: 'stp',
+    fileSize: 200,
+    source: 'model',
+  });
 });
 
 test('classifies async-safe records without daily limit', () => {

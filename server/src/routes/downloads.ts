@@ -39,15 +39,22 @@ function startOfDay(date: Date) {
   return next;
 }
 
+// 趋势桶按服务器本地日期分桶（与 startOfDay 的本地午夜日界一致）。
+// 不能用 toISOString()：那是 UTC 日期，本地 00:00–08:00 的事件会落到前一天的桶，
+// 08:00 后的事件更会越过最后一个桶被直接丢弃（当天柱永远缺晚间的下载）。
 function dateKey(date: Date) {
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function containsText(value: string): Prisma.StringFilter {
   return { contains: value, mode: 'insensitive' };
 }
 
-function buildAdminDownloadSearchWhere(search: string): Prisma.DownloadWhereInput {
+// 事件表搜索：user 关系可空（匿名/分享事件不匹配用户名子句，但匹配模型子句）
+function buildAdminDownloadEventSearchWhere(search: string): Prisma.DownloadEventWhereInput {
   if (!search) return {};
   const contains = containsText(search);
   return {
@@ -81,11 +88,41 @@ function buildAdminDownloadModelSearchWhere(search: string): Prisma.ModelWhereIn
   };
 }
 
-function combineDownloadWhere(...items: Prisma.DownloadWhereInput[]): Prisma.DownloadWhereInput {
+function combineDownloadEventWhere(...items: Prisma.DownloadEventWhereInput[]): Prisma.DownloadEventWhereInput {
   const filters = items.filter((item) => Object.keys(item).length > 0);
   if (filters.length === 0) return {};
   if (filters.length === 1) return filters[0];
   return { AND: filters };
+}
+
+// 分享下载归因：事件里的 shareId 是无 FK 的纯字符串，读取时批量关联出分享创建者
+// （分享/用户已删除时返回空 Map，前端不展示该段）。stats 与 records 两个端点共用。
+async function attachShareCreatorNames(
+  rows: Array<{ shareId: string | null; source: string }>,
+): Promise<Map<string, string>> {
+  const shareIds = Array.from(
+    new Set(rows.filter((row) => row.source === 'share' && row.shareId).map((row) => row.shareId as string)),
+  );
+  if (shareIds.length === 0) return new Map();
+  const shares = await prisma.shareLink.findMany({
+    where: { id: { in: shareIds } },
+    select: { id: true, createdById: true },
+  });
+  const creatorIds = Array.from(new Set(shares.map((share) => share.createdById)));
+  const creators =
+    creatorIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: creatorIds } },
+          select: { id: true, username: true, email: true },
+        })
+      : [];
+  const creatorMap = new Map(creators.map((user) => [user.id, user.username || user.email || '']));
+  const result = new Map<string, string>();
+  for (const share of shares) {
+    const name = creatorMap.get(share.createdById);
+    if (name) result.set(share.id, name);
+  }
+  return result;
 }
 
 function uniqueArchiveFileName(fileName: string, usedNames: Map<string, number>): string {
@@ -270,7 +307,8 @@ router.get('/api/downloads', authMiddleware, async (req: Request, res: Response)
 });
 
 // Admin download statistics. Model.downloadCount is the source of truth for all model downloads;
-// Download rows are user-level history records and may not include anonymous/share-only traffic.
+// DownloadEvent rows are the per-download audit stream (incl. anonymous/share/batch traffic) and
+// drive records/trend/formats here; Download rows remain the per-user deduped history (我的下载).
 router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
   if (!prisma) {
@@ -286,7 +324,7 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
     const chartStart = new Date(todayStart);
     chartStart.setDate(chartStart.getDate() - 13);
     const search = String(req.query.search || '').trim();
-    const downloadWhere = buildAdminDownloadSearchWhere(search);
+    const eventWhere = buildAdminDownloadEventSearchWhere(search);
     const modelWhere = buildAdminDownloadModelSearchWhere(search);
 
     const [
@@ -302,15 +340,19 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
       chartRows,
     ] = await Promise.all([
       prisma.model.aggregate({ where: modelWhere, _sum: { downloadCount: true } }),
-      prisma.download.count({ where: downloadWhere }),
-      prisma.download.count({ where: combineDownloadWhere(downloadWhere, { createdAt: { gte: todayStart } }) }),
-      prisma.download.count({ where: combineDownloadWhere(downloadWhere, { createdAt: { gte: weekStart } }) }),
-      prisma.download.findMany({
-        where: combineDownloadWhere(downloadWhere, { createdAt: { gte: weekStart } }),
+      prisma.downloadEvent.count({ where: eventWhere }),
+      prisma.downloadEvent.count({
+        where: combineDownloadEventWhere(eventWhere, { createdAt: { gte: todayStart } }),
+      }),
+      prisma.downloadEvent.count({
+        where: combineDownloadEventWhere(eventWhere, { createdAt: { gte: weekStart } }),
+      }),
+      prisma.downloadEvent.findMany({
+        where: combineDownloadEventWhere(eventWhere, { createdAt: { gte: weekStart } }),
         distinct: ['userId'],
         select: { userId: true },
       }),
-      prisma.download.aggregate({ where: downloadWhere, _sum: { fileSize: true } }),
+      prisma.downloadEvent.aggregate({ where: eventWhere, _sum: { fileSize: true } }),
       prisma.model.findMany({
         where: modelWhere,
         orderBy: [{ downloadCount: 'desc' }, { createdAt: 'desc' }],
@@ -326,8 +368,8 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
           categoryRef: { select: { name: true } },
         },
       }),
-      prisma.download.findMany({
-        where: downloadWhere,
+      prisma.downloadEvent.findMany({
+        where: eventWhere,
         orderBy: { createdAt: 'desc' },
         take: 20,
         select: {
@@ -336,22 +378,26 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
           userId: true,
           format: true,
           fileSize: true,
+          source: true,
+          shareId: true,
           createdAt: true,
         },
       }),
-      prisma.download.groupBy({
+      prisma.downloadEvent.groupBy({
         by: ['format'],
-        where: downloadWhere,
+        where: eventWhere,
         _count: { _all: true },
         _sum: { fileSize: true },
       }),
-      prisma.download.findMany({
-        where: combineDownloadWhere(downloadWhere, { createdAt: { gte: chartStart } }),
+      prisma.downloadEvent.findMany({
+        where: combineDownloadEventWhere(eventWhere, { createdAt: { gte: chartStart } }),
         select: { createdAt: true, fileSize: true },
       }),
     ]);
 
-    const recentUserIds = Array.from(new Set(recentDownloadRows.map((download) => download.userId).filter(Boolean)));
+    const recentUserIds = Array.from(
+      new Set(recentDownloadRows.map((download) => download.userId).filter((id): id is string => Boolean(id))),
+    );
     const recentModelIds = Array.from(new Set(recentDownloadRows.map((download) => download.modelId).filter(Boolean)));
     const [recentUsers, recentModels] = await Promise.all([
       recentUserIds.length > 0
@@ -375,6 +421,7 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
     ]);
     const recentUserMap = new Map(recentUsers.map((user) => [user.id, user]));
     const recentModelMap = new Map(recentModels.map((model) => [model.id, model]));
+    const recentSharedByMap = await attachShareCreatorNames(recentDownloadRows);
 
     const dailyMap = new Map<string, { downloads: number; bytes: number }>();
     for (let offset = 13; offset >= 0; offset -= 1) {
@@ -410,7 +457,7 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
       })),
       recentDownloads: recentDownloadRows.map((download) => {
         const model = recentModelMap.get(download.modelId);
-        const user = recentUserMap.get(download.userId);
+        const user = download.userId ? recentUserMap.get(download.userId) : undefined;
         return {
           id: download.id,
           model_id: download.modelId,
@@ -418,9 +465,12 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
           model_format: model?.format || download.format,
           thumbnail_url: model?.thumbnailUrl || null,
           user_id: download.userId,
-          username: user?.username || user?.email || '未知用户',
+          username: user?.username || user?.email || (download.source === 'share' ? '分享访客' : '未登录用户'),
           format: download.format,
           file_size: download.fileSize,
+          source: download.source,
+          shared_by:
+            download.source === 'share' && download.shareId ? (recentSharedByMap.get(download.shareId) ?? null) : null,
           created_at: download.createdAt,
         };
       }),
@@ -452,11 +502,11 @@ router.get('/api/admin/downloads/records', authMiddleware, async (req: AuthReque
     const search = String(req.query.search || '').trim();
     const page = Math.max(1, Number.parseInt(String(req.query.page || '1'), 10) || 1);
     const pageSize = Math.min(100, Math.max(10, Number.parseInt(String(req.query.page_size || '20'), 10) || 20));
-    const where = buildAdminDownloadSearchWhere(search);
+    const where = buildAdminDownloadEventSearchWhere(search);
 
     const [total, rows] = await Promise.all([
-      prisma.download.count({ where }),
-      prisma.download.findMany({
+      prisma.downloadEvent.count({ where }),
+      prisma.downloadEvent.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
@@ -467,12 +517,16 @@ router.get('/api/admin/downloads/records', authMiddleware, async (req: AuthReque
           userId: true,
           format: true,
           fileSize: true,
+          source: true,
+          shareId: true,
           createdAt: true,
         },
       }),
     ]);
 
-    const userIds = Array.from(new Set(rows.map((download) => download.userId).filter(Boolean)));
+    const userIds = Array.from(
+      new Set(rows.map((download) => download.userId).filter((id): id is string => Boolean(id))),
+    );
     const modelIds = Array.from(new Set(rows.map((download) => download.modelId).filter(Boolean)));
     const [users, models] = await Promise.all([
       userIds.length > 0
@@ -496,11 +550,12 @@ router.get('/api/admin/downloads/records', authMiddleware, async (req: AuthReque
     ]);
     const userMap = new Map(users.map((user) => [user.id, user]));
     const modelMap = new Map(models.map((model) => [model.id, model]));
+    const sharedByMap = await attachShareCreatorNames(rows);
 
     res.json({
       items: rows.map((download) => {
         const model = modelMap.get(download.modelId);
-        const user = userMap.get(download.userId);
+        const user = download.userId ? userMap.get(download.userId) : undefined;
         return {
           id: download.id,
           model_id: download.modelId,
@@ -508,9 +563,12 @@ router.get('/api/admin/downloads/records', authMiddleware, async (req: AuthReque
           model_format: model?.format || download.format,
           thumbnail_url: model?.thumbnailUrl || null,
           user_id: download.userId,
-          username: user?.username || user?.email || '未知用户',
+          username: user?.username || user?.email || (download.source === 'share' ? '分享访客' : '未登录用户'),
           format: download.format,
           file_size: download.fileSize,
+          source: download.source,
+          shared_by:
+            download.source === 'share' && download.shareId ? (sharedByMap.get(download.shareId) ?? null) : null,
           created_at: download.createdAt,
         };
       }),

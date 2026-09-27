@@ -24,6 +24,7 @@ function encode(record: QueuedModelDownloadRecord & { attempts?: number; queuedA
     modelId: record.modelId,
     format: record.format,
     fileSize: Number(record.fileSize) || 0,
+    source: record.source || 'model',
     attempts: Number(record.attempts) || 0,
     queuedAt: record.queuedAt || new Date().toISOString(),
   });
@@ -39,6 +40,7 @@ function decode(payload: string): ClaimedDownloadRecord['record'] | null {
       modelId: parsed.modelId,
       format: parsed.format,
       fileSize: Number(parsed.fileSize) || 0,
+      source: typeof parsed.source === 'string' && parsed.source ? parsed.source : 'model',
       attempts: Number(parsed.attempts) || 0,
       queuedAt: typeof parsed.queuedAt === 'string' ? parsed.queuedAt : undefined,
     };

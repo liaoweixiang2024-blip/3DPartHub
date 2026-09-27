@@ -242,6 +242,16 @@ router.post('/api/batch/download', authMiddleware, requireRole('ADMIN'), async (
             },
             update: { createdAt: new Date(), fileSize: archived.fileSize },
           }),
+          // 事件流水不去重：批量打包里每个模型都是一次真实下载
+          prisma.downloadEvent.create({
+            data: {
+              userId: req.user!.userId,
+              modelId: model.id,
+              format: archived.format,
+              fileSize: archived.fileSize,
+              source: 'batch',
+            },
+          }),
           prisma.model.update({
             where: { id: model.id },
             data: { downloadCount: { increment: 1 } },

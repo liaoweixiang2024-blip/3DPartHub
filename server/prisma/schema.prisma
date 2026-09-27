@@ -32,6 +32,7 @@ model User {
   modelVersions             ModelVersion[]
   favorites                 Favorite[]
   downloads                 Download[]
+  downloadEvents            DownloadEvent[]
   comments                  Comment[]
   ownedProjects             Project[]                  @relation("ProjectOwner")
   projectMembers            ProjectMember[]
@@ -205,11 +206,12 @@ model Model {
   createdById String @map("created_by_id")
   createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
 
-  versions   ModelVersion[]
-  favorites  Favorite[]
-  downloads  Download[]
-  comments   Comment[]
-  shareLinks ShareLink[]
+  versions       ModelVersion[]
+  favorites      Favorite[]
+  downloads      Download[]
+  downloadEvents DownloadEvent[]
+  comments       Comment[]
+  shareLinks     ShareLink[]
 
   groupId      String?     @map("group_id")
   group        ModelGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
@@ -309,6 +311,26 @@ model Download {
   @@index([format], map: "downloads_format_idx")
   @@index([format, createdAt], map: "downloads_format_created_at_idx")
   @@map("downloads")
+}
+
+// 下载事件流水：每次真实下载一行（含匿名/分享/批量），是管理端下载统计与趋势图的数据源。
+// 与 Download（登录用户去重历史，服务「我的下载」与每日限额）双轨并存。
+model DownloadEvent {
+  id        String   @id @default(uuid())
+  modelId   String   @map("model_id")
+  model     Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  userId    String?  @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  format    String
+  fileSize  Int      @default(0) @map("file_size")
+  source    String   @default("model") // model | share | batch
+  shareId   String?  @map("share_id") // 纯字符串引用，不加 FK（分享删除后事件保留）
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([modelId, createdAt])
+  @@index([userId, createdAt])
+  @@map("download_events")
 }
 
 model Comment {
