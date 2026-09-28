@@ -317,6 +317,16 @@ export async function batchUpdateSelectionProductsHidden(ids: string[], hidden: 
   return unwrapResponse(res);
 }
 
+/** 批量修改单个字段（field='name' 改名称，否则为参数列 key），统一设置为 value */
+export async function batchUpdateSelectionProductField(
+  ids: string[],
+  field: string,
+  value: string,
+): Promise<{ updated: number }> {
+  const res = await client.post('/admin/selections/products/batch-update-field', { ids, field, value });
+  return unwrapResponse(res);
+}
+
 // ========== 选型分类数据包搬运（本地站 ↔ 服务器站） ==========
 
 /** 数据包导出：勾选分类（含设置 + 产品 + 图片/PDF 资产），流式 zip 下载 */

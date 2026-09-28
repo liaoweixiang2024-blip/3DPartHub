@@ -134,6 +134,8 @@ export function ResultCard({
           {specCols.map((col) => {
             const v = (product.specs as Record<string, string>)[col.key] || '—';
             if (v === '—') return null;
+            // 值与副标题中文名相同（如「接头形态」拼进了产品名）→ 副标题已展示，参数面板不再重复
+            if (v === displayName) return null;
             return (
               <div key={col.key} className="text-xs md:text-sm min-w-0">
                 <span className="text-on-surface-variant">{col.label}: </span>

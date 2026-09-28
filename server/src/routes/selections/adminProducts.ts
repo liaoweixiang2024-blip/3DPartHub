@@ -7,9 +7,11 @@ import { adminOnly, invalidateSelectionCache } from './common.js';
 
 function cleanProductName(name: string, modelNo?: string | null) {
   if (!name || !modelNo) return name;
+  // 剥掉型号的「所有」出现（历史数据名称常以「系列号 描述 完整型号」结尾，只剥第一次会留尾巴）
+  const escaped = modelNo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return (
     name
-      .replace(modelNo, '')
+      .replace(new RegExp(escaped, 'gi'), '')
       .replace(/[\s\-—_]+$/g, '')
       .replace(/^[\s\-—_]+/g, '')
       .trim() || name
@@ -282,6 +284,75 @@ export function createSelectionAdminProductsRouter() {
     } catch (err) {
       logger.error({ err }, '[Selections] Batch update hidden error');
       res.status(500).json({ detail: '批量设置隐藏失败' });
+    }
+  });
+
+  // Batch update one field (name or a spec column) to a single value — 选项值反查弹窗的「批量修改」
+  router.post('/api/admin/selections/products/batch-update-field', authMiddleware, async (req: AuthRequest, res) => {
+    if (!adminOnly(req, res)) return;
+    try {
+      const rawIds = req.body?.ids;
+      const field = req.body?.field;
+      const value = typeof req.body?.value === 'string' ? req.body.value.trim() : '';
+      if (!Array.isArray(rawIds) || rawIds.length === 0) {
+        res.status(400).json({ detail: 'ids 必须是非空数组' });
+        return;
+      }
+      if (rawIds.length > 1000) {
+        res.status(400).json({ detail: '单次最多操作 1000 个产品' });
+        return;
+      }
+      if (typeof field !== 'string' || !field) {
+        res.status(400).json({ detail: 'field 不能为空（"name" 或参数列 key）' });
+        return;
+      }
+      if (field === '型号') {
+        res.status(400).json({ detail: '「型号」列由型号编号自动维护，不支持批量修改' });
+        return;
+      }
+      if (!value) {
+        res.status(400).json({ detail: 'value 不能为空' });
+        return;
+      }
+      if (value.length > 200) {
+        res.status(400).json({ detail: 'value 长度不能超过 200' });
+        return;
+      }
+      const ids = Array.from(
+        new Set(rawIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)),
+      );
+      if (ids.length === 0) {
+        res.status(400).json({ detail: 'ids 中没有有效的产品 ID' });
+        return;
+      }
+      // 名称要与型号联动清洗、参数列要逐行合并 specs JSON，updateMany 做不到 → 逐行事务（同批量导入模式）
+      const products = await prisma.selectionProduct.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, modelNo: true, specs: true },
+      });
+      if (products.length === 0) {
+        res.status(404).json({ detail: '产品不存在' });
+        return;
+      }
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        for (const p of products) {
+          if (field === 'name') {
+            await tx.selectionProduct.update({
+              where: { id: p.id },
+              data: { name: cleanProductName(value, p.modelNo) },
+            });
+          } else {
+            const specs = toJsonObject(p.specs);
+            specs[field] = value;
+            await tx.selectionProduct.update({ where: { id: p.id }, data: { specs } });
+          }
+        }
+      });
+      await invalidateSelectionCache();
+      res.json({ updated: products.length });
+    } catch (err) {
+      logger.error({ err }, '[Selections] Batch update field error');
+      res.status(500).json({ detail: '批量修改失败' });
     }
   });
 

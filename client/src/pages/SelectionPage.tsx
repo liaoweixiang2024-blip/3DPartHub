@@ -848,9 +848,21 @@ export default function SelectionPage() {
     if (!items.length) return;
     try {
       const { default: writeXlsxFile } = await import('write-excel-file/browser');
-      // 只导核心四列（型号/名称/数量/单位），不带参数列
+      // 只导核心四列（型号/名称/数量/单位），不带参数列；
+      // 名称剥掉型号的「所有」出现（历史数据常以「系列号 描述 完整型号」结尾，不剥会和型号列重复）
       const headers = ['型号', '名称', '数量', '单位'];
-      const rows = items.map((it) => [it.modelNo || '', it.productName, it.qty, it.unit || '']);
+      const rows = items.map((it) => {
+        let name = it.productName || '';
+        if (it.modelNo) {
+          const escaped = it.modelNo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          name =
+            name
+              .replace(new RegExp(escaped, 'gi'), ' ')
+              .replace(/[\s\-—_]+/g, ' ')
+              .trim() || it.productName;
+        }
+        return [it.modelNo || '', name, it.qty, it.unit || ''];
+      });
       const stamp = new Date();
       const pad = (n: number) => String(n).padStart(2, '0');
       const fileName = `选型清单_${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.xlsx`;

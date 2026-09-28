@@ -20,6 +20,7 @@ import {
   sortCategories,
   batchDeleteSelectionProducts,
   batchUpdateSelectionProductsHidden,
+  batchUpdateSelectionProductField,
   type SelectionCategory,
   type SelectionProduct,
   type SelectionComponent,
@@ -128,6 +129,12 @@ const ProductTableRow = memo(function ProductTableRow({
           className="h-4 w-4 accent-primary-container"
           aria-label={`选择 ${p.modelNo || p.name}`}
         />
+      </AdminTableCell>
+      <AdminTableCell
+        className="max-w-[200px] truncate whitespace-nowrap px-3 py-2.5 text-on-surface-variant"
+        title={p.name}
+      >
+        {p.name || '—'}
       </AdminTableCell>
       {columns.map((col) => (
         <AdminTableCell key={col.key} className="whitespace-nowrap px-3 py-2.5">
@@ -422,6 +429,14 @@ function Content() {
   const [optPasteZone, setOptPasteZone] = useState<'image' | 'catalog' | null>(null);
   // 选项值 → 产品反查弹窗（点选项卡上的「N 型」角标打开）
   const [valueProductsView, setValueProductsView] = useState<{ field: string; value: string } | null>(null);
+  // 反查弹窗内「批量修改」：选列（名称/参数列）+ 填值 → 统一应用到当前选项值命中的全部产品
+  const [batchFieldEditOpen, setBatchFieldEditOpen] = useState(false);
+  const [batchFieldKey, setBatchFieldKey] = useState('name');
+  const [batchFieldValue, setBatchFieldValue] = useState('');
+  const [batchFieldBusy, setBatchFieldBusy] = useState(false);
+  // 批量修改列选择：自定义下拉（同 optFieldPicker 原因——原生 select 在弹窗内偶发跳动）
+  const [batchFieldPickerOpen, setBatchFieldPickerOpen] = useState(false);
+  const batchFieldPickerRef = useRef<HTMLDivElement | null>(null);
 
   const [renameField, setRenameField] = useState<string>('');
   const [renameOldVal, setRenameOldVal] = useState<string>('');
@@ -463,6 +478,31 @@ function Content() {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [optFieldOpen]);
+  useEffect(() => {
+    if (!batchFieldPickerOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!batchFieldPickerRef.current?.contains(event.target as Node)) {
+        setBatchFieldPickerOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setBatchFieldPickerOpen(false);
+    };
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [batchFieldPickerOpen]);
+  // 反查弹窗关闭：重置批量修改面板，下次打开（可能换了选项值/分类）不残留旧值
+  useEffect(() => {
+    if (valueProductsView) return;
+    setBatchFieldEditOpen(false);
+    setBatchFieldKey('name');
+    setBatchFieldValue('');
+    setBatchFieldPickerOpen(false);
+  }, [valueProductsView]);
   useEffect(() => {
     if (!productCatOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
@@ -877,6 +917,41 @@ function Content() {
       toast(getApiErrorMessage(err, '批量操作失败'), 'error');
     } finally {
       setBatchBusy(false);
+    }
+  };
+  // 反查弹窗「批量修改」：把当前选项值命中的全部产品的所选列统一设置为填写值
+  const handleBatchFieldUpdate = async () => {
+    if (!valueProductsView || batchFieldBusy) return;
+    const value = batchFieldValue.trim();
+    if (!value) {
+      toast('请填写要设置的值', 'error');
+      return;
+    }
+    // 与 productsByOptionValue 同语义（specs[field] === value 的全部产品），但该 memo 定义在本函数之后，
+    // 这里直接从 products 过滤，避免 no-use-before-define
+    const matched = products.filter(
+      (p) => (p.specs as Record<string, string>)[valueProductsView.field] === valueProductsView.value,
+    );
+    if (!matched.length) return;
+    setBatchFieldBusy(true);
+    try {
+      const { updated } = await batchUpdateSelectionProductField(
+        matched.map((p) => p.id),
+        batchFieldKey,
+        value,
+      );
+      const fieldLabel =
+        batchFieldKey === 'name'
+          ? '名称'
+          : activeCat?.columns.find((c) => c.key === batchFieldKey)?.label || batchFieldKey;
+      toast(`已将 ${updated} 个产品的${fieldLabel}统一设置为「${value}」`, 'success');
+      setBatchFieldEditOpen(false);
+      setBatchFieldValue('');
+      mutateProds();
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, '批量修改失败'), 'error');
+    } finally {
+      setBatchFieldBusy(false);
     }
   };
   const handleBatchDeleteProducts = async () => {
@@ -2098,6 +2173,7 @@ function Content() {
                                   aria-label="全选当前筛选结果"
                                 />
                               </AdminTableHeadCell>
+                              <AdminTableHeadCell className="whitespace-nowrap px-3">名称</AdminTableHeadCell>
                               {productColumns.map((col) => (
                                 <AdminTableHeadCell key={col.key} className="whitespace-nowrap px-3">
                                   {col.label}
@@ -3553,6 +3629,126 @@ function Content() {
                         ))}
                       </tbody>
                     </AdminTable>
+                  </div>
+                  {/* 底部：批量修改——单行布局，控件统一 h-8、收起/展开行高一致不跳动；
+                      展开时小号下拉+输入框插在「批量修改」按钮左侧，最左侧提示文字与按钮都保留不遮挡 */}
+                  <div className="flex shrink-0 flex-nowrap items-center gap-1.5 border-t border-outline-variant/10 bg-surface-container-low px-3 py-2 sm:gap-2 sm:px-5">
+                    <p className="min-w-0 flex-1 truncate text-[11px] text-on-surface-variant">
+                      {batchFieldEditOpen
+                        ? `填值后 ✓ 应用到该选项值的 ${matched.length} 个产品；Esc 或点「批量修改」收起。`
+                        : '名称不统一？可批量把该选项值下全部产品的名称或参数列设置为同一值。'}
+                    </p>
+                    {batchFieldEditOpen && (
+                      <>
+                        <div ref={batchFieldPickerRef} className="relative w-24 shrink-0 sm:w-28">
+                          <button
+                            type="button"
+                            name="batch-field-picker"
+                            onClick={() => setBatchFieldPickerOpen((v) => !v)}
+                            className={`flex h-8 w-full items-center justify-between gap-1 rounded-lg border px-2 text-left text-xs transition-colors ${
+                              batchFieldPickerOpen
+                                ? 'border-primary-container text-on-surface ring-2 ring-primary-container/20'
+                                : 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                            }`}
+                          >
+                            <span className="truncate text-on-surface">
+                              {batchFieldKey === 'name'
+                                ? '名称'
+                                : activeCat.columns.find((c) => c.key === batchFieldKey)?.label || batchFieldKey}
+                            </span>
+                            <Icon
+                              name="expand_more"
+                              size={14}
+                              className={`shrink-0 text-on-surface-variant transition-transform ${batchFieldPickerOpen ? 'rotate-180' : ''}`}
+                            />
+                          </button>
+                          {batchFieldPickerOpen && (
+                            <div className="absolute bottom-[calc(100%+4px)] left-0 z-20 max-h-56 w-max min-w-full overflow-y-auto rounded-xl border border-outline-variant/20 bg-surface-container-low py-1 shadow-2xl">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBatchFieldKey('name');
+                                  setBatchFieldPickerOpen(false);
+                                }}
+                                className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors ${
+                                  batchFieldKey === 'name'
+                                    ? 'bg-primary-container/10 font-medium text-primary-container'
+                                    : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                                }`}
+                              >
+                                <span>名称</span>
+                                <span className="text-[10px] text-on-surface-variant/60">基础字段</span>
+                              </button>
+                              {activeCat.columns
+                                .filter((c) => c.key !== '型号')
+                                .map((c) => (
+                                  <button
+                                    type="button"
+                                    key={c.key}
+                                    onClick={() => {
+                                      setBatchFieldKey(c.key);
+                                      setBatchFieldPickerOpen(false);
+                                    }}
+                                    className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors ${
+                                      c.key === batchFieldKey
+                                        ? 'bg-primary-container/10 font-medium text-primary-container'
+                                        : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                                    }`}
+                                  >
+                                    <span className="truncate">{c.label}</span>
+                                  </button>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                        <input
+                          name="batch-field-value"
+                          value={batchFieldValue}
+                          onChange={(e) => setBatchFieldValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && batchFieldValue.trim() && !batchFieldBusy) {
+                              e.preventDefault();
+                              void handleBatchFieldUpdate();
+                            } else if (e.key === 'Escape' && !batchFieldPickerOpen) {
+                              setBatchFieldEditOpen(false);
+                              setBatchFieldValue('');
+                            }
+                          }}
+                          autoFocus
+                          placeholder="统一设置的值"
+                          className="h-8 w-52 shrink-0 rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-2.5 text-xs text-on-surface outline-none transition-colors hover:border-outline-variant/40 focus:border-primary-container sm:w-72 sm:text-sm"
+                        />
+                        <button
+                          type="button"
+                          disabled={batchFieldBusy || !batchFieldValue.trim()}
+                          onClick={() => void handleBatchFieldUpdate()}
+                          title={`应用到该选项值命中的 ${matched.length} 个产品（含隐藏产品），操作不可撤销`}
+                          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-outline-variant/20 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-40"
+                        >
+                          <Icon name={batchFieldBusy ? 'hourglass_empty' : 'check'} size={15} />
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      disabled={!batchFieldEditOpen && matched.length === 0}
+                      onClick={() => {
+                        if (batchFieldEditOpen) {
+                          setBatchFieldEditOpen(false);
+                          setBatchFieldValue('');
+                        } else {
+                          setBatchFieldEditOpen(true);
+                        }
+                      }}
+                      className={`flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium transition-colors ${
+                        batchFieldEditOpen
+                          ? 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high'
+                          : 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface disabled:opacity-40'
+                      }`}
+                    >
+                      <Icon name={batchFieldEditOpen ? 'close' : 'edit'} size={13} />
+                      批量修改
+                    </button>
                   </div>
                 </motion.div>
               </motion.div>

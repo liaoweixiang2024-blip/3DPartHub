@@ -111,9 +111,11 @@ export function safeSpreadsheetText(value: unknown): string {
 
 export function cleanProductName(name: string, modelNo?: string | null) {
   if (!name || !modelNo) return name;
+  // 剥掉型号的「所有」出现（历史数据名称常以「系列号 描述 完整型号」结尾，只剥第一次会留尾巴）
+  const escaped = modelNo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return (
     name
-      .replace(modelNo, '')
+      .replace(new RegExp(escaped, 'gi'), '')
       .replace(/[\s\-—_]+$/g, '')
       .replace(/^[\s\-—_]+/g, '')
       .trim() || name

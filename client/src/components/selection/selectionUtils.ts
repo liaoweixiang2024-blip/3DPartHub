@@ -62,13 +62,26 @@ export function displayProductName(product: SelectionProduct) {
   const modelNo = product.modelNo?.trim();
   if (!rawName) return modelNo || '';
   if (!modelNo) return rawName;
-  return (
-    rawName
-      .replace(modelNo, '')
-      .replace(/[\s\-—_]+$/g, '')
-      .replace(/^[\s\-—_]+/g, '')
-      .trim() || rawName
-  );
+  // 副标题显示「实际内容」：剥掉型号的「所有」出现（历史数据名称常以「系列号 描述 完整型号」结尾）
+  const escaped = modelNo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let cleaned = rawName
+    .replace(new RegExp(escaped, 'gi'), ' ')
+    .replace(/^[\s\-—_]+|[\s\-—_]+$/g, '')
+    .trim();
+  // 首段（按空格分段，系列号内部的连字符保留）若是型号的系列号前缀
+  // （如 TKN-PZA 之于 TKN-PZA10 / PAW 之于 PAW4-01）也剥掉——型号标题已含系列号
+  const compact = (s: string) => s.toLowerCase().replace(/[\s\-—_]/g, '');
+  const firstSpace = cleaned.indexOf(' ');
+  if (firstSpace > 0) {
+    const head = cleaned.slice(0, firstSpace);
+    if (compact(modelNo).startsWith(compact(head))) {
+      cleaned = cleaned
+        .slice(firstSpace + 1)
+        .replace(/^[\s\-—_]+/, '')
+        .trim();
+    }
+  }
+  return cleaned;
 }
 
 export function getInquiryCartItemTitle(item: InquiryCartItem) {
