@@ -21,7 +21,7 @@ export async function buildModelMatchMap(modelNos: string[]) {
   if (modelNos.length === 0) return result;
 
   const { value: matchIndex } = await cacheGetOrSet<MatchIndexEntry[]>(
-    'cache:models:match-index:v3',
+    'cache:models:match-index:v4',
     TTL.MODEL_MATCH_INDEX,
     buildModelMatchIndex,
     { lockTtlMs: 30_000, waitTimeoutMs: 20_000, pollMs: 50 },
@@ -108,10 +108,17 @@ async function buildModelMatchIndex(): Promise<MatchIndexEntry[]> {
   for (const m of allModels) {
     const nk = normalizePN(m.name);
     addBucket(nk, m);
-    // 站内命名规约「中文名_型号」（如 白色联管直通_PU8）：型号尾段单独立 key，
-    // 否则下方 60% 覆盖率门槛会把「短型号 + 长中文名」的组合全部拒掉（PU8 ↔ 白色联管直通_PU8）
-    const tail = nk.split('_').pop() || '';
-    if (tail !== nk) addBucket(tail, m);
+    // 站内命名规约「中文名_型号」（如 白色联管直通_PU8）：型号段单独立 key，
+    // 否则下方 60% 覆盖率门槛会把「短型号 + 长中文名」的组合全部拒掉（PU8 ↔ 白色联管直通_PU8）。
+    // 型号段取「第一个 _ 之后」的整段：型号里的 / 在文件名中被清洗成 _（SLF-3/8 → 不锈钢内牙弯头_SLF-3_8），
+    // 按全部 _ 切分会把尾段切碎成 "8"；最后一个 _ 段同时保留，兼容历史「A_B_C 只以 C 为型号」的命名
+    const segments = nk.split('_');
+    if (segments.length > 1) {
+      const tail = segments.slice(1).join('_');
+      if (tail) addBucket(tail, m);
+      const last = segments[segments.length - 1];
+      if (last && last !== tail) addBucket(last, m);
+    }
   }
 
   // Flatten: pick primary if available, else first

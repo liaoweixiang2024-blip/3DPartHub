@@ -427,6 +427,8 @@ function Content() {
   const [optCatalogDragActive, setOptCatalogDragActive] = useState(false);
   // 悬停即粘贴目标：鼠标停在哪个上传区，Cmd+V 就传哪个区（null=弹窗外，走默认分流 图片→选项图/PDF→画册）
   const [optPasteZone, setOptPasteZone] = useState<'image' | 'catalog' | null>(null);
+  // 选项设置网格里悬停的选项卡图片：单选项弹窗没开时，悬停哪张卡片粘贴就传哪个选项值
+  const [hoverOptVal, setHoverOptVal] = useState<string | null>(null);
   // 选项值 → 产品反查弹窗（点选项卡上的「N 型」角标打开）
   const [valueProductsView, setValueProductsView] = useState<{ field: string; value: string } | null>(null);
   // 反查弹窗内「批量修改」：选列（名称/参数列）+ 填值 → 统一应用到当前选项值命中的全部产品
@@ -1448,19 +1450,23 @@ function Content() {
     }
   }
 
-  // 单选项弹窗粘贴分流（悬停即目标）：鼠标悬停在上传区时 Cmd+V 传该区；
-  // 悬停在画册区：图片/PDF/链接 都进画册；悬停在选项图片区：图片进选项图片（PDF 仍进画册并提示）；
-  // 不在任何区（鼠标在弹窗外）：默认分流 图片→选项图片、PDF→画册。
-  // 挂 document 级监听（见下方 useEffect）：弹窗开着就生效，不要求先点进弹窗获得焦点。
+  // 选项粘贴分流（悬停即目标，统一走 document 级监听）：
+  // 单选项弹窗开着：鼠标悬停在上传区时 Cmd+V 传该区——画册区收图片/PDF/链接，
+  //   选项图片区收图片（PDF 仍进画册并提示），鼠标在弹窗外默认 图片→选项图片、PDF→画册；
+  // 弹窗没开：悬停在选项设置网格的某张选项图片上 → 粘贴直接传该选项值。
+  // 注意不能在弹窗容器上再挂 onPaste 抢事件：焦点落在容器内时容器级 handler 先于本监听执行，
+  // 历史上的容器级 onPaste 把图片传进 __pasting__ 黑洞键（无任何 UI 读取），
+  // 造成「提示上传成功但图片不显示、也没有上传中图标」。
   async function handleOptValPaste(e: ClipboardEvent) {
-    if (!editOptVal || !optImgField || e.defaultPrevented) return;
+    const targetVal = editOptVal || hoverOptVal;
+    if (!targetVal || !optImgField || e.defaultPrevented) return;
     const zone = optPasteZone;
     const pastedFiles = Array.from(e.clipboardData?.files || []);
     const pdfFile = pastedFiles.find((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
     if (pdfFile) {
       e.preventDefault();
       try {
-        await uploadOptCatalog(optImgField, editOptVal, pdfFile);
+        await uploadOptCatalog(optImgField, targetVal, pdfFile);
         if (zone === 'image') toast('PDF 已上传到画册资料（画册区才收 PDF）', 'info');
       } catch {
         toast('上传 PDF 失败', 'error');
@@ -1472,13 +1478,13 @@ function Content() {
       e.preventDefault();
       if (zone === 'catalog') {
         try {
-          await uploadOptCatalog(optImgField, editOptVal, imageFile);
+          await uploadOptCatalog(optImgField, targetVal, imageFile);
         } catch {
           toast('上传画册失败', 'error');
         }
         return;
       }
-      await uploadOptImg(optImgField, editOptVal, imageFile);
+      await uploadOptImg(optImgField, targetVal, imageFile);
       return;
     }
     for (const item of Array.from(e.clipboardData?.items || [])) {
@@ -1488,13 +1494,13 @@ function Content() {
         if (!file) return;
         if (zone === 'catalog') {
           try {
-            await uploadOptCatalog(optImgField, editOptVal, file);
+            await uploadOptCatalog(optImgField, targetVal, file);
           } catch {
             toast('上传画册失败', 'error');
           }
           return;
         }
-        await uploadOptImg(optImgField, editOptVal, file);
+        await uploadOptImg(optImgField, targetVal, file);
         return;
       }
     }
@@ -1506,7 +1512,7 @@ function Content() {
         try {
           const updated = {
             ...optCatalogs,
-            [optImgField]: { ...(optCatalogs[optImgField] || {}), [editOptVal]: text },
+            [optImgField]: { ...(optCatalogs[optImgField] || {}), [targetVal]: text },
           };
           await updateCategory(activeCat!.id, { optionCatalogs: updated });
           mutateCats();
@@ -1521,7 +1527,7 @@ function Content() {
         const { url } = await uploadOptionImageFromUrl(text);
         const updated = {
           ...optImages,
-          [optImgField]: { ...(optImages[optImgField] || {}), [editOptVal]: url },
+          [optImgField]: { ...(optImages[optImgField] || {}), [targetVal]: url },
         };
         await updateCategory(activeCat!.id, { optionImages: updated });
         mutateCats();
@@ -1532,7 +1538,7 @@ function Content() {
     }
   }
   useEffect(() => {
-    if (!editOptVal || !optImgField) return;
+    if (!optImgField) return;
     const listener = (event: Event) => void handleOptValPaste(event as ClipboardEvent);
     document.addEventListener('paste', listener);
     return () => document.removeEventListener('paste', listener);
@@ -1570,33 +1576,6 @@ function Content() {
     toast('画册已移除', 'success');
   }
 
-  async function handlePaste(e: React.ClipboardEvent) {
-    if (!optImgField) return;
-    const items = e.clipboardData.items;
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        e.preventDefault();
-        const file = item.getAsFile();
-        if (file) await uploadOptImg(optImgField, '__pasting__', file);
-        return;
-      }
-    }
-    // No image — check for URL text
-    const text = e.clipboardData.getData('text/plain')?.trim();
-    if (text && /^https?:\/\/.+/i.test(text)) {
-      e.preventDefault();
-      toast('正在下载图片...', 'info');
-      try {
-        const { url } = await uploadOptionImageFromUrl(text);
-        const updated = { ...optImages, [optImgField]: { ...(optImages[optImgField] || {}), ['__pasting__']: url } };
-        await updateCategory(activeCat!.id, { optionImages: updated });
-        mutateCats();
-        toast('图片已下载并保存', 'success');
-      } catch {
-        toast('下载图片失败，请检查链接', 'error');
-      }
-    }
-  }
   const totalCats = categories.length;
   const totalProducts = categories.reduce((s, c) => s + (c.productCount || 0), 0);
   const filteredSelectionCategories = useMemo(() => {
@@ -2898,7 +2877,6 @@ function Content() {
         <div
           className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
           onClick={() => setShowOptImgModal(false)}
-          onPaste={handlePaste}
         >
           <div
             className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] max-w-none bg-surface-container-low rounded-2xl border border-outline-variant/20 p-3 space-y-3 flex min-h-0 flex-col overflow-hidden shadow-2xl sm:relative sm:inset-auto sm:w-full sm:max-w-2xl sm:max-h-[90dvh] sm:p-5 sm:space-y-4 sm:rounded-xl"
@@ -3104,7 +3082,12 @@ function Content() {
                           </button>
                         </div>
                         <button
-                          onClick={() => setEditOptVal(val)}
+                          onClick={() => {
+                            setEditOptVal(val);
+                            setHoverOptVal(null);
+                          }}
+                          onMouseEnter={() => setHoverOptVal(val)}
+                          onMouseLeave={() => setHoverOptVal(null)}
                           className="w-full aspect-[2.2/1] min-[430px]:aspect-square rounded bg-surface-container-lowest flex items-center justify-center overflow-hidden border border-outline-variant/10 hover:border-primary-container/30 transition-colors"
                         >
                           {isUploading ? (
@@ -3121,7 +3104,7 @@ function Content() {
                           )}
                         </button>
                         <span className="block text-center text-[10px] text-primary-container">
-                          {imgUrl ? '点击更换' : '点击上传'}
+                          {imgUrl ? '点击或粘贴更换' : '点击或粘贴上传'}
                         </span>
                       </div>
                     );
