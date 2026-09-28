@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import { mutate as mutateSWR } from 'swr';
@@ -53,6 +53,18 @@ const MANAGEMENT_ALL = '__all__';
 const MANAGEMENT_DEFAULT_PAGE_SIZE = 40;
 const MANAGEMENT_EAGER_IMAGE_COUNT = 8;
 
+/** 搜索防抖：搜索词停顿 300ms 才发请求/换列表（否则每键一次请求 + 整列表替换） */
+function useDebouncedValue<T>(value: T, delay = 300) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedValue(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [delay, value]);
+
+  return debouncedValue;
+}
+
 const STATUS_TABS: { value: ProductWallAdminStatusFilter; labelKey: string; icon: string }[] = [
   { value: 'all', labelKey: 'productWall.management.statusAll', icon: 'apps' },
   { value: 'pending', labelKey: 'productWall.management.statusPending', icon: 'schedule' },
@@ -86,6 +98,183 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/** 卡片 memo 化：搜索每键 commit 都会重渲染整页，卡片级 props（item 引用 + 布尔 + 稳定 handler）不变时跳过 */
+const ProductWallCard = memo(function ProductWallCard({
+  item,
+  imageIndex,
+  canvasMode,
+  selectionMode,
+  selected,
+  isTrash,
+  onOpen,
+  onToggleSelect,
+  onApprove,
+  onReject,
+  onEdit,
+  onRestore,
+  onPurge,
+  onDelete,
+}: {
+  item: ProductWallItem;
+  imageIndex: number;
+  canvasMode: ProductWallCanvasMode;
+  selectionMode: boolean;
+  selected: boolean;
+  isTrash: boolean;
+  onOpen: (item: ProductWallItem) => void;
+  onToggleSelect: (item: ProductWallItem) => void;
+  onApprove: (item: ProductWallItem) => void;
+  onReject: (item: ProductWallItem) => void;
+  onEdit: (item: ProductWallItem) => void;
+  onRestore: (item: ProductWallItem) => void;
+  onPurge: (item: ProductWallItem) => void;
+  onDelete: (item: ProductWallItem) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <article className="group relative overflow-hidden rounded-lg border border-outline-variant/12 bg-surface-container-low/50 transition-colors hover:border-outline-variant/24">
+      <button
+        type="button"
+        onClick={() => (selectionMode ? onToggleSelect(item) : onOpen(item))}
+        className={`block w-full text-left transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container/35 ${
+          selectionMode ? 'cursor-pointer' : 'cursor-zoom-in hover:opacity-90'
+        }`}
+        aria-label={selectionMode ? t('productWall.selectionBar.selected', { count: 1 }) : t('common.preview')}
+        title={selectionMode ? undefined : t('common.preview')}
+        data-tooltip-ignore
+      >
+        <ProductWallThumbnail
+          item={item}
+          canvasMode={canvasMode}
+          imageIndex={imageIndex}
+          eagerImageCount={MANAGEMENT_EAGER_IMAGE_COUNT}
+          lazyRootMargin="360px 0px"
+          ratioOverride={1}
+        >
+          {item.status === 'pending' && (
+            <span className="absolute left-2 top-2 z-10 inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+              <Icon name="schedule" size={11} />
+              {t('productWall.management.statusPending')}
+            </span>
+          )}
+          {selectionMode && (
+            <span
+              className={`absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur transition-colors ${
+                selected
+                  ? 'border-primary-container bg-primary-container text-on-primary-container'
+                  : 'border-white/50 bg-black/24 text-white'
+              }`}
+            >
+              <Icon name={selected ? 'check' : 'add'} size={16} />
+            </span>
+          )}
+        </ProductWallThumbnail>
+      </button>
+      <div className="p-2.5">
+        <p className="truncate text-xs font-medium text-on-surface" title={item.title}>
+          {item.title}
+        </p>
+        <p className="mt-0.5 truncate text-[10px] text-on-surface-variant">{item.description || item.kind}</p>
+        <div className="mt-1.5 flex items-center justify-between gap-1">
+          <StatusBadge status={item.status} />
+          <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            {isTrash ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void onRestore(item)}
+                  className="flex h-6 w-6 items-center justify-center rounded text-primary-container transition-colors hover:bg-primary-container/15"
+                  aria-label={t('productWall.management.restore')}
+                  title={t('productWall.management.restore')}
+                  data-tooltip-ignore
+                >
+                  <Icon name="restore" size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void onPurge(item)}
+                  className="flex h-6 w-6 items-center justify-center rounded text-error transition-colors hover:bg-error-container/25"
+                  aria-label={t('productWall.management.purge')}
+                  title={t('productWall.management.purge')}
+                  data-tooltip-ignore
+                >
+                  <Icon name="delete_sweep" size={13} />
+                </button>
+              </>
+            ) : item.status === 'pending' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onApprove(item)}
+                  className="flex h-6 w-6 items-center justify-center rounded text-emerald-600 transition-colors hover:bg-emerald-500/10"
+                  aria-label={t('productWall.management.approve')}
+                  title={t('productWall.management.approve')}
+                  data-tooltip-ignore
+                >
+                  <Icon name="check" size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onReject(item)}
+                  className="flex h-6 w-6 items-center justify-center rounded text-error transition-colors hover:bg-error-container/25"
+                  aria-label={t('productWall.management.reject')}
+                  title={t('productWall.management.reject')}
+                  data-tooltip-ignore
+                >
+                  <Icon name="close" size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onEdit(item)}
+                  className="flex h-6 w-6 items-center justify-center rounded text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                  aria-label={t('productWall.actions.edit')}
+                  title={t('productWall.actions.edit')}
+                  data-tooltip-ignore
+                >
+                  <Icon name="edit" size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(item)}
+                  className="flex h-6 w-6 items-center justify-center rounded text-error transition-colors hover:bg-error-container/25"
+                  aria-label={t('common.delete')}
+                  title={t('common.delete')}
+                  data-tooltip-ignore
+                >
+                  <Icon name="delete" size={13} />
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onEdit(item)}
+                  className="flex h-6 w-6 items-center justify-center rounded text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                  aria-label={t('productWall.actions.edit')}
+                  title={t('productWall.actions.edit')}
+                  data-tooltip-ignore
+                >
+                  <Icon name="edit" size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(item)}
+                  className="flex h-6 w-6 items-center justify-center rounded text-error transition-colors hover:bg-error-container/25"
+                  aria-label={t('common.delete')}
+                  title={t('common.delete')}
+                  data-tooltip-ignore
+                >
+                  <Icon name="delete" size={13} />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+});
+
 export default function ProductWallAdminPage() {
   const { t } = useTranslation();
   useDocumentTitle(t('nav.admin.productWall'));
@@ -98,6 +287,7 @@ export default function ProductWallAdminPage() {
     setValue: setQueryInput,
     inputProps: queryInputProps,
   } = useImeSafeSearchInput();
+  const debouncedQuery = useDebouncedValue(committedQuery.trim(), 300);
   const { data: categoriesData, mutate: mutateCategories } = useSWR(
     'admin-product-wall-categories',
     listAdminProductWallCategories,
@@ -126,7 +316,7 @@ export default function ProductWallAdminPage() {
   } = useSWRInfinite(
     (pageIndex: number, previousPage: ProductWallAdminListResponse | null) => {
       if (previousPage && previousPage.items.length < pageSize) return null;
-      return `admin-product-wall-page?p=${pageIndex + 1}&st=${status}&k=${kind}&q=${committedQuery}`;
+      return `admin-product-wall-page?p=${pageIndex + 1}&st=${status}&k=${kind}&q=${debouncedQuery}`;
     },
     (key: string) => {
       const params = new URLSearchParams(key.split('?')[1] || '');
@@ -135,7 +325,7 @@ export default function ProductWallAdminPage() {
         pageSize,
         status,
         kind: kind === MANAGEMENT_ALL ? undefined : kind,
-        q: committedQuery || undefined,
+        q: debouncedQuery || undefined,
       });
     },
     // 翻页/聚焦不重校验已加载页（变更都通过 mutateList() 显式刷新）
@@ -179,13 +369,13 @@ export default function ProductWallAdminPage() {
   }, [hasMorePages, isLoading, size, setSize]);
 
   // 切换筛选/搜索条件后回到第一页（useSWRInfinite 换 key 不会自动重置 size；仅条件真实变化时触发）
-  const lastQueryKeyRef = useRef(`${status}|${kind}|${committedQuery}`);
+  const lastQueryKeyRef = useRef(`${status}|${kind}|${debouncedQuery}`);
   useEffect(() => {
-    const nextKey = `${status}|${kind}|${committedQuery}`;
+    const nextKey = `${status}|${kind}|${debouncedQuery}`;
     if (lastQueryKeyRef.current === nextKey) return;
     lastQueryKeyRef.current = nextKey;
     setSize(1);
-  }, [status, kind, committedQuery, setSize]);
+  }, [status, kind, debouncedQuery, setSize]);
 
   // ── 操作状态 ──
   const [previewItem, setPreviewItem] = useState<ProductWallItem | null>(null);
@@ -228,32 +418,37 @@ export default function ProductWallAdminPage() {
     [t, toast],
   );
 
-  const refreshAfterChange = async () => {
+  const refreshAfterChange = useCallback(async () => {
     await mutateList();
     // 前台 tab 计数即时刷新；墙列表由前台页面重新挂载时的 SWR revalidate 更新
     void mutateSWR('product-wall-counts');
-  };
+  }, [mutateList]);
 
-  const reviewItem = async (item: ProductWallItem, nextStatus: 'approved' | 'rejected', reason?: string) => {
-    try {
-      await reviewProductWallItem(item.id, { status: nextStatus, rejectReason: reason });
-      toast(
-        nextStatus === 'approved' ? t('productWall.toasts.reviewApproved') : t('productWall.toasts.reviewRejected'),
-        'success',
-      );
-      await refreshAfterChange();
-    } catch (err) {
-      toast(errorMessage(err, t('productWall.toasts.reviewFailed')), 'error');
-    }
-  };
+  const reviewItem = useCallback(
+    async (item: ProductWallItem, nextStatus: 'approved' | 'rejected', reason?: string) => {
+      try {
+        await reviewProductWallItem(item.id, { status: nextStatus, rejectReason: reason });
+        toast(
+          nextStatus === 'approved' ? t('productWall.toasts.reviewApproved') : t('productWall.toasts.reviewRejected'),
+          'success',
+        );
+        await refreshAfterChange();
+      } catch (err) {
+        toast(errorMessage(err, t('productWall.toasts.reviewFailed')), 'error');
+      }
+    },
+    [t, toast, refreshAfterChange],
+  );
 
-  const openEditItem = (item: ProductWallItem) => {
+  const approveItem = useCallback((item: ProductWallItem) => void reviewItem(item, 'approved'), [reviewItem]);
+
+  const openEditItem = useCallback((item: ProductWallItem) => {
     setEditingItem(item);
     setEditTitle(item.title);
     setEditDescription(item.description || '');
     setEditKind(item.kind);
     setEditTags(item.tags.join('，'));
-  };
+  }, []);
 
   const saveEditingItem = async () => {
     if (!editingItem) return;
@@ -272,14 +467,14 @@ export default function ProductWallAdminPage() {
     }
   };
 
-  const toggleSelectedItem = (item: ProductWallItem) => {
+  const toggleSelectedItem = useCallback((item: ProductWallItem) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(item.id)) next.delete(item.id);
       else next.add(item.id);
       return next;
     });
-  };
+  }, []);
   const selectAllPage = () => {
     setSelectionMode(true);
     setSelectedIds(new Set(items.map((item) => item.id)));
@@ -313,24 +508,36 @@ export default function ProductWallAdminPage() {
     }
   };
 
-  const restoreItem = async (item: ProductWallItem) => {
-    try {
-      await restoreProductWallItems([item.id]);
-      toast(t('productWall.toasts.restored'), 'success');
-      await refreshAfterChange();
-    } catch (err) {
-      toast(errorMessage(err, t('productWall.toasts.restoreFailed')), 'error');
-    }
-  };
-  const purgeItem = async (item: ProductWallItem) => {
-    try {
-      await purgeProductWallItems([item.id]);
-      toast(t('productWall.toasts.purged'), 'success');
-      await refreshAfterChange();
-    } catch (err) {
-      toast(errorMessage(err, t('productWall.toasts.purgeFailed')), 'error');
-    }
-  };
+  const restoreItem = useCallback(
+    async (item: ProductWallItem) => {
+      try {
+        await restoreProductWallItems([item.id]);
+        toast(t('productWall.toasts.restored'), 'success');
+        await refreshAfterChange();
+      } catch (err) {
+        toast(errorMessage(err, t('productWall.toasts.restoreFailed')), 'error');
+      }
+    },
+    [t, toast, refreshAfterChange],
+  );
+  const purgeItem = useCallback(
+    async (item: ProductWallItem) => {
+      try {
+        await purgeProductWallItems([item.id]);
+        toast(t('productWall.toasts.purged'), 'success');
+        await refreshAfterChange();
+      } catch (err) {
+        toast(errorMessage(err, t('productWall.toasts.purgeFailed')), 'error');
+      }
+    },
+    [t, toast, refreshAfterChange],
+  );
+  // memo 卡片的稳定 handler（搜索每键重渲染间引用不变）
+  const requestReject = useCallback((item: ProductWallItem) => {
+    setRejectReason(item.rejectReason || '');
+    setRejectTarget(item);
+  }, []);
+  const requestDeleteSingle = useCallback((item: ProductWallItem) => setDeleteDialog({ type: 'single', item }), []);
   const confirmDelete = async () => {
     if (!deleteDialog) return;
     setDeleting(true);
@@ -508,156 +715,23 @@ export default function ProductWallAdminPage() {
                 }`}
               >
                 {items.map((item, index) => (
-                  <article
+                  <ProductWallCard
                     key={item.id}
-                    className="group relative overflow-hidden rounded-lg border border-outline-variant/12 bg-surface-container-low/50 transition-colors hover:border-outline-variant/24"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => (selectionMode ? toggleSelectedItem(item) : setPreviewItem(item))}
-                      className={`block w-full text-left transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container/35 ${
-                        selectionMode ? 'cursor-pointer' : 'cursor-zoom-in hover:opacity-90'
-                      }`}
-                      aria-label={
-                        selectionMode ? t('productWall.selectionBar.selected', { count: 1 }) : t('common.preview')
-                      }
-                      title={selectionMode ? undefined : t('common.preview')}
-                      data-tooltip-ignore
-                    >
-                      <ProductWallThumbnail
-                        item={item}
-                        canvasMode={canvasMode}
-                        imageIndex={index}
-                        eagerImageCount={MANAGEMENT_EAGER_IMAGE_COUNT}
-                        lazyRootMargin="360px 0px"
-                        ratioOverride={1}
-                      >
-                        {item.status === 'pending' && (
-                          <span className="absolute left-2 top-2 z-10 inline-flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
-                            <Icon name="schedule" size={11} />
-                            {t('productWall.management.statusPending')}
-                          </span>
-                        )}
-                        {selectionMode && (
-                          <span
-                            className={`absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur transition-colors ${
-                              selectedIds.has(item.id)
-                                ? 'border-primary-container bg-primary-container text-on-primary-container'
-                                : 'border-white/50 bg-black/24 text-white'
-                            }`}
-                          >
-                            <Icon name={selectedIds.has(item.id) ? 'check' : 'add'} size={16} />
-                          </span>
-                        )}
-                      </ProductWallThumbnail>
-                    </button>
-                    <div className="p-2.5">
-                      <p className="truncate text-xs font-medium text-on-surface" title={item.title}>
-                        {item.title}
-                      </p>
-                      <p className="mt-0.5 truncate text-[10px] text-on-surface-variant">
-                        {item.description || item.kind}
-                      </p>
-                      <div className="mt-1.5 flex items-center justify-between gap-1">
-                        <StatusBadge status={item.status} />
-                        <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                          {status === 'trash' ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => void restoreItem(item)}
-                                className="flex h-6 w-6 items-center justify-center rounded text-primary-container transition-colors hover:bg-primary-container/15"
-                                aria-label={t('productWall.management.restore')}
-                                title={t('productWall.management.restore')}
-                                data-tooltip-ignore
-                              >
-                                <Icon name="restore" size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void purgeItem(item)}
-                                className="flex h-6 w-6 items-center justify-center rounded text-error transition-colors hover:bg-error-container/25"
-                                aria-label={t('productWall.management.purge')}
-                                title={t('productWall.management.purge')}
-                                data-tooltip-ignore
-                              >
-                                <Icon name="delete_sweep" size={13} />
-                              </button>
-                            </>
-                          ) : item.status === 'pending' ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => void reviewItem(item, 'approved')}
-                                className="flex h-6 w-6 items-center justify-center rounded text-emerald-600 transition-colors hover:bg-emerald-500/10"
-                                aria-label={t('productWall.management.approve')}
-                                title={t('productWall.management.approve')}
-                                data-tooltip-ignore
-                              >
-                                <Icon name="check" size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setRejectReason(item.rejectReason || '');
-                                  setRejectTarget(item);
-                                }}
-                                className="flex h-6 w-6 items-center justify-center rounded text-error transition-colors hover:bg-error-container/25"
-                                aria-label={t('productWall.management.reject')}
-                                title={t('productWall.management.reject')}
-                                data-tooltip-ignore
-                              >
-                                <Icon name="close" size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => openEditItem(item)}
-                                className="flex h-6 w-6 items-center justify-center rounded text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-                                aria-label={t('productWall.actions.edit')}
-                                title={t('productWall.actions.edit')}
-                                data-tooltip-ignore
-                              >
-                                <Icon name="edit" size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeleteDialog({ type: 'single', item })}
-                                className="flex h-6 w-6 items-center justify-center rounded text-error transition-colors hover:bg-error-container/25"
-                                aria-label={t('common.delete')}
-                                title={t('common.delete')}
-                                data-tooltip-ignore
-                              >
-                                <Icon name="delete" size={13} />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => openEditItem(item)}
-                                className="flex h-6 w-6 items-center justify-center rounded text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-                                aria-label={t('productWall.actions.edit')}
-                                title={t('productWall.actions.edit')}
-                                data-tooltip-ignore
-                              >
-                                <Icon name="edit" size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeleteDialog({ type: 'single', item })}
-                                className="flex h-6 w-6 items-center justify-center rounded text-error transition-colors hover:bg-error-container/25"
-                                aria-label={t('common.delete')}
-                                title={t('common.delete')}
-                                data-tooltip-ignore
-                              >
-                                <Icon name="delete" size={13} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </article>
+                    item={item}
+                    imageIndex={index}
+                    canvasMode={canvasMode}
+                    selectionMode={selectionMode}
+                    selected={selectedIds.has(item.id)}
+                    isTrash={status === 'trash'}
+                    onOpen={setPreviewItem}
+                    onToggleSelect={toggleSelectedItem}
+                    onApprove={approveItem}
+                    onReject={requestReject}
+                    onEdit={openEditItem}
+                    onRestore={restoreItem}
+                    onPurge={purgeItem}
+                    onDelete={requestDeleteSingle}
+                  />
                 ))}
               </div>
             ) : (

@@ -102,6 +102,7 @@ export const DEFAULT_UPLOAD_POLICY_FOR_SETTINGS: UploadPolicy = {
   selectionImportMaxSizeMb: 5,
   selectionImportMaxRows: 10000,
   selectionImportMaxColumns: 200,
+  selectionTransferMaxSizeMb: 200,
   productWallImageMaxSizeMb: 8,
   productWallUploadMaxFiles: 20,
   productWallArchiveExtractMaxFiles: 100,

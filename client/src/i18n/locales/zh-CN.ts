@@ -1459,6 +1459,7 @@ export const zhCN: { translation: TranslationMap } = {
       unknownError: '未知错误',
       cart: {
         added: '已加入询价清单',
+        addedExport: '已加入导出清单',
         limitReached: '单个询价单最多包含 {{limit}} 个产品',
       },
       categories: {
@@ -1469,6 +1470,11 @@ export const zhCN: { translation: TranslationMap } = {
       },
       inquiryCart: {
         addedCount: '已加入 {{count}} 项',
+        exportFailed: '导出失败，请重试',
+        exportSelected: '导出选中',
+        selected: '已选',
+        exportTitle: '导出清单',
+        exportedCount: '已导出 {{count}} 项',
         clear: '清空',
         clearAria: '清空询价清单',
         edit: '编辑',
@@ -1538,9 +1544,14 @@ export const zhCN: { translation: TranslationMap } = {
     },
     selectionResult: {
       addInquiry: '加入询价',
+      addToList: '添加到清单',
+      addedList: '已添加',
       addedInquiry: '已加入询价',
       catalog: '画册',
       catalogMaterials: '画册资料',
+      viewCatalog: '查看画册',
+      zoomCatalog: '放大查看',
+      collapseCatalog: '收起画册',
       catalogPdf: '画册 PDF',
       collapseList: '收起清单',
       copyList: '复制清单',

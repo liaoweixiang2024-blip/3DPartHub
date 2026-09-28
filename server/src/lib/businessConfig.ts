@@ -44,6 +44,7 @@ export type UploadPolicy = {
   selectionImportMaxSizeMb: number;
   selectionImportMaxRows: number;
   selectionImportMaxColumns: number;
+  selectionTransferMaxSizeMb: number;
   productWallImageMaxSizeMb: number;
   productWallUploadMaxFiles: number;
   productWallArchiveExtractMaxFiles: number;
@@ -162,6 +163,7 @@ export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
   selectionImportMaxSizeMb: 5,
   selectionImportMaxRows: 10000,
   selectionImportMaxColumns: 200,
+  selectionTransferMaxSizeMb: 200,
   productWallImageMaxSizeMb: 8,
   productWallUploadMaxFiles: 20,
   productWallArchiveExtractMaxFiles: 100,
@@ -221,6 +223,12 @@ export function normalizeUploadPolicy(policy: UploadPolicy): UploadPolicy {
       DEFAULT_UPLOAD_POLICY.selectionImportMaxColumns,
       1,
       1000,
+    ),
+    selectionTransferMaxSizeMb: clamp(
+      policy.selectionTransferMaxSizeMb,
+      DEFAULT_UPLOAD_POLICY.selectionTransferMaxSizeMb,
+      1,
+      2048,
     ),
     productWallImageMaxSizeMb: clamp(
       policy.productWallImageMaxSizeMb,

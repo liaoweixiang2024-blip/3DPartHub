@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
 import useSWR from 'swr';
 import type { SheetData } from 'write-excel-file/browser';
 import {
@@ -9,6 +9,7 @@ import {
   deleteCategory,
   createProduct,
   getSelectionProducts,
+  getSelectionProductById,
   updateProduct,
   deleteProduct,
   batchImportProducts,
@@ -17,6 +18,8 @@ import {
   uploadOptionImageFromUrl,
   renameOptionValue,
   sortCategories,
+  batchDeleteSelectionProducts,
+  batchUpdateSelectionProductsHidden,
   type SelectionCategory,
   type SelectionProduct,
   type SelectionComponent,
@@ -49,6 +52,7 @@ import {
   buildGeneratedProductDrafts,
   type GeneratedProductDraft,
 } from '../components/selection-admin/selectionAdminUtils';
+import { SelectionExportModal, SelectionImportModal } from '../components/selection-admin/SelectionTransferModal';
 import {
   ADMIN_GRID_ROW_CLASS,
   ADMIN_ROW_META_CLASS,
@@ -63,7 +67,9 @@ import {
 } from '../components/shared/AdminDataTable';
 import { AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import { AnimatePresence, motion } from 'framer-motion';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
+import { dialogPanelMotion } from '../lib/motion';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
@@ -85,6 +91,204 @@ const PRODUCT_NAME_HEADERS = ['名称', '产品名称', 'name', 'Name'];
 const SELECTION_CATEGORY_GRID_COLUMNS = 'minmax(220px,1.4fr) minmax(120px,0.8fr) 92px 92px 80px 104px';
 
 // ========== Content ==========
+// ---- 产品行 memo 组件：行内容只随自身数据/删除态变化 ----
+// 5000 个产品的分类下，表格 120 行×20+ 列全量重渲染约 340ms/次，
+// 会拖慢一切页面级 setState（打开弹窗、下拉、搜索联想）。memo 隔离后无关更新零开销。
+interface ProductRowHandlers {
+  onToggleHidden: (p: SelectionProduct) => void;
+  onEdit: (p: SelectionProduct) => void;
+  onConfirmDelete: (id: string) => void;
+  /** 由 setState setter 直接传入（接受 string） */
+  onRequestDelete: (id: string) => void;
+  onCancelDelete: () => void;
+  /** 批量选择：空依赖 useCallback，保持引用稳定 */
+  onToggleSelected: (id: string) => void;
+}
+
+const ProductTableRow = memo(function ProductTableRow({
+  p,
+  columns,
+  isDeleting,
+  selected,
+  onToggleHidden,
+  onEdit,
+  onConfirmDelete,
+  onRequestDelete,
+  onCancelDelete,
+  onToggleSelected,
+}: { p: SelectionProduct; columns: ColumnDef[]; isDeleting: boolean; selected: boolean } & ProductRowHandlers) {
+  return (
+    <AdminTableBodyRow className={p.hidden ? 'opacity-55' : undefined}>
+      <AdminTableCell className="w-10 px-3 py-2.5">
+        <input
+          name="select-product"
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelected(p.id)}
+          className="h-4 w-4 accent-primary-container"
+          aria-label={`选择 ${p.modelNo || p.name}`}
+        />
+      </AdminTableCell>
+      {columns.map((col) => (
+        <AdminTableCell key={col.key} className="whitespace-nowrap px-3 py-2.5">
+          {(p.specs as Record<string, string>)[col.key] ?? '—'}
+        </AdminTableCell>
+      ))}
+      <AdminTableCell className="px-3 py-2.5 text-right">
+        <div className="flex items-center justify-end gap-1">
+          <button
+            onClick={() => onToggleHidden(p)}
+            className={p.hidden ? SELECTION_ICON_BUTTON_ACTIVE : SELECTION_ICON_BUTTON_EDIT}
+            data-tooltip-ignore
+            aria-label={p.hidden ? '恢复产品参与选型' : '隐藏产品（不参与选型）'}
+          >
+            <Icon name={p.hidden ? 'visibility_off' : 'visibility'} size={13} />
+          </button>
+          <button
+            onClick={() => onEdit(p)}
+            className={SELECTION_ICON_BUTTON_EDIT}
+            data-tooltip-ignore
+            aria-label="编辑产品"
+          >
+            <Icon name="edit" size={13} />
+          </button>
+          {isDeleting ? (
+            <>
+              <button
+                onClick={() => onConfirmDelete(p.id)}
+                className="px-1.5 py-0.5 text-[10px] bg-error text-on-error-container rounded"
+              >
+                确认
+              </button>
+              <button onClick={onCancelDelete} className="px-1.5 py-0.5 text-[10px] text-on-surface-variant">
+                取消
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => onRequestDelete(p.id)}
+              className={SELECTION_ICON_BUTTON_DELETE}
+              data-tooltip-ignore
+              aria-label="删除产品"
+            >
+              <Icon name="delete" size={13} />
+            </button>
+          )}
+        </div>
+      </AdminTableCell>
+    </AdminTableBodyRow>
+  );
+});
+
+const ProductMobileCard = memo(function ProductMobileCard({
+  p,
+  columns,
+  isDeleting,
+  selected,
+  onToggleHidden,
+  onEdit,
+  onConfirmDelete,
+  onRequestDelete,
+  onCancelDelete,
+  onToggleSelected,
+}: { p: SelectionProduct; columns: ColumnDef[]; isDeleting: boolean; selected: boolean } & ProductRowHandlers) {
+  const specs = (p.specs as Record<string, string>) || {};
+  const primaryColumn = columns.find((col) => col.displayOnly) || columns[0];
+  const title = p.modelNo || (primaryColumn ? specs[primaryColumn.key] : '') || p.name || '未命名产品';
+  const cleanName = cleanProductName(p.name, p.modelNo);
+  const subtitle = cleanName && cleanName !== title ? cleanName : '';
+  const displayColumns = columns.filter((col) => col.key !== primaryColumn?.key).slice(0, 6);
+
+  return (
+    <div
+      className={`rounded-xl border border-outline-variant/10 bg-surface-container-low p-3 shadow-sm ${
+        p.hidden ? 'opacity-55' : ''
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        <input
+          name="select-product"
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelected(p.id)}
+          className="mt-1 h-4 w-4 shrink-0 accent-primary-container"
+          aria-label={`选择 ${p.modelNo || p.name}`}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5 text-sm font-bold leading-snug text-on-surface break-words">
+            <span>{title}</span>
+            {p.hidden ? (
+              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-surface-container-high px-1.5 py-0.5 text-[9px] font-medium text-on-surface-variant/70">
+                <Icon name="visibility_off" size={10} />
+                隐藏
+              </span>
+            ) : null}
+          </div>
+          {subtitle && (
+            <div className="mt-0.5 text-xs leading-snug text-on-surface-variant break-words">{subtitle}</div>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            onClick={() => onToggleHidden(p)}
+            className={p.hidden ? SELECTION_ICON_BUTTON_ACTIVE : SELECTION_ICON_BUTTON_EDIT}
+            data-tooltip-ignore
+            aria-label={p.hidden ? '恢复产品参与选型' : '隐藏产品（不参与选型）'}
+          >
+            <Icon name={p.hidden ? 'visibility_off' : 'visibility'} size={14} />
+          </button>
+          <button
+            onClick={() => onEdit(p)}
+            className={SELECTION_ICON_BUTTON_EDIT}
+            data-tooltip-ignore
+            aria-label="编辑产品"
+          >
+            <Icon name="edit" size={14} />
+          </button>
+          {isDeleting ? (
+            <>
+              <button
+                onClick={() => onConfirmDelete(p.id)}
+                className="h-8 px-2 text-[10px] font-bold bg-error text-on-error-container rounded"
+              >
+                确认
+              </button>
+              <button
+                onClick={onCancelDelete}
+                className="h-8 px-2 text-[10px] text-on-surface-variant bg-surface-container-high rounded"
+              >
+                取消
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => onRequestDelete(p.id)}
+              className={SELECTION_ICON_BUTTON_DELETE}
+              data-tooltip-ignore
+              aria-label="删除产品"
+            >
+              <Icon name="delete" size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        {displayColumns.map((col) => (
+          <div key={col.key} className="min-w-0 rounded-lg bg-surface-container-lowest px-2 py-1.5">
+            <div className="truncate text-[10px] leading-tight text-on-surface-variant">
+              {col.label || col.key}
+              {col.unit ? ` (${col.unit})` : ''}
+            </div>
+            <div className="mt-0.5 text-xs font-medium leading-snug text-on-surface break-words line-clamp-2">
+              {specs[col.key] ?? '—'}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});
+
 function Content() {
   const { toast } = useToast();
   const businessConfig = useMemo(() => getBusinessConfig(), []);
@@ -158,10 +362,17 @@ function Content() {
     components: [] as SelectionComponent[],
   });
   const [deleteProdId, setDeleteProdId] = useState<string | null>(null);
+  // 批量操作：选中集合 + 确认弹窗 + 执行中
+  const [selectedProdIds, setSelectedProdIds] = useState<Set<string>>(new Set());
+  const [batchDeleteConfirmOpen, setBatchDeleteConfirmOpen] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
   const [productAssetDragging, setProductAssetDragging] = useState(false);
   const [productAssetUploading, setProductAssetUploading] = useState(false);
   const productAssetInputRef = useRef<HTMLInputElement | null>(null);
   const [showBatchModal, setShowBatchModal] = useState(false);
+  // 选型分类数据包搬运（本地站 ↔ 服务器站）：导出/导入弹窗
+  const [showTransferExport, setShowTransferExport] = useState(false);
+  const [showTransferImport, setShowTransferImport] = useState(false);
   // 套件子零件批量导入（粘贴文本解析）
   const [kitImportOpen, setKitImportOpen] = useState(false);
   const [kitImportText, setKitImportText] = useState('');
@@ -205,6 +416,12 @@ function Content() {
   } = useImeSafeSearchInput();
   const [uploadingVal, setUploadingVal] = useState<string | null>(null);
   const [editOptVal, setEditOptVal] = useState<string | null>(null);
+  // 画册专属拖拽目标悬停态（区别于整弹窗拖拽态 optDragActive）
+  const [optCatalogDragActive, setOptCatalogDragActive] = useState(false);
+  // 悬停即粘贴目标：鼠标停在哪个上传区，Cmd+V 就传哪个区（null=弹窗外，走默认分流 图片→选项图/PDF→画册）
+  const [optPasteZone, setOptPasteZone] = useState<'image' | 'catalog' | null>(null);
+  // 选项值 → 产品反查弹窗（点选项卡上的「N 型」角标打开）
+  const [valueProductsView, setValueProductsView] = useState<{ field: string; value: string } | null>(null);
 
   const [renameField, setRenameField] = useState<string>('');
   const [renameOldVal, setRenameOldVal] = useState<string>('');
@@ -226,6 +443,26 @@ function Content() {
       };
     }
   }, [showOptImgModal, editOptVal, renameOldVal]);
+  // 选项设置字段选择：自定义下拉（原生 select 在弹窗内偶发跳动/闪跳，样式也不可控）
+  const [optFieldOpen, setOptFieldOpen] = useState(false);
+  const optFieldPickerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!optFieldOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!optFieldPickerRef.current?.contains(event.target as Node)) {
+        setOptFieldOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOptFieldOpen(false);
+    };
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [optFieldOpen]);
   useEffect(() => {
     if (!productCatOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
@@ -241,6 +478,8 @@ function Content() {
   const [optViewMode, setOptViewMode] = useState<'grid' | 'list'>('grid');
   const [optDragActive, setOptDragActive] = useState(false);
   const productTableScrollRef = useRef<HTMLDivElement | null>(null);
+  /** 当前编辑弹窗对应的产品 id：丢弃编辑切换后到达的过期 components 拉取 */
+  const editProdIdRef = useRef<string | null>(null);
 
   // 管理端拉全量（含隐藏分类）：独立 SWR key，避免污染公开选型页的 categories 缓存
   const { data: categories = [], mutate: mutateCats } = useSWR('selections/categories-admin', () =>
@@ -469,19 +708,23 @@ function Content() {
     }
   }
 
-  async function toggleProdHidden(p: SelectionProduct) {
-    const next = !p.hidden;
-    try {
-      await updateProduct(p.id, { hidden: next });
-      mutateProds();
-      toast(
-        next ? `「${p.modelNo || p.name}」已隐藏（不参与选型）` : `「${p.modelNo || p.name}」已恢复参与选型`,
-        'success',
-      );
-    } catch (err: unknown) {
-      toast(getApiErrorMessage(err, '操作失败'), 'error');
-    }
-  }
+  // memo 行组件依赖稳定的 handler 引用，避免无关 setState 时全表重渲染
+  const toggleProdHidden = useCallback(
+    async (p: SelectionProduct) => {
+      const next = !p.hidden;
+      try {
+        await updateProduct(p.id, { hidden: next });
+        mutateProds();
+        toast(
+          next ? `「${p.modelNo || p.name}」已隐藏（不参与选型）` : `「${p.modelNo || p.name}」已恢复参与选型`,
+          'success',
+        );
+      } catch (err: unknown) {
+        toast(getApiErrorMessage(err, '操作失败'), 'error');
+      }
+    },
+    [mutateProds, toast],
+  );
 
   // ---- Product handlers ----
   const activeCat = categories.find((c) => c.id === selectedCatId);
@@ -534,12 +777,14 @@ function Content() {
       toast('请先选择分类', 'error');
       return;
     }
+    editProdIdRef.current = null;
     setEditProd(null);
     setProdForm({ name: '', modelNo: '', specs: {}, image: '', pdfUrl: '', isKit: false, components: [] });
     setShowProdModal(true);
   }
-  function openEditProd(prod: SelectionProduct) {
+  const openEditProd = useCallback((prod: SelectionProduct) => {
     const modelNo = prod.modelNo || '';
+    editProdIdRef.current = prod.id;
     setEditProd(prod);
     setProdForm({
       name: cleanProductName(prod.name, modelNo),
@@ -551,7 +796,24 @@ function Content() {
       components: (prod.components as SelectionComponent[]) ?? [],
     });
     setShowProdModal(true);
-  }
+    // 子零件清单占列表响应 ~44%，列表接口已剔除；编辑时单独拉取补齐。
+    // 竞态防护：切换到其他产品/新建后丢弃过期响应；保存时 components 为 undefined 不会覆盖库内清单
+    if (prod.components == null) {
+      void (async () => {
+        try {
+          const full = await getSelectionProductById(prod.id);
+          if (editProdIdRef.current !== prod.id) return;
+          setProdForm((prev) =>
+            prev.components.length === 0
+              ? { ...prev, components: (full.components as SelectionComponent[]) ?? [] }
+              : prev,
+          );
+        } catch {
+          // 拉取失败不阻断编辑，子零件清单保持为空展示
+        }
+      })();
+    }
+  }, []);
   async function saveProd() {
     try {
       const modelNo = prodForm.modelNo || undefined;
@@ -577,16 +839,71 @@ function Content() {
       toast(getApiErrorMessage(err, '操作失败'), 'error');
     }
   }
-  async function handleDeleteProd(id: string) {
+  const handleDeleteProd = useCallback(
+    async (id: string) => {
+      try {
+        await deleteProduct(id);
+        toast('产品已删除', 'success');
+        setDeleteProdId(null);
+        mutateProds();
+      } catch (err: unknown) {
+        toast(getApiErrorMessage(err, '删除失败'), 'error');
+      }
+    },
+    [mutateProds, toast],
+  );
+  const cancelDeleteProd = useCallback(() => setDeleteProdId(null), []);
+
+  // ---- 批量操作（memo 行的稳定 handler：空依赖，只做 setState） ----
+  const toggleProdSelected = useCallback((id: string) => {
+    setSelectedProdIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const clearProdSelection = useCallback(() => setSelectedProdIds(new Set()), []);
+  const handleBatchUpdateHidden = async (hidden: boolean) => {
+    const ids = Array.from(selectedProdIds);
+    if (!ids.length || batchBusy) return;
+    setBatchBusy(true);
     try {
-      await deleteProduct(id);
-      toast('产品已删除', 'success');
-      setDeleteProdId(null);
+      const { updated } = await batchUpdateSelectionProductsHidden(ids, hidden);
+      toast(hidden ? `已隐藏 ${updated} 个产品` : `已恢复 ${updated} 个产品参与选型`, 'success');
+      setSelectedProdIds(new Set());
       mutateProds();
     } catch (err: unknown) {
-      toast(getApiErrorMessage(err, '删除失败'), 'error');
+      toast(getApiErrorMessage(err, '批量操作失败'), 'error');
+    } finally {
+      setBatchBusy(false);
     }
-  }
+  };
+  const handleBatchDeleteProducts = async () => {
+    const ids = Array.from(selectedProdIds);
+    if (!ids.length || batchBusy) return;
+    setBatchBusy(true);
+    try {
+      const { deleted } = await batchDeleteSelectionProducts(ids);
+      toast(`已删除 ${deleted} 个产品`, 'success');
+      setBatchDeleteConfirmOpen(false);
+      setSelectedProdIds(new Set());
+      mutateProds();
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, '批量删除失败'), 'error');
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+  // 搜索/切分类后 filteredProducts 变化：剔除已消失的 id，选择集自动收敛
+  useEffect(() => {
+    setSelectedProdIds((prev) => {
+      if (prev.size === 0) return prev;
+      const visible = new Set(filteredProducts.map((p) => p.id));
+      const next = new Set([...prev].filter((id) => visible.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [filteredProducts]);
   async function handleProductAssetFiles(fileList: FileList | File[]) {
     const files = Array.from(fileList);
     const validFiles = files.filter((file) => productAssetKind(file));
@@ -825,11 +1142,23 @@ function Content() {
       toast('没有可导出的产品', 'error');
       return;
     }
+    // 列表数据不含子零件清单（体积优化），导出需要「组件(JSON)」列，单独拉一次全量
+    let exportItems = products;
+    try {
+      toast('正在准备导出数据（含子零件清单）...', 'info');
+      const full = await getSelectionProducts(activeCat.slug, 1, 5000, '', {
+        includeHidden: true,
+        includeComponents: true,
+      });
+      if (full.items.length) exportItems = full.items;
+    } catch {
+      toast('拉取完整数据失败，子零件清单列将为空', 'error');
+    }
     const { default: writeXlsxFile } = await import('write-excel-file/browser');
     const cols = productColumns;
     const headers = productImportHeaders(cols);
     const rows: SheetData = [headers.map((header) => ({ value: header, fontWeight: 'bold' as const }))];
-    products.forEach((p) => {
+    exportItems.forEach((p) => {
       const specs = p.specs as Record<string, string>;
       const baseRow: Record<string, string> = {
         名称: safeSpreadsheetText(p.name),
@@ -847,7 +1176,7 @@ function Content() {
       rows.push(headers.map((header) => baseRow[header] ?? ''));
     });
     await writeXlsxFile(rows, { sheet: '产品' }).toFile(`${activeCat.slug || 'products'}_products.xlsx`);
-    toast(`已导出 ${products.length} 个产品`, 'success');
+    toast(`已导出 ${exportItems.length} 个产品`, 'success');
   }
 
   // ---- Option Image handlers ----
@@ -868,6 +1197,21 @@ function Content() {
     }
     return result;
   }, [activeCat, products]);
+  // 「字段+选项值 → 命中产品」反查索引：选项值卡片角标计数 + 反查弹窗数据源
+  const productsByOptionValue = useMemo(() => {
+    const map = new Map<string, SelectionProduct[]>();
+    for (const p of products) {
+      const specs = (p.specs as Record<string, unknown>) || {};
+      for (const [field, value] of Object.entries(specs)) {
+        if (typeof value !== 'string' || !value) continue;
+        const key = `${field}\u0000${value}`;
+        const list = map.get(key);
+        if (list) list.push(p);
+        else map.set(key, [p]);
+      }
+    }
+    return map;
+  }, [products]);
   const optSearchText = optSettingsSearch.trim().toLowerCase();
   const optionMatchedProducts = useMemo(() => {
     if (!optSearchText) return [];
@@ -899,6 +1243,12 @@ function Content() {
     );
     return orderItems.filter((item) => item.toLowerCase().includes(optSearchText) || matchedValues.has(item));
   }, [optImgField, optSearchText, optionMatchedProducts, orderItems]);
+  // 选项卡片增量渲染：型号类字段可能有数千个选项值，一次性全渲染会冻结主线程数秒
+  const {
+    visibleItems: visibleOrderItems,
+    hasMore: hasMoreOrderItems,
+    loadMore: loadMoreOrderItems,
+  } = useVisibleItems(filteredOrderItems, 60, `${optImgField}:${optSearchText}`);
 
   function resetGenerateFormForCategory(cat: SelectionCategory, sourceProducts: SelectionProduct[] = []) {
     const columns = (cat.columns as ColumnDef[]) || [];
@@ -1006,6 +1356,113 @@ function Content() {
     }
   }
 
+  // 选项设置：切换字段（恢复已保存的选项顺序）
+  function pickOptField(f: string) {
+    if (!activeCat) return;
+    setOptImgField(f);
+    setOptSettingsSearch('');
+    if (f) {
+      const vals = fieldOptions[f] || [];
+      const savedOrderRaw = (activeCat.optionOrder as Record<string, string[] | string>)?.[f];
+      const savedOrder = Array.isArray(savedOrderRaw) ? savedOrderRaw : [];
+      const ordered = savedOrder.filter((v) => vals.includes(v));
+      const rest = vals.filter((v) => !savedOrder.includes(v));
+      setOrderItems([...ordered, ...rest]);
+    } else {
+      setOrderItems([]);
+    }
+  }
+
+  // 单选项弹窗粘贴分流（悬停即目标）：鼠标悬停在上传区时 Cmd+V 传该区；
+  // 悬停在画册区：图片/PDF/链接 都进画册；悬停在选项图片区：图片进选项图片（PDF 仍进画册并提示）；
+  // 不在任何区（鼠标在弹窗外）：默认分流 图片→选项图片、PDF→画册。
+  // 挂 document 级监听（见下方 useEffect）：弹窗开着就生效，不要求先点进弹窗获得焦点。
+  async function handleOptValPaste(e: ClipboardEvent) {
+    if (!editOptVal || !optImgField || e.defaultPrevented) return;
+    const zone = optPasteZone;
+    const pastedFiles = Array.from(e.clipboardData?.files || []);
+    const pdfFile = pastedFiles.find((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+    if (pdfFile) {
+      e.preventDefault();
+      try {
+        await uploadOptCatalog(optImgField, editOptVal, pdfFile);
+        if (zone === 'image') toast('PDF 已上传到画册资料（画册区才收 PDF）', 'info');
+      } catch {
+        toast('上传 PDF 失败', 'error');
+      }
+      return;
+    }
+    const imageFile = pastedFiles.find((f) => f.type.startsWith('image/'));
+    if (imageFile) {
+      e.preventDefault();
+      if (zone === 'catalog') {
+        try {
+          await uploadOptCatalog(optImgField, editOptVal, imageFile);
+        } catch {
+          toast('上传画册失败', 'error');
+        }
+        return;
+      }
+      await uploadOptImg(optImgField, editOptVal, imageFile);
+      return;
+    }
+    for (const item of Array.from(e.clipboardData?.items || [])) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) return;
+        if (zone === 'catalog') {
+          try {
+            await uploadOptCatalog(optImgField, editOptVal, file);
+          } catch {
+            toast('上传画册失败', 'error');
+          }
+          return;
+        }
+        await uploadOptImg(optImgField, editOptVal, file);
+        return;
+      }
+    }
+    const text = e.clipboardData?.getData('text/plain')?.trim();
+    if (text && /^https?:\/\/.+/i.test(text)) {
+      e.preventDefault();
+      // .pdf 链接 → 画册资料（直接保存 URL，不做服务端搬运）
+      if (/\.pdf(\?.*)?$/i.test(text) || zone === 'catalog') {
+        try {
+          const updated = {
+            ...optCatalogs,
+            [optImgField]: { ...(optCatalogs[optImgField] || {}), [editOptVal]: text },
+          };
+          await updateCategory(activeCat!.id, { optionCatalogs: updated });
+          mutateCats();
+          toast('画册链接已保存', 'success');
+        } catch {
+          toast('保存失败', 'error');
+        }
+        return;
+      }
+      toast('正在下载图片...', 'info');
+      try {
+        const { url } = await uploadOptionImageFromUrl(text);
+        const updated = {
+          ...optImages,
+          [optImgField]: { ...(optImages[optImgField] || {}), [editOptVal]: url },
+        };
+        await updateCategory(activeCat!.id, { optionImages: updated });
+        mutateCats();
+        toast('图片已下载并保存', 'success');
+      } catch {
+        toast('下载图片失败，请检查链接是否有效', 'error');
+      }
+    }
+  }
+  useEffect(() => {
+    if (!editOptVal || !optImgField) return;
+    const listener = (event: Event) => void handleOptValPaste(event as ClipboardEvent);
+    document.addEventListener('paste', listener);
+    return () => document.removeEventListener('paste', listener);
+  });
+
   async function removeOptImg(field: string, val: string) {
     const updated = { ...optImages };
     if (updated[field]) {
@@ -1019,7 +1476,8 @@ function Content() {
 
   async function uploadOptCatalog(field: string, val: string, file: File) {
     if (!activeCat) return;
-    const { url } = await uploadOptionImage(file);
+    // 画册走 product-asset 端点（接受图片和 PDF）；option-image 端点只收图片，传 PDF 会 400
+    const { url } = await uploadSelectionProductAsset(file);
     const updated = { ...optCatalogs, [field]: { ...(optCatalogs[field] || {}), [val]: url } };
     await updateCategory(activeCat.id, { optionCatalogs: updated });
     mutateCats();
@@ -1131,6 +1589,8 @@ function Content() {
               },
               { label: '批量生成', icon: 'auto_awesome', disabled: noProductCat, action: openGenerateProducts },
               { label: '导出', icon: 'download', disabled: noProductCat, action: exportCurrentProducts },
+              { label: '导出数据包', icon: 'inventory_2', action: () => setShowTransferExport(true) },
+              { label: '导入数据包', icon: 'archive', action: () => setShowTransferImport(true) },
               {
                 label: '选项设置',
                 icon: 'settings',
@@ -1227,6 +1687,12 @@ function Content() {
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
               <SelectionToolbarButtonContent icon="view_list">排序</SelectionToolbarButtonContent>
+            </button>
+            <button onClick={() => setShowTransferExport(true)} className={SELECTION_TOOLBAR_BUTTON_SECONDARY}>
+              <SelectionToolbarButtonContent icon="inventory_2">导出数据包</SelectionToolbarButtonContent>
+            </button>
+            <button onClick={() => setShowTransferImport(true)} className={SELECTION_TOOLBAR_BUTTON_SECONDARY}>
+              <SelectionToolbarButtonContent icon="archive">导入数据包</SelectionToolbarButtonContent>
             </button>
           </div>
           <SearchField
@@ -1524,6 +1990,50 @@ function Content() {
                       {filteredProducts.length} / {products.length} 个产品
                     </p>
                   )}
+                  {selectedProdIds.size > 0 && (
+                    <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-primary-container/25 bg-primary-container/5 px-3 py-2">
+                      <span className="text-xs font-medium text-on-surface">
+                        已选 <span className="tabular-nums">{selectedProdIds.size}</span> 项
+                      </span>
+                      <span className="mx-0.5 h-4 w-px bg-outline-variant/25" />
+                      <button
+                        type="button"
+                        disabled={batchBusy}
+                        onClick={() => void handleBatchUpdateHidden(true)}
+                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-40"
+                      >
+                        <Icon name="visibility_off" size={13} />
+                        批量隐藏
+                      </button>
+                      <button
+                        type="button"
+                        disabled={batchBusy}
+                        onClick={() => void handleBatchUpdateHidden(false)}
+                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-40"
+                      >
+                        <Icon name="visibility" size={13} />
+                        批量显示
+                      </button>
+                      <button
+                        type="button"
+                        disabled={batchBusy}
+                        onClick={() => setBatchDeleteConfirmOpen(true)}
+                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:opacity-40"
+                      >
+                        <Icon name="delete" size={13} />
+                        批量删除
+                      </button>
+                      <span className="flex-1" />
+                      <button
+                        type="button"
+                        disabled={batchBusy}
+                        onClick={clearProdSelection}
+                        className="rounded-lg px-2 py-1 text-xs text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-40"
+                      >
+                        取消选择
+                      </button>
+                    </div>
+                  )}
                   {filteredProducts.length === 0 ? (
                     <div className="text-center py-12 text-on-surface-variant">
                       <Icon name="search_off" size={40} className="mx-auto mb-2 opacity-30" />
@@ -1532,104 +2042,21 @@ function Content() {
                   ) : (
                     <>
                       <div className="md:hidden space-y-2">
-                        {visibleProducts.map((p) => {
-                          const specs = (p.specs as Record<string, string>) || {};
-                          const primaryColumn = productColumns.find((col) => col.displayOnly) || productColumns[0];
-                          const title =
-                            p.modelNo || (primaryColumn ? specs[primaryColumn.key] : '') || p.name || '未命名产品';
-                          const cleanName = cleanProductName(p.name, p.modelNo);
-                          const subtitle = cleanName && cleanName !== title ? cleanName : '';
-                          const displayColumns = productColumns
-                            .filter((col) => col.key !== primaryColumn?.key)
-                            .slice(0, 6);
-
-                          return (
-                            <div
-                              key={p.id}
-                              className={`rounded-xl border border-outline-variant/10 bg-surface-container-low p-3 shadow-sm ${
-                                p.hidden ? 'opacity-55' : ''
-                              }`}
-                            >
-                              <div className="flex items-start gap-2">
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center gap-1.5 text-sm font-bold leading-snug text-on-surface break-words">
-                                    <span>{title}</span>
-                                    {p.hidden ? (
-                                      <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-surface-container-high px-1.5 py-0.5 text-[9px] font-medium text-on-surface-variant/70">
-                                        <Icon name="visibility_off" size={10} />
-                                        隐藏
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  {subtitle && (
-                                    <div className="mt-0.5 text-xs leading-snug text-on-surface-variant break-words">
-                                      {subtitle}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex shrink-0 items-center gap-1">
-                                  <button
-                                    onClick={() => void toggleProdHidden(p)}
-                                    className={p.hidden ? SELECTION_ICON_BUTTON_ACTIVE : SELECTION_ICON_BUTTON_EDIT}
-                                    data-tooltip-ignore
-                                    aria-label={p.hidden ? '恢复产品参与选型' : '隐藏产品（不参与选型）'}
-                                  >
-                                    <Icon name={p.hidden ? 'visibility_off' : 'visibility'} size={14} />
-                                  </button>
-                                  <button
-                                    onClick={() => openEditProd(p)}
-                                    className={SELECTION_ICON_BUTTON_EDIT}
-                                    data-tooltip-ignore
-                                    aria-label="编辑产品"
-                                  >
-                                    <Icon name="edit" size={14} />
-                                  </button>
-                                  {deleteProdId === p.id ? (
-                                    <>
-                                      <button
-                                        onClick={() => handleDeleteProd(p.id)}
-                                        className="h-8 px-2 text-[10px] font-bold bg-error text-on-error-container rounded"
-                                      >
-                                        确认
-                                      </button>
-                                      <button
-                                        onClick={() => setDeleteProdId(null)}
-                                        className="h-8 px-2 text-[10px] text-on-surface-variant bg-surface-container-high rounded"
-                                      >
-                                        取消
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <button
-                                      onClick={() => setDeleteProdId(p.id)}
-                                      className={SELECTION_ICON_BUTTON_DELETE}
-                                      data-tooltip-ignore
-                                      aria-label="删除产品"
-                                    >
-                                      <Icon name="delete" size={14} />
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="mt-3 grid grid-cols-2 gap-2">
-                                {displayColumns.map((col) => (
-                                  <div
-                                    key={col.key}
-                                    className="min-w-0 rounded-lg bg-surface-container-lowest px-2 py-1.5"
-                                  >
-                                    <div className="truncate text-[10px] leading-tight text-on-surface-variant">
-                                      {col.label || col.key}
-                                      {col.unit ? ` (${col.unit})` : ''}
-                                    </div>
-                                    <div className="mt-0.5 text-xs font-medium leading-snug text-on-surface break-words line-clamp-2">
-                                      {specs[col.key] ?? '—'}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {visibleProducts.map((p) => (
+                          <ProductMobileCard
+                            key={p.id}
+                            p={p}
+                            columns={productColumns}
+                            isDeleting={deleteProdId === p.id}
+                            selected={selectedProdIds.has(p.id)}
+                            onToggleHidden={toggleProdHidden}
+                            onEdit={openEditProd}
+                            onConfirmDelete={handleDeleteProd}
+                            onRequestDelete={setDeleteProdId}
+                            onCancelDelete={cancelDeleteProd}
+                            onToggleSelected={toggleProdSelected}
+                          />
+                        ))}
                       </div>
                       {hasMoreProducts && (
                         <div className="md:hidden">
@@ -1651,6 +2078,26 @@ function Content() {
                         <AdminTable>
                           <thead className={ADMIN_TABLE_HEAD_CLASS}>
                             <AdminTableHeadRow>
+                              <AdminTableHeadCell className="w-10 px-3">
+                                <input
+                                  name="select-all-products"
+                                  type="checkbox"
+                                  checked={
+                                    filteredProducts.length > 0 &&
+                                    filteredProducts.every((p) => selectedProdIds.has(p.id))
+                                  }
+                                  disabled={batchBusy}
+                                  onChange={() =>
+                                    setSelectedProdIds((prev) =>
+                                      filteredProducts.every((p) => prev.has(p.id))
+                                        ? new Set()
+                                        : new Set(filteredProducts.map((p) => p.id)),
+                                    )
+                                  }
+                                  className="h-4 w-4 accent-primary-container"
+                                  aria-label="全选当前筛选结果"
+                                />
+                              </AdminTableHeadCell>
                               {productColumns.map((col) => (
                                 <AdminTableHeadCell key={col.key} className="whitespace-nowrap px-3">
                                   {col.label}
@@ -1662,58 +2109,19 @@ function Content() {
                           </thead>
                           <tbody>
                             {visibleProducts.map((p) => (
-                              <AdminTableBodyRow key={p.id} className={p.hidden ? 'opacity-55' : undefined}>
-                                {productColumns.map((col) => (
-                                  <AdminTableCell key={col.key} className="whitespace-nowrap px-3 py-2.5">
-                                    {(p.specs as Record<string, string>)[col.key] ?? '—'}
-                                  </AdminTableCell>
-                                ))}
-                                <AdminTableCell className="px-3 py-2.5 text-right">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <button
-                                      onClick={() => void toggleProdHidden(p)}
-                                      className={p.hidden ? SELECTION_ICON_BUTTON_ACTIVE : SELECTION_ICON_BUTTON_EDIT}
-                                      data-tooltip-ignore
-                                      aria-label={p.hidden ? '恢复产品参与选型' : '隐藏产品（不参与选型）'}
-                                    >
-                                      <Icon name={p.hidden ? 'visibility_off' : 'visibility'} size={13} />
-                                    </button>
-                                    <button
-                                      onClick={() => openEditProd(p)}
-                                      className={SELECTION_ICON_BUTTON_EDIT}
-                                      data-tooltip-ignore
-                                      aria-label="编辑产品"
-                                    >
-                                      <Icon name="edit" size={13} />
-                                    </button>
-                                    {deleteProdId === p.id ? (
-                                      <>
-                                        <button
-                                          onClick={() => handleDeleteProd(p.id)}
-                                          className="px-1.5 py-0.5 text-[10px] bg-error text-on-error-container rounded"
-                                        >
-                                          确认
-                                        </button>
-                                        <button
-                                          onClick={() => setDeleteProdId(null)}
-                                          className="px-1.5 py-0.5 text-[10px] text-on-surface-variant"
-                                        >
-                                          取消
-                                        </button>
-                                      </>
-                                    ) : (
-                                      <button
-                                        onClick={() => setDeleteProdId(p.id)}
-                                        className={SELECTION_ICON_BUTTON_DELETE}
-                                        data-tooltip-ignore
-                                        aria-label="删除产品"
-                                      >
-                                        <Icon name="delete" size={13} />
-                                      </button>
-                                    )}
-                                  </div>
-                                </AdminTableCell>
-                              </AdminTableBodyRow>
+                              <ProductTableRow
+                                key={p.id}
+                                p={p}
+                                columns={productColumns}
+                                isDeleting={deleteProdId === p.id}
+                                selected={selectedProdIds.has(p.id)}
+                                onToggleHidden={toggleProdHidden}
+                                onEdit={openEditProd}
+                                onConfirmDelete={handleDeleteProd}
+                                onRequestDelete={setDeleteProdId}
+                                onCancelDelete={cancelDeleteProd}
+                                onToggleSelected={toggleProdSelected}
+                              />
                             ))}
                           </tbody>
                         </AdminTable>
@@ -2438,33 +2846,68 @@ function Content() {
 
             {/* Field selector + view toggle */}
             <div className="grid grid-cols-1 gap-2 shrink-0 pb-2 border-b border-outline-variant/10 sm:flex sm:flex-wrap sm:items-center sm:pb-0 sm:border-b-0">
-              <select
-                name="opt-img-field"
-                value={optImgField}
-                onChange={(e) => {
-                  const f = e.target.value;
-                  setOptImgField(f);
-                  setOptSettingsSearch('');
-                  if (f) {
-                    const vals = fieldOptions[f] || [];
-                    const savedOrderRaw = (activeCat.optionOrder as Record<string, string[] | string>)?.[f];
-                    const savedOrder = Array.isArray(savedOrderRaw) ? savedOrderRaw : [];
-                    const ordered = savedOrder.filter((v) => vals.includes(v));
-                    const rest = vals.filter((v) => !savedOrder.includes(v));
-                    setOrderItems([...ordered, ...rest]);
-                  } else {
-                    setOrderItems([]);
-                  }
-                }}
-                className="w-full sm:w-48 bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-              >
-                <option value="">选择字段...</option>
-                {filteredOptionFields.map((f) => (
-                  <option key={f} value={f}>
-                    {f} ({fieldOptions[f].length} 个选项)
-                  </option>
-                ))}
-              </select>
+              <div ref={optFieldPickerRef} className="relative w-full sm:w-56 shrink-0">
+                <button
+                  type="button"
+                  name="opt-img-field"
+                  onClick={() => setOptFieldOpen((v) => !v)}
+                  className={`flex w-full items-center justify-between gap-2 rounded-lg border bg-surface-container-lowest px-3 py-2 text-left text-sm transition-colors ${
+                    optFieldOpen
+                      ? 'border-primary-container ring-2 ring-primary-container/20'
+                      : 'border-outline-variant/20 hover:border-outline-variant/40'
+                  }`}
+                >
+                  <span className={`truncate ${optImgField ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>
+                    {optImgField ? `${optImgField}（${fieldOptions[optImgField]?.length ?? 0} 个选项）` : '选择字段…'}
+                  </span>
+                  <Icon
+                    name="expand_more"
+                    size={16}
+                    className={`shrink-0 text-on-surface-variant transition-transform ${optFieldOpen ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {optFieldOpen && (
+                  <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-64 overflow-y-auto rounded-xl border border-outline-variant/20 bg-surface-container-low py-1 shadow-2xl">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        pickOptField('');
+                        setOptFieldOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                        optImgField === ''
+                          ? 'bg-primary-container/10 font-medium text-primary-container'
+                          : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                      }`}
+                    >
+                      <span>选择字段…</span>
+                      <span className="text-[10px] text-on-surface-variant/60">
+                        {Object.keys(fieldOptions).length} 个字段
+                      </span>
+                    </button>
+                    {filteredOptionFields.map((f) => (
+                      <button
+                        type="button"
+                        key={f}
+                        onClick={() => {
+                          pickOptField(f);
+                          setOptFieldOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                          f === optImgField
+                            ? 'bg-primary-container/10 font-medium text-primary-container'
+                            : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                        }`}
+                      >
+                        <span className="truncate">{f}</span>
+                        <span className="shrink-0 text-[10px] tabular-nums text-on-surface-variant/60">
+                          {fieldOptions[f].length} 项
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               {optImgField && (
                 <SearchField
                   inputProps={optSettingsSearchInputProps}
@@ -2535,10 +2978,11 @@ function Content() {
               ) : optViewMode === 'grid' ? (
                 /* ===== Card Grid View (for images) ===== */
                 <div className="grid grid-cols-1 min-[430px]:grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
-                  {filteredOrderItems.map((val) => {
+                  {visibleOrderItems.map((val) => {
                     const i = orderItems.indexOf(val);
                     const imgUrl = optImages[optImgField]?.[val];
                     const isUploading = uploadingVal === `${optImgField}::${val}`;
+                    const valueProductCount = productsByOptionValue.get(`${optImgField}\u0000${val}`)?.length ?? 0;
                     return (
                       <div
                         key={val}
@@ -2563,6 +3007,15 @@ function Content() {
                           <span className="text-xs font-medium text-on-surface break-words line-clamp-2 flex-1 min-w-0">
                             {val}
                           </span>
+                          <button
+                            onClick={() => setValueProductsView({ field: optImgField, value: val })}
+                            title="查看该选项值对应的产品"
+                            className={`shrink-0 rounded-full bg-surface-container-high px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors hover:bg-primary-container/15 hover:text-primary-container ${
+                              valueProductCount === 0 ? 'text-on-surface-variant/50' : 'text-on-surface-variant'
+                            }`}
+                          >
+                            {valueProductCount} 型
+                          </button>
                           <button
                             onClick={() => {
                               setRenameField(optImgField);
@@ -2601,8 +3054,9 @@ function Content() {
               ) : (
                 /* ===== List View (for sorting & rename) ===== */
                 <div className="space-y-1">
-                  {filteredOrderItems.map((val) => {
+                  {visibleOrderItems.map((val) => {
                     const i = orderItems.indexOf(val);
+                    const valueProductCount = productsByOptionValue.get(`${optImgField}\u0000${val}`)?.length ?? 0;
                     return (
                       <div
                         key={val}
@@ -2628,6 +3082,15 @@ function Content() {
                           ⠿
                         </span>
                         <span className="text-sm font-medium text-on-surface flex-1 min-w-0 break-words">{val}</span>
+                        <button
+                          onClick={() => setValueProductsView({ field: optImgField, value: val })}
+                          title="查看该选项值对应的产品"
+                          className={`shrink-0 rounded-full bg-surface-container-high px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors hover:bg-primary-container/15 hover:text-primary-container ${
+                            valueProductCount === 0 ? 'text-on-surface-variant/50' : 'text-on-surface-variant'
+                          }`}
+                        >
+                          {valueProductCount} 型
+                        </button>
                         {optImages[optImgField]?.[val] && (
                           <SafeImage
                             src={optImages[optImgField][val]}
@@ -2651,6 +3114,13 @@ function Content() {
                   })}
                 </div>
               )}
+              <InfiniteLoadTrigger
+                hasMore={hasMoreOrderItems}
+                isLoading={false}
+                onLoadMore={loadMoreOrderItems}
+                buttonless
+                idleLabel={null}
+              />
             </div>
 
             {/* Save order button */}
@@ -2700,6 +3170,19 @@ function Content() {
         confirmLabel="确认强制删除"
       />
 
+      {/* 批量删除产品确认 */}
+      <ConfirmDialog
+        open={batchDeleteConfirmOpen}
+        onClose={() => {
+          if (!batchBusy) setBatchDeleteConfirmOpen(false);
+        }}
+        onConfirm={() => void handleBatchDeleteProducts()}
+        title="批量删除产品"
+        description={`确定删除已选的 ${selectedProdIds.size} 个产品吗？删除后不可恢复。`}
+        confirmLabel={batchBusy ? '删除中...' : '确认删除'}
+        confirmDisabled={batchBusy}
+      />
+
       {/* ===== Single Option Upload Dialog ===== */}
       {editOptVal &&
         optImgField &&
@@ -2729,33 +3212,6 @@ function Content() {
             <div
               className="fixed inset-0 z-[330] flex items-center justify-center bg-black/50 p-3 sm:p-4"
               onClick={() => setEditOptVal(null)}
-              onPaste={async (e) => {
-                for (const item of Array.from(e.clipboardData.items)) {
-                  if (item.type.startsWith('image/')) {
-                    e.preventDefault();
-                    const file = item.getAsFile();
-                    if (file) await uploadOptImg(optImgField, editOptVal, file);
-                    return;
-                  }
-                }
-                const text = e.clipboardData.getData('text/plain')?.trim();
-                if (text && /^https?:\/\/.+/i.test(text)) {
-                  e.preventDefault();
-                  toast('正在下载图片...', 'info');
-                  try {
-                    const { url } = await uploadOptionImageFromUrl(text);
-                    const updated = {
-                      ...optImages,
-                      [optImgField]: { ...(optImages[optImgField] || {}), [editOptVal]: url },
-                    };
-                    await updateCategory(activeCat!.id, { optionImages: updated });
-                    mutateCats();
-                    toast('图片已下载并保存', 'success');
-                  } catch {
-                    toast('下载图片失败，请检查链接是否有效', 'error');
-                  }
-                }
-              }}
               onDragOver={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -2769,12 +3225,12 @@ function Content() {
               onDrop={handleDrop}
             >
               <div
-                className={`flex max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-sm flex-col gap-4 rounded-2xl border bg-surface-container-low p-4 shadow-2xl sm:max-h-[min(620px,90dvh)] sm:p-5 transition-colors ${optDragActive ? 'border-primary-container/60 ring-2 ring-primary-container/20' : 'border-outline-variant/20'}`}
+                className={`flex max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-sm flex-col gap-3 rounded-2xl border bg-surface-container-low p-4 shadow-2xl sm:max-h-[min(620px,90dvh)] sm:p-5 transition-colors ${optDragActive ? 'border-primary-container/60 ring-2 ring-primary-container/20' : 'border-outline-variant/20'}`}
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-start justify-between gap-3 shrink-0">
                   <div className="min-w-0">
-                    <h3 className="text-sm font-bold leading-snug text-on-surface">上传选项图片</h3>
+                    <h3 className="text-sm font-bold leading-snug text-on-surface">选项值设置</h3>
                     <p className="mt-1 text-xs leading-snug text-on-surface-variant break-words">{editOptVal}</p>
                   </div>
                   <button
@@ -2791,37 +3247,85 @@ function Content() {
                   return (
                     <>
                       <div className="min-h-0 overflow-y-auto">
-                        <div className="flex flex-col gap-4">
-                          <div className="w-full aspect-[4/3] max-h-[38dvh] rounded-xl bg-surface-container-lowest flex items-center justify-center overflow-hidden border border-outline-variant/10">
-                            {isUploading ? (
-                              <Icon name="hourglass_empty" size={30} className="text-on-surface-variant animate-spin" />
-                            ) : imgUrl ? (
-                              <SafeImage
-                                src={imgUrl}
-                                alt={editOptVal}
-                                className="w-full h-full object-contain p-2"
-                                fallbackIcon="add_photo_alternate"
+                        <div className="flex flex-col gap-3.5">
+                          {/* ❶ 选项图片：预览框即上传按钮（点击选文件），下方小文字操作 */}
+                          <section className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <Icon name="photo_library" size={14} className="shrink-0 text-primary-container" />
+                              <span className="text-xs font-bold text-on-surface">选项图片</span>
+                              <span className="truncate text-[10px] text-on-surface-variant">推荐 1200×900 · 4:3</span>
+                            </div>
+                            <label
+                              onMouseEnter={() => setOptPasteZone('image')}
+                              onMouseLeave={() => setOptPasteZone(null)}
+                              className={`group relative flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border bg-surface-container-lowest aspect-[4/3] max-h-[38dvh] transition-colors ${
+                                optPasteZone === 'image'
+                                  ? 'border-primary-container ring-2 ring-primary-container/20'
+                                  : 'border-outline-variant/10 hover:border-primary-container/30'
+                              }`}
+                            >
+                              <input
+                                name="file"
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) uploadOptImg(optImgField, editOptVal, f);
+                                  e.target.value = '';
+                                }}
                               />
-                            ) : (
-                              <div className="flex flex-col items-center gap-2 text-on-surface-variant/40">
-                                <Icon name="add_photo_alternate" size={30} />
-                                <span className="text-xs">暂无图片</span>
+                              {isUploading ? (
+                                <Icon
+                                  name="hourglass_empty"
+                                  size={30}
+                                  className="text-on-surface-variant animate-spin"
+                                />
+                              ) : imgUrl ? (
+                                <>
+                                  <SafeImage
+                                    src={imgUrl}
+                                    alt={editOptVal}
+                                    className="w-full h-full object-contain p-2"
+                                    fallbackIcon="add_photo_alternate"
+                                  />
+                                  <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/45 py-1 text-center text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                    点击更换图片
+                                  </span>
+                                </>
+                              ) : (
+                                <div className="flex flex-col items-center gap-2 text-on-surface-variant/40 transition-colors group-hover:text-on-surface-variant/70">
+                                  <Icon name="add_photo_alternate" size={30} />
+                                  <span className="text-xs">点击或粘贴上传图片</span>
+                                </div>
+                              )}
+                            </label>
+                            {imgUrl && (
+                              <div className="flex items-center justify-end">
+                                <button
+                                  onClick={() => {
+                                    removeOptImg(optImgField, editOptVal);
+                                  }}
+                                  className="rounded px-1.5 py-0.5 text-xs text-error/70 transition-colors hover:bg-error/10 hover:text-error"
+                                >
+                                  移除图片
+                                </button>
                               </div>
                             )}
-                          </div>
-                          <p className="text-[11px] leading-relaxed text-on-surface-variant text-center">
-                            图片推荐 1200×900，比例
-                            4:3；支持选择本地图片，也可以复制截图或远程图片地址后粘贴，或将图片/PDF 拖入此弹窗。
-                          </p>
+                          </section>
 
-                          {/* Catalog PDF/Image section */}
-                          <div className="border-t border-outline-variant/10 pt-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="text-xs font-medium text-on-surface">画册资料</p>
+                          {/* ❷ 画册资料：与选项图片同构 —— 标题行在外，上传框（虚线=可投放）为唯一带边框元素 */}
+                          <section className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <Icon name="menu_book" size={14} className="shrink-0 text-primary-container" />
+                              <span className="shrink-0 text-xs font-bold text-on-surface">画册资料</span>
+                              <span className="truncate text-[10px] text-on-surface-variant">图片或 PDF</span>
+                              <span className="flex-1" />
                               <button
                                 type="button"
                                 role="switch"
                                 aria-checked={activeCat?.catalogShared ?? false}
+                                aria-label="选型结果页显示画册"
                                 onClick={async () => {
                                   if (!activeCat) return;
                                   const next = !(activeCat.catalogShared ?? false);
@@ -2840,124 +3344,107 @@ function Content() {
                                 />
                               </button>
                             </div>
-                            {catalogUrl ? (
-                              <div className="flex items-center gap-2">
-                                <Icon
-                                  name={/\.(pdf)(\?.*)?$/i.test(catalogUrl) ? 'picture_as_pdf' : 'image'}
-                                  size={18}
-                                  className="text-primary-container shrink-0"
-                                />
-                                <span className="text-xs text-on-surface-variant truncate flex-1">
-                                  {catalogUrl.split('/').pop()?.split('?')[0] || '已上传'}
-                                </span>
-                                <button
-                                  onClick={() => removeOptCatalog(optImgField, editOptVal)}
-                                  className="text-xs text-error/70 hover:text-error shrink-0"
-                                >
-                                  移除
-                                </button>
-                              </div>
-                            ) : (
-                              <label className="block">
-                                <input
-                                  name="file"
-                                  type="file"
-                                  accept=".pdf,image/*"
-                                  className="hidden"
-                                  onChange={async (e) => {
-                                    const f = e.target.files?.[0];
-                                    if (f) {
-                                      try {
-                                        await uploadOptCatalog(optImgField, editOptVal, f);
-                                      } catch {
-                                        toast('上传失败', 'error');
-                                      }
-                                    }
-                                    e.target.value = '';
-                                  }}
-                                />
-                                <span className="block text-center px-3 py-2 text-xs font-medium border border-dashed border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/30 cursor-pointer">
-                                  上传 PDF 或图片画册
-                                </span>
-                              </label>
-                            )}
-                            <p className="text-[10px] text-on-surface-variant mt-1">
-                              {activeCat?.catalogShared ? '开启：选型结果页会显示画册' : '关闭：选型结果页不显示画册'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="shrink-0 space-y-2 pt-1">
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          <label className="flex-1">
-                            <input
-                              name="file"
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                if (f) uploadOptImg(optImgField, editOptVal, f);
-                                e.target.value = '';
+                            <label
+                              onMouseEnter={() => setOptPasteZone('catalog')}
+                              onMouseLeave={() => setOptPasteZone(null)}
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOptCatalogDragActive(true);
                               }}
-                            />
-                            <span className="block text-center px-3 py-3 text-xs font-medium bg-primary-container text-on-primary rounded-lg hover:opacity-90 cursor-pointer">
-                              选择图片
-                            </span>
-                          </label>
-                          <button
-                            onClick={async () => {
-                              try {
-                                const clipboardItems = await navigator.clipboard.read();
-                                for (const item of clipboardItems) {
-                                  for (const type of item.types) {
-                                    if (type.startsWith('image/')) {
-                                      const blob = await item.getType(type);
-                                      const file = new File([blob], `${optImgField}_${editOptVal}.png`, { type });
-                                      await uploadOptImg(optImgField, editOptVal, file);
-                                      return;
-                                    }
-                                    // Check for URL in text clipboard
-                                    if (type === 'text/plain') {
-                                      const blob = await item.getType(type);
-                                      const text = await blob.text();
-                                      const url = text.trim();
-                                      if (/^https?:\/\/.+/i.test(url)) {
-                                        toast('正在下载图片...', 'info');
-                                        const { url: localUrl } = await uploadOptionImageFromUrl(url);
-                                        const updated = {
-                                          ...optImages,
-                                          [optImgField]: { ...(optImages[optImgField] || {}), [editOptVal]: localUrl },
-                                        };
-                                        await updateCategory(activeCat!.id, { optionImages: updated });
-                                        mutateCats();
-                                        toast('图片已下载并保存', 'success');
-                                        return;
-                                      }
+                              onDragLeave={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOptCatalogDragActive(false);
+                              }}
+                              onDrop={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOptCatalogDragActive(false);
+                                const f = Array.from(e.dataTransfer.files)[0];
+                                if (!f) return;
+                                if (
+                                  f.type.startsWith('image/') ||
+                                  f.type === 'application/pdf' ||
+                                  f.name.toLowerCase().endsWith('.pdf')
+                                ) {
+                                  try {
+                                    await uploadOptCatalog(optImgField, editOptVal, f);
+                                  } catch {
+                                    toast('上传失败', 'error');
+                                  }
+                                } else {
+                                  toast('画册只支持图片或 PDF 文件', 'error');
+                                }
+                              }}
+                              className={`group relative flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed bg-surface-container-lowest transition-colors ${
+                                optCatalogDragActive || optPasteZone === 'catalog'
+                                  ? 'border-primary-container ring-2 ring-primary-container/20'
+                                  : 'border-outline-variant/25 hover:border-primary-container/30'
+                              } ${catalogUrl ? 'min-h-[3.25rem] px-3 py-3' : 'flex-col gap-1 px-2.5 py-5'}`}
+                            >
+                              <input
+                                name="file"
+                                type="file"
+                                accept=".pdf,image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) {
+                                    try {
+                                      await uploadOptCatalog(optImgField, editOptVal, f);
+                                    } catch {
+                                      toast('上传失败', 'error');
                                     }
                                   }
-                                }
-                                toast('剪贴板中没有图片，请先截图或复制图片链接', 'error');
-                              } catch {
-                                toast('无法读取剪贴板，请使用 Ctrl+V 粘贴或选择文件上传', 'error');
-                              }
-                            }}
-                            className="flex-1 px-3 py-3 text-xs font-medium bg-surface-container-high text-on-surface rounded-lg hover:opacity-90"
-                          >
-                            从剪贴板粘贴
-                          </button>
+                                  e.target.value = '';
+                                }}
+                              />
+                              {catalogUrl ? (
+                                <>
+                                  <div className="flex w-full items-center gap-2">
+                                    <Icon
+                                      name={/\.(pdf)(\?.*)?$/i.test(catalogUrl) ? 'picture_as_pdf' : 'image'}
+                                      size={20}
+                                      className="shrink-0 text-primary-container"
+                                    />
+                                    <span className="flex-1 truncate text-xs text-on-surface-variant">
+                                      {catalogUrl.split('/').pop()?.split('?')[0] || '已上传'}
+                                    </span>
+                                  </div>
+                                  <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/45 py-1 text-center text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                    点击更换画册
+                                  </span>
+                                </>
+                              ) : (
+                                <div className="flex flex-col items-center gap-1 text-on-surface-variant/60 transition-colors group-hover:text-on-surface-variant">
+                                  <Icon name="upload_file" size={22} />
+                                  <span className="text-xs font-medium">点击 / 拖拽 上传，或停在此区按 Cmd+V</span>
+                                  <span className="text-[10px]">图片或 PDF · 命中该选项值的产品会在选型结果页显示</span>
+                                </div>
+                              )}
+                            </label>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="min-w-0 truncate text-[10px] text-on-surface-variant">
+                                {activeCat?.catalogShared
+                                  ? '已开启：选型结果页显示画册'
+                                  : '已关闭：选型结果页不显示画册'}
+                              </p>
+                              {catalogUrl && (
+                                <button
+                                  onClick={() => removeOptCatalog(optImgField, editOptVal)}
+                                  className="shrink-0 rounded px-1.5 py-0.5 text-xs text-error/70 transition-colors hover:bg-error/10 hover:text-error"
+                                >
+                                  移除画册
+                                </button>
+                              )}
+                            </div>
+                          </section>
                         </div>
-                        {imgUrl && (
-                          <button
-                            onClick={() => {
-                              removeOptImg(optImgField, editOptVal);
-                            }}
-                            className="w-full py-2 text-xs text-error/70 hover:text-error text-center"
-                          >
-                            移除图片
-                          </button>
-                        )}
                       </div>
+                      <p className="shrink-0 text-center text-[10px] leading-snug text-on-surface-variant/70">
+                        鼠标停在哪个上传区，Cmd+V 就传哪个区；拖文件进弹窗：图片 → 选项图片，PDF → 画册资料
+                      </p>
                     </>
                   );
                 })()}
@@ -2965,6 +3452,113 @@ function Content() {
             </div>
           );
         })()}
+
+      {/* ===== 选项值 → 产品反查弹窗 ===== */}
+      <AnimatePresence>
+        {valueProductsView &&
+          activeCat &&
+          (() => {
+            const fieldDef = activeCat.columns.find((c) => c.key === valueProductsView.field);
+            const matched =
+              productsByOptionValue.get(`${valueProductsView.field}\u0000${valueProductsView.value}`) || [];
+            const MAX_ROWS = 200;
+            const rows = matched.slice(0, MAX_ROWS);
+            return (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="fixed inset-0 z-[330] flex items-center justify-center bg-black/50 p-3 sm:p-4"
+                onClick={() => setValueProductsView(null)}
+              >
+                <motion.div
+                  {...dialogPanelMotion}
+                  className="flex max-h-[min(680px,92dvh)] w-full max-w-[min(1400px,94vw)] flex-col overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-low shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* 头部：与选项设置弹窗同款（标题 + 副标题 + 分隔线 + 关闭钮） */}
+                  <div className="flex shrink-0 items-start justify-between gap-3 border-b border-outline-variant/10 px-4 py-3.5 sm:px-5">
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        <h2 className="text-base font-bold leading-snug text-on-surface">
+                          {fieldDef?.label || valueProductsView.field}
+                        </h2>
+                        <Icon name="chevron_right" size={14} className="shrink-0 text-on-surface-variant/40" />
+                        <span className="min-w-0 break-words text-sm font-medium leading-snug text-on-surface">
+                          {valueProductsView.value}
+                        </span>
+                        <span className="shrink-0 rounded-full bg-primary-container/15 px-2 py-0.5 text-[11px] font-medium tabular-nums text-primary-container">
+                          {matched.length} 型号
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-on-surface-variant">
+                        使用该选项值的全部产品及其参数
+                        {matched.length > MAX_ROWS && ` · 仅显示前 ${MAX_ROWS} 行`}
+                        {matched.length === 0 && ' · 暂无产品使用该选项值'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setValueProductsView(null)}
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+                    >
+                      <Icon name="close" size={18} />
+                    </button>
+                  </div>
+                  {/* 表格：页面产品表格同款 AdminTable 组件（粘性表头/悬停行高亮/隐藏行置灰） */}
+                  <div
+                    // 只用 overflow-auto：面板类自带 overflow-hidden 会压掉横向滚动，宽表会被左右裁切
+                    className="min-h-0 flex-1 overflow-auto custom-scrollbar"
+                  >
+                    <AdminTable>
+                      <thead className={ADMIN_TABLE_HEAD_CLASS}>
+                        <AdminTableHeadRow>
+                          <AdminTableHeadCell className="whitespace-nowrap">型号</AdminTableHeadCell>
+                          <AdminTableHeadCell className="whitespace-nowrap">名称</AdminTableHeadCell>
+                          {activeCat.columns.map((col) => (
+                            <AdminTableHeadCell
+                              key={col.key}
+                              className={`whitespace-nowrap ${col.key === valueProductsView.field ? 'text-primary-container' : ''}`}
+                            >
+                              {col.label}
+                              {col.unit ? ` (${col.unit})` : ''}
+                            </AdminTableHeadCell>
+                          ))}
+                        </AdminTableHeadRow>
+                      </thead>
+                      <tbody>
+                        {rows.map((p) => (
+                          <AdminTableBodyRow key={p.id} className={p.hidden ? 'opacity-50' : undefined}>
+                            <AdminTableCell className="whitespace-nowrap font-medium">
+                              {p.modelNo || '—'}
+                            </AdminTableCell>
+                            <AdminTableCell muted className="max-w-48 truncate" title={p.name}>
+                              {p.name}
+                            </AdminTableCell>
+                            {activeCat.columns.map((col) => {
+                              const v = (p.specs as Record<string, string>)[col.key];
+                              return (
+                                <AdminTableCell
+                                  key={col.key}
+                                  muted={col.key !== valueProductsView.field}
+                                  className={`whitespace-nowrap ${
+                                    col.key === valueProductsView.field ? 'font-medium !text-primary-container' : ''
+                                  }`}
+                                >
+                                  {v ?? '—'}
+                                </AdminTableCell>
+                              );
+                            })}
+                          </AdminTableBodyRow>
+                        ))}
+                      </tbody>
+                    </AdminTable>
+                  </div>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+      </AnimatePresence>
 
       {/* ===== Single Rename Dialog ===== */}
       {renameOldVal && renameField && activeCat && (
@@ -3088,6 +3682,24 @@ function Content() {
         handleExcelFile={handleExcelFile}
         downloadProductImportTemplate={downloadProductImportTemplate}
         uploadPolicy={uploadPolicy}
+      />
+
+      {/* ===== 选型分类数据包搬运（本地站 ↔ 服务器站） ===== */}
+      <SelectionExportModal
+        open={showTransferExport}
+        onClose={() => setShowTransferExport(false)}
+        categories={categories}
+        toast={toast}
+      />
+      <SelectionImportModal
+        open={showTransferImport}
+        onClose={() => setShowTransferImport(false)}
+        onImported={() => {
+          void mutateCats();
+          void mutateProds();
+        }}
+        toast={toast}
+        maxPackageMb={uploadPolicy?.selectionTransferMaxSizeMb ?? 200}
       />
 
       {/* ===== Group Management Modal ===== */}

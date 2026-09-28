@@ -21,7 +21,7 @@ export async function buildModelMatchMap(modelNos: string[]) {
   if (modelNos.length === 0) return result;
 
   const { value: matchIndex } = await cacheGetOrSet<MatchIndexEntry[]>(
-    'cache:models:match-index:v2',
+    'cache:models:match-index:v3',
     TTL.MODEL_MATCH_INDEX,
     buildModelMatchIndex,
     { lockTtlMs: 30_000, waitTimeoutMs: 20_000, pollMs: 50 },
@@ -100,10 +100,18 @@ async function buildModelMatchIndex(): Promise<MatchIndexEntry[]> {
 
   // Build normalized lookup: normalized name → ALL matching models
   const normBuckets = new Map<string, { id: string; thumbnailUrl: string | null; isPrimary: boolean }[]>();
-  for (const m of allModels) {
-    const nk = normalizePN(m.name);
+  const addBucket = (nk: string, m: { id: string; thumbnailUrl: string | null }) => {
+    if (!nk) return;
     if (!normBuckets.has(nk)) normBuckets.set(nk, []);
     normBuckets.get(nk)!.push({ id: m.id, thumbnailUrl: m.thumbnailUrl, isPrimary: primaryIds.has(m.id) });
+  };
+  for (const m of allModels) {
+    const nk = normalizePN(m.name);
+    addBucket(nk, m);
+    // 站内命名规约「中文名_型号」（如 白色联管直通_PU8）：型号尾段单独立 key，
+    // 否则下方 60% 覆盖率门槛会把「短型号 + 长中文名」的组合全部拒掉（PU8 ↔ 白色联管直通_PU8）
+    const tail = nk.split('_').pop() || '';
+    if (tail !== nk) addBucket(tail, m);
   }
 
   // Flatten: pick primary if available, else first

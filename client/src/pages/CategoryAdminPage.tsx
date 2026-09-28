@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { categoriesApi, type CategoryItem } from '../api/categories';
 import client from '../api/client';
@@ -23,13 +23,18 @@ import { getErrorMessage } from '../lib/errorNotifications';
 
 const CATEGORY_ADMIN_GRID_COLUMNS = '28px 34px 44px minmax(0,1fr) 104px 68px 152px';
 
-function CategoryRow({
+/** 搜索态「展开全部」用的稳定空集合（每键重渲染间引用不变） */
+const EMPTY_COLLAPSED_IDS = new Set<string>();
+
+/** 行组件 memo 化：搜索每键 commit 都会重渲染整页，行级 props 不变时跳过（配 filterCategoryTree 的引用保持） */
+const CategoryRow = memo(function CategoryRow({
   cat,
   depth = 0,
   inheritedRestricted = false,
   dragItem,
   dragDisabled = false,
   collapsedIds,
+  searchActive = false,
   onToggleCollapse,
   onDragStart,
   onDragEnd,
@@ -45,6 +50,8 @@ function CategoryRow({
   dragItem: { id: string; parentId: string | null } | null;
   dragDisabled?: boolean;
   collapsedIds: Set<string>;
+  /** 搜索态：跳过子行高度动画直接渲染 */
+  searchActive?: boolean;
   onToggleCollapse: (id: string) => void;
   onDragStart: (cat: CategoryItem) => void;
   onDragEnd: () => void;
@@ -246,22 +253,18 @@ function CategoryRow({
       <AnimatePresence initial={false}>
         {hasChildren &&
           !collapsed &&
-          cat.children?.map((child) => (
-            <motion.div
-              key={child.id}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.16 }}
-              className="overflow-hidden"
-            >
+          cat.children?.map((child) =>
+            // 搜索态直接渲染子行：几十个子节点同时跑高度动画只会放大每键开销，动画留给手动展开
+            searchActive ? (
               <CategoryRow
+                key={child.id}
                 cat={child}
                 depth={depth + 1}
                 inheritedRestricted={inheritedRestricted || cat.restricted === true}
                 dragItem={dragItem}
                 dragDisabled={dragDisabled}
                 collapsedIds={collapsedIds}
+                searchActive={searchActive}
                 onToggleCollapse={onToggleCollapse}
                 onDragStart={onDragStart}
                 onDragEnd={onDragEnd}
@@ -270,12 +273,38 @@ function CategoryRow({
                 onAddChild={onAddChild}
                 onDelete={onDelete}
               />
-            </motion.div>
-          ))}
+            ) : (
+              <motion.div
+                key={child.id}
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.16 }}
+                className="overflow-hidden"
+              >
+                <CategoryRow
+                  cat={child}
+                  depth={depth + 1}
+                  inheritedRestricted={inheritedRestricted || cat.restricted === true}
+                  dragItem={dragItem}
+                  dragDisabled={dragDisabled}
+                  collapsedIds={collapsedIds}
+                  searchActive={searchActive}
+                  onToggleCollapse={onToggleCollapse}
+                  onDragStart={onDragStart}
+                  onDragEnd={onDragEnd}
+                  onDropOn={onDropOn}
+                  onEdit={onEdit}
+                  onAddChild={onAddChild}
+                  onDelete={onDelete}
+                />
+              </motion.div>
+            ),
+          )}
       </AnimatePresence>
     </>
   );
-}
+});
 
 // 可授权的角色（ADMIN 始终可见，不在此列）
 const ACCESS_ROLE_OPTIONS = [
@@ -724,7 +753,10 @@ function filterCategoryTree(items: CategoryItem[], query: string): CategoryItem[
       const haystack = `${cat.name} ${cat.icon || ''} ${cat.id}`.toLowerCase();
       const matched = haystack.includes(q);
       if (!matched && childMatches.length === 0) return null;
-      return { ...cat, children: matched ? cat.children : childMatches };
+      // 父级自身命中时展示原 children，直接保留原对象引用（行 memo 生效的前提）；
+      // 只有「父级不命中、靠子级命中」才需要新建带过滤 children 的对象
+      if (matched) return cat;
+      return { ...cat, children: childMatches };
     })
     .filter((cat): cat is CategoryItem => Boolean(cat));
 }
@@ -761,17 +793,17 @@ function Content() {
   const stats = useMemo(() => collectCategoryStats(tree || []), [tree]);
   const visibleTree = useMemo(() => filterCategoryTree(tree || [], query), [tree, query]);
 
-  const handleEdit = (cat: CategoryItem) => {
+  const handleEdit = useCallback((cat: CategoryItem) => {
     setEditingCat(cat);
     setAddParentId(null);
     setShowModal(true);
-  };
+  }, []);
 
-  const handleAddChild = (parentId: string) => {
+  const handleAddChild = useCallback((parentId: string) => {
     setEditingCat(null);
     setAddParentId(parentId);
     setShowModal(true);
-  };
+  }, []);
 
   const handleDelete = async (id: string) => {
     try {
@@ -789,14 +821,22 @@ function Content() {
     setAddParentId(null);
     setShowModal(true);
   };
-  const toggleCollapse = (id: string) => {
+  const toggleCollapse = useCallback((id: string) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  };
+  }, []);
+
+  // memo 行的稳定 handler（搜索每键重渲染间引用不变）
+  const handleDragStart = useCallback(
+    (item: CategoryItem) => setDragItem({ id: item.id, parentId: item.parentId || null }),
+    [],
+  );
+  const handleDragEnd = useCallback(() => setDragItem(null), []);
+  const requestDelete = useCallback((cat: CategoryItem) => setDeleteConfirm(cat.id), []);
   const rootIdsWithChildren = useMemo(
     () => (tree || []).filter((cat) => cat.children?.length).map((cat) => cat.id),
     [tree],
@@ -808,7 +848,8 @@ function Content() {
     setCollapsedIds(new Set(rootIdsWithChildren));
   }, [rootIdsWithChildren]);
 
-  const displayCollapsedIds = query.trim() ? new Set<string>() : collapsedIds;
+  // 搜索态展开全部：空集合用模块级常量保持引用稳定（行 memo 生效的前提）
+  const displayCollapsedIds = useMemo(() => (query.trim() ? EMPTY_COLLAPSED_IDS : collapsedIds), [query, collapsedIds]);
   const dragDisabled = Boolean(query.trim()) || sorting;
   const toolbarStatus = query
     ? `搜索结果 ${visibleTree.length} 个一级分组，已自动展开匹配项`
@@ -816,40 +857,43 @@ function Content() {
       ? '正在保存排序...'
       : '';
 
-  const handleDropCategory = async (target: CategoryItem) => {
-    if (!tree || !dragItem || sorting) return;
-    const parentId = target.parentId || null;
-    if (dragItem.id === target.id) return;
-    if (dragItem.parentId !== parentId) {
-      toast('只能在同一层级内拖拽排序', 'error');
-      setDragItem(null);
-      return;
-    }
+  const handleDropCategory = useCallback(
+    async (target: CategoryItem) => {
+      if (!tree || !dragItem || sorting) return;
+      const parentId = target.parentId || null;
+      if (dragItem.id === target.id) return;
+      if (dragItem.parentId !== parentId) {
+        toast('只能在同一层级内拖拽排序', 'error');
+        setDragItem(null);
+        return;
+      }
 
-    const siblings = findSiblingsByParent(tree, parentId);
-    const fromIndex = siblings.findIndex((item) => item.id === dragItem.id);
-    const toIndex = siblings.findIndex((item) => item.id === target.id);
-    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
-      setDragItem(null);
-      return;
-    }
+      const siblings = findSiblingsByParent(tree, parentId);
+      const fromIndex = siblings.findIndex((item) => item.id === dragItem.id);
+      const toIndex = siblings.findIndex((item) => item.id === target.id);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+        setDragItem(null);
+        return;
+      }
 
-    const next = [...siblings];
-    const [moved] = next.splice(fromIndex, 1);
-    next.splice(toIndex, 0, moved);
+      const next = [...siblings];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
 
-    setSorting(true);
-    try {
-      await categoriesApi.reorder(next.map((item, index) => ({ id: item.id, sortOrder: index })));
-      toast('排序已保存', 'success');
-      await mutate();
-    } catch (err) {
-      toast(getErrorMessage(err, '排序保存失败'), 'error');
-    } finally {
-      setSorting(false);
-      setDragItem(null);
-    }
-  };
+      setSorting(true);
+      try {
+        await categoriesApi.reorder(next.map((item, index) => ({ id: item.id, sortOrder: index })));
+        toast('排序已保存', 'success');
+        await mutate();
+      } catch (err) {
+        toast(getErrorMessage(err, '排序保存失败'), 'error');
+      } finally {
+        setSorting(false);
+        setDragItem(null);
+      }
+    },
+    [tree, dragItem, sorting, toast, mutate],
+  );
 
   return (
     <AdminManagementPage
@@ -929,13 +973,14 @@ function Content() {
                   dragItem={dragItem}
                   dragDisabled={dragDisabled}
                   collapsedIds={displayCollapsedIds}
+                  searchActive={Boolean(query.trim())}
                   onToggleCollapse={toggleCollapse}
-                  onDragStart={(item) => setDragItem({ id: item.id, parentId: item.parentId || null })}
-                  onDragEnd={() => setDragItem(null)}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
                   onDropOn={handleDropCategory}
                   onEdit={handleEdit}
                   onAddChild={handleAddChild}
-                  onDelete={(c) => setDeleteConfirm(c.id)}
+                  onDelete={requestDelete}
                 />
               ))}
 

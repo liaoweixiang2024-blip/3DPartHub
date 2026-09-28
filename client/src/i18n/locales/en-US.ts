@@ -1470,6 +1470,7 @@ export const enUS: { translation: TranslationMap } = {
       unknownError: 'Unknown error',
       cart: {
         added: 'Added to inquiry cart',
+        addedExport: 'Added to export list',
         limitReached: 'A single inquiry can contain up to {{limit}} products',
       },
       categories: {
@@ -1480,6 +1481,11 @@ export const enUS: { translation: TranslationMap } = {
       },
       inquiryCart: {
         addedCount: '{{count}} items added',
+        exportFailed: 'Export failed, please retry',
+        exportSelected: 'Export selected',
+        selected: 'Selected',
+        exportTitle: 'Export list',
+        exportedCount: 'Exported {{count}} items',
         clear: 'Clear',
         clearAria: 'Clear inquiry cart',
         edit: 'Edit',
@@ -1549,9 +1555,14 @@ export const enUS: { translation: TranslationMap } = {
     },
     selectionResult: {
       addInquiry: 'Add inquiry',
+      addToList: 'Add to list',
+      addedList: 'Added',
       addedInquiry: 'Added',
       catalog: 'Catalog',
       catalogMaterials: 'Catalog materials',
+      viewCatalog: 'View catalog',
+      zoomCatalog: 'Zoom in',
+      collapseCatalog: 'Collapse catalog',
       catalogPdf: 'Catalog PDF',
       collapseList: 'Collapse list',
       copyList: 'Copy list',

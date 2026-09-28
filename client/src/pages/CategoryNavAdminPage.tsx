@@ -59,8 +59,8 @@ export default function CategoryNavAdminPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pendingUploadRef = useRef<{ nodeId: string; itemIndex: number | null } | null>(null);
   const dragNodeRef = useRef<{ nodeId: string; groupId: string } | null>(null);
-  // 大类（组）折叠状态：默认全部展开
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // 大类（组）展开状态：默认全部收缩（进页先看 4 行摘要，按需展开编辑）
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   // 正在编辑名称的大类：点击编辑按钮进入输入态，Enter/失焦提交、Esc 取消还原
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
   const editNameBackupRef = useRef<string>('');
@@ -297,7 +297,10 @@ export default function CategoryNavAdminPage() {
           </div>
         }
       >
-        <AdminContentPanel scroll className="overflow-y-auto">
+        {/* 不用面板内滚（scroll/overflow-y-auto）：展开/收缩时内容高度变化会让内部滚动条
+            出现/消失，占用宽度的滚动条（Windows/始终显示设置）会导致整页宽度抖动；
+            交由外层主滚动区（已设 scrollbar-gutter:stable 预留滚动槽）统一滚动 */}
+        <AdminContentPanel>
           <input
             name="file"
             ref={fileInputRef}
@@ -312,9 +315,9 @@ export default function CategoryNavAdminPage() {
             </div>
           ) : null}
 
-          <div className="flex flex-col gap-4 p-4">
+          <div className="flex flex-col gap-2.5 p-3 md:p-4">
             {/* 页面文案：留空 = 前台回退默认文案 */}
-            <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low p-4">
+            <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low p-3">
               {/* 移动端：标签与输入框逐行堆叠（label 一行、输入框占满一行），桌面端同行排布 */}
               <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-x-3 md:gap-y-2">
                 <span className="shrink-0 text-xs font-bold text-on-surface-variant">
@@ -339,139 +342,130 @@ export default function CategoryNavAdminPage() {
                   className="min-w-0 w-full flex-1 rounded-md border border-outline-variant/20 bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface md:w-auto"
                   maxLength={200}
                 />
+                {/* 全部展开/收缩合一：默认全收缩 → 首次点击展开全部，再点收缩全部。
+                    图标单一字形旋转 180°（不换字形，避免视觉抖动）；两个文案同宽不跳字 */}
+                {(() => {
+                  const allExpanded = section.groups.length > 0 && expandedGroups.size >= section.groups.length;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedGroups((prev) =>
+                          prev.size >= section.groups.length ? new Set() : new Set(section.groups.map((g) => g.id)),
+                        )
+                      }
+                      className="flex shrink-0 items-center gap-1 self-end rounded-md px-2.5 py-1 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface md:ml-auto md:self-auto"
+                    >
+                      <Icon
+                        name="chevrons_down"
+                        size={14}
+                        className={`transition-transform duration-200 ${allExpanded ? 'rotate-180' : ''}`}
+                      />
+                      {allExpanded ? t('categoryNav.admin.collapseAll') : t('categoryNav.admin.expandAll')}
+                    </button>
+                  );
+                })()}
               </div>
               <p className="mt-2 text-[11px] text-on-surface-variant/70">{t('categoryNav.admin.pageCopyHint')}</p>
             </div>
 
-            {/* 全部展开 / 全部收缩 */}
-            <div className="flex items-center justify-end gap-1.5">
-              <button
-                type="button"
-                onClick={() => setCollapsedGroups(new Set())}
-                className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
-              >
-                <Icon name="chevrons_down" size={14} />
-                {t('categoryNav.admin.expandAll')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setCollapsedGroups(new Set(section.groups.map((g) => g.id)))}
-                className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
-              >
-                <Icon name="chevrons_up" size={14} />
-                {t('categoryNav.admin.collapseAll')}
-              </button>
-            </div>
             {section.groups.map((group) => {
               const groupNodes = section.nodes.filter((n) => n.groupId === group.id);
               const slotLimit = slotLimitOf(group.id);
               const itemCount = groupNodes.reduce((sum, n) => sum + navNodeItems(n).length, 0);
-              const collapsed = collapsedGroups.has(group.id);
+              const collapsed = !expandedGroups.has(group.id);
               return (
                 <div
                   key={group.id}
-                  className={`rounded-xl border border-outline-variant/15 bg-surface-container-low ${
-                    collapsed ? 'px-1.5 py-1' : 'p-4'
-                  }`}
+                  className="rounded-xl border border-outline-variant/15 bg-surface-container-low p-2"
                 >
-                  {collapsed ? (
-                    /* 折叠态：整行可点的紧凑摘要行（组名 + 节点/分类项计数） */
+                  {/* 组头：折叠/展开共用同一套持久 DOM（图标按钮+标题+徽标位置固定），
+                      切换只换图标方向与内容区显隐，标题不再位移抖动；整卡 padding 两态一致 */}
+                  <div className={`flex flex-wrap items-center gap-2 ${collapsed ? '' : 'mb-2.5'}`}>
                     <button
                       type="button"
                       onClick={() =>
-                        setCollapsedGroups((prev) => {
+                        setExpandedGroups((prev) => {
                           const next = new Set(prev);
-                          next.delete(group.id);
+                          if (next.has(group.id)) next.delete(group.id);
+                          else next.add(group.id);
                           return next;
                         })
                       }
-                      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-surface-container/70"
-                      title={t('categoryNav.admin.expandGroup')}
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-outline-variant/25 bg-surface-container-lowest text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+                      title={collapsed ? t('categoryNav.admin.expandGroup') : t('categoryNav.admin.collapseGroup')}
                     >
-                      <Icon name="chevron_right" size={16} className="shrink-0 text-on-surface-variant" />
-                      <span className="min-w-0 truncate text-sm font-bold text-on-surface">{group.name}</span>
-                      <span className="ml-1 shrink-0 rounded-full bg-surface-container px-2 py-0.5 text-[11px] text-on-surface-variant">
-                        {groupNodes.length}/{slotLimit} {t('categoryNav.admin.nodes')} · {itemCount}{' '}
-                        {t('categoryNav.admin.itemsUnit')}
-                      </span>
+                      {/* 单一字形旋转（不换字形），箭头翻转无跳变 */}
+                      <Icon
+                        name="chevron_right"
+                        size={18}
+                        className={`transition-transform duration-200 ${collapsed ? '' : 'rotate-90'}`}
+                      />
                     </button>
-                  ) : (
-                    <>
-                      {/* 组头：折叠按钮 + 大类标题（点击编辑按钮才进入输入态） */}
-                      <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCollapsedGroups((prev) => {
-                              const next = new Set(prev);
-                              next.add(group.id);
-                              return next;
-                            })
+                    {editingGroup === group.id ? (
+                      <input
+                        name="name"
+                        autoFocus
+                        value={group.name}
+                        onChange={(e) => patchGroup(group.id, { name: e.target.value })}
+                        onBlur={() => setEditingGroup(null)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') setEditingGroup(null);
+                          if (e.key === 'Escape') {
+                            patchGroup(group.id, { name: editNameBackupRef.current });
+                            setEditingGroup(null);
                           }
-                          className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-outline-variant/25 bg-surface-container-lowest text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
-                          title={t('categoryNav.admin.collapseGroup')}
-                        >
-                          <Icon name="expand_more" size={18} />
-                        </button>
-                        {editingGroup === group.id ? (
-                          <input
-                            name="name"
-                            autoFocus
-                            value={group.name}
-                            onChange={(e) => patchGroup(group.id, { name: e.target.value })}
-                            onBlur={() => setEditingGroup(null)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') setEditingGroup(null);
-                              if (e.key === 'Escape') {
-                                patchGroup(group.id, { name: editNameBackupRef.current });
-                                setEditingGroup(null);
-                              }
-                            }}
-                            placeholder={t('categoryNav.admin.groupNamePlaceholder')}
-                            className="w-44 rounded-md border border-primary/50 bg-surface-container-lowest px-2 py-1 text-sm font-bold text-on-surface outline-none"
-                            maxLength={30}
-                          />
-                        ) : (
-                          <>
-                            <span className="max-w-72 truncate text-sm font-bold text-on-surface" title={group.name}>
-                              {group.name}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                editNameBackupRef.current = group.name;
-                                setEditingGroup(group.id);
-                              }}
-                              className="rounded p-1 text-on-surface-variant/60 hover:text-primary"
-                              title={t('categoryNav.admin.editGroupName')}
-                            >
-                              <Icon name="edit" size={14} />
-                            </button>
-                          </>
-                        )}
-                        <span className="text-xs text-on-surface-variant">
-                          {groupNodes.length}/{slotLimit} {t('categoryNav.admin.nodes')}
+                        }}
+                        placeholder={t('categoryNav.admin.groupNamePlaceholder')}
+                        className="w-44 rounded-md border border-primary/50 bg-surface-container-lowest px-2 py-1 text-sm font-bold text-on-surface outline-none"
+                        maxLength={30}
+                      />
+                    ) : (
+                      <>
+                        <span className="max-w-72 truncate text-sm font-bold text-on-surface" title={group.name}>
+                          {group.name}
                         </span>
-                        <span className="flex-1" />
                         <button
                           type="button"
-                          onClick={() => addNode(group.id)}
-                          disabled={groupNodes.length >= slotLimit}
-                          title={groupNodes.length >= slotLimit ? t('categoryNav.admin.groupFull') : undefined}
-                          className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold text-primary hover:bg-primary-container/10 disabled:cursor-not-allowed disabled:text-on-surface-variant disabled:opacity-40 disabled:hover:bg-transparent"
+                          onClick={() => {
+                            editNameBackupRef.current = group.name;
+                            setEditingGroup(group.id);
+                          }}
+                          className="rounded p-1 text-on-surface-variant/60 hover:text-primary"
+                          title={t('categoryNav.admin.editGroupName')}
                         >
-                          <Icon name="add" size={14} />
-                          {t('categoryNav.admin.addNode')}
+                          <Icon name="edit" size={14} />
                         </button>
-                      </div>
+                      </>
+                    )}
+                    <span className="shrink-0 rounded-full bg-surface-container px-2 py-0.5 text-[11px] text-on-surface-variant">
+                      {groupNodes.length}/{slotLimit} {t('categoryNav.admin.nodes')} · {itemCount}{' '}
+                      {t('categoryNav.admin.itemsUnit')}
+                    </span>
+                    <span className="flex-1" />
+                    {!collapsed && (
+                      <button
+                        type="button"
+                        onClick={() => addNode(group.id)}
+                        disabled={groupNodes.length >= slotLimit}
+                        title={groupNodes.length >= slotLimit ? t('categoryNav.admin.groupFull') : undefined}
+                        className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold text-primary hover:bg-primary-container/10 disabled:cursor-not-allowed disabled:text-on-surface-variant disabled:opacity-40 disabled:hover:bg-transparent"
+                      >
+                        <Icon name="add" size={14} />
+                        {t('categoryNav.admin.addNode')}
+                      </button>
+                    )}
+                  </div>
 
-                      {/* 节点列表 */}
+                  {/* 节点列表（仅展开态渲染） */}
+                  {!collapsed && (
+                    <>
                       {groupNodes.length === 0 ? (
                         <p className="py-4 text-center text-xs text-on-surface-variant">
                           {t('categoryNav.admin.noNodes')}
                         </p>
                       ) : (
-                        <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-2">
                           {groupNodes.map((node, idx) => {
                             const items = navNodeItems(node);
                             // 默认插画预览：与前台同源（NAV_ICON_COMPONENTS），WYSIWYG
@@ -483,7 +477,7 @@ export default function CategoryNavAdminPage() {
                                 onDragStart={() => (dragNodeRef.current = { nodeId: node.id, groupId: group.id })}
                                 onDragOver={(e) => e.preventDefault()}
                                 onDrop={() => handleDropOnNode(node.id)}
-                                className="rounded-lg border border-outline-variant/15 bg-surface-container-lowest p-3"
+                                className="rounded-lg border border-outline-variant/15 bg-surface-container-lowest px-3 py-2.5"
                               >
                                 <div className="mb-2 flex flex-wrap items-center gap-2">
                                   <Icon
@@ -492,11 +486,11 @@ export default function CategoryNavAdminPage() {
                                     className="cursor-grab text-on-surface-variant/50"
                                   />
                                   {/* 节点级图标：拓扑图卡位插画位。无自定义图时直接预览默认插画（与前台一致）。
-                                      媒体约束用像素值（max-h-[52px] 等）：grid 自动行高下百分比 max 解析不到确定高度会失效，导致裁切 */}
+                                      媒体约束用像素值（max-h-[38px] 等）：grid 自动行高下百分比 max 解析不到确定高度会失效，导致裁切 */}
                                   <button
                                     type="button"
                                     onClick={() => pickImage(node.id, null)}
-                                    className="grid h-14 w-20 shrink-0 place-items-center overflow-hidden rounded border border-outline-variant/20 bg-surface-container p-0.5 [&_svg]:max-h-[52px] [&_svg]:max-w-[72px]"
+                                    className="grid h-11 w-16 shrink-0 place-items-center overflow-hidden rounded border border-outline-variant/20 bg-surface-container p-0.5 [&_svg]:max-h-[38px] [&_svg]:max-w-[54px]"
                                     title={t('categoryNav.admin.pickNodeIcon')}
                                   >
                                     {uploadingKey === `${node.id}#node` ? (
@@ -509,7 +503,7 @@ export default function CategoryNavAdminPage() {
                                       <img
                                         src={node.imageUrl}
                                         alt=""
-                                        className="max-h-[52px] max-w-[72px] object-contain"
+                                        className="max-h-[38px] max-w-[54px] object-contain"
                                       />
                                     ) : NodeIllu ? (
                                       <NodeIllu />
@@ -558,7 +552,7 @@ export default function CategoryNavAdminPage() {
                                 </div>
 
                                 {/* 分类项列表 */}
-                                <div className="ml-6 flex flex-col gap-2">
+                                <div className="ml-5 flex flex-col gap-1.5">
                                   {items.map((it, j) => {
                                     const uploading = uploadingKey === `${node.id}#${j}`;
                                     // 无图默认预览：所选分类的目录图标（与前台弹窗兜底一致）
@@ -568,7 +562,7 @@ export default function CategoryNavAdminPage() {
                                         <button
                                           type="button"
                                           onClick={() => pickImage(node.id, j)}
-                                          className="grid h-14 w-20 shrink-0 place-items-center overflow-hidden rounded border border-outline-variant/20 bg-surface-container"
+                                          className="grid h-11 w-16 shrink-0 place-items-center overflow-hidden rounded border border-outline-variant/20 bg-surface-container"
                                           title={t('categoryNav.admin.pickImage')}
                                         >
                                           {uploading ? (
@@ -581,10 +575,10 @@ export default function CategoryNavAdminPage() {
                                             <img
                                               src={it.imageUrl}
                                               alt=""
-                                              className="max-h-[52px] max-w-[72px] object-contain"
+                                              className="max-h-[38px] max-w-[54px] object-contain"
                                             />
                                           ) : catIcon ? (
-                                            <Icon name={catIcon} size={26} className="text-on-surface-variant/50" />
+                                            <Icon name={catIcon} size={22} className="text-on-surface-variant/50" />
                                           ) : (
                                             <Icon name="image" size={15} className="text-on-surface-variant/40" />
                                           )}

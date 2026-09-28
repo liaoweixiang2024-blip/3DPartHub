@@ -70,6 +70,7 @@ type SelectionProductPayloadInput = {
 function selectionProductPayload(
   p: SelectionProductPayloadInput,
   modelMap = new Map<string, { id: string; thumbnailUrl: string | null }>(),
+  opts: { includeComponents?: boolean } = {},
 ) {
   const matched = p.modelNo ? modelMap.get(p.modelNo) : undefined;
   return {
@@ -84,7 +85,9 @@ function selectionProductPayload(
     sortOrder: p.sortOrder,
     isKit: p.isKit,
     hidden: p.hidden ?? false,
-    components: p.components,
+    // 管理端列表不渲染子零件清单，components 占大分类列表响应的 ~44%（5000 条 ≈ 1.9MB），
+    // 默认剔除；编辑弹窗/导出按需单独拉取（include_components=1）
+    ...(opts.includeComponents === false ? {} : { components: p.components }),
     categoryCatalogPdf: p.categoryCatalogPdf ?? null,
     matchedModelId: matched?.id ?? null,
     matchedModelThumbnail: matched?.thumbnailUrl ?? null,
@@ -561,13 +564,15 @@ export function createSelectionPublicRouter() {
 
       const includeHidden = await wantsHiddenIncluded(req);
 
-      // 管理端拉全量（含隐藏产品，含隐藏分类下的产品）：绕过缓存
+      // 管理端拉全量（含隐藏产品，含隐藏分类下的产品）：绕过缓存。
+      // 默认不带 components（列表不渲染、体积大）；导出等场景用 include_components=1 显式拉全量
       if (includeHidden) {
         const category = await prisma.selectionCategory.findUnique({ where: { slug }, select: { id: true } });
         if (!category) {
           res.status(404).json({ detail: '分类不存在' });
           return;
         }
+        const includeComponents = req.query.include_components === '1';
         const where = selectionSearchWhere(category.id, search, true);
         const [total, items] = await Promise.all([
           prisma.selectionProduct.count({ where }),
@@ -578,7 +583,12 @@ export function createSelectionPublicRouter() {
             take: pageSize,
           }),
         ]);
-        res.json({ total, page, pageSize, items: items.map((p) => selectionProductPayload(p)) });
+        res.json({
+          total,
+          page,
+          pageSize,
+          items: items.map((p) => selectionProductPayload(p, undefined, { includeComponents })),
+        });
         return;
       }
 

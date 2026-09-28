@@ -64,21 +64,23 @@ export default function InviteAdminPage() {
         title={t('invites.adminTitle')}
         meta={t('invites.count', { count: items.length })}
         description={t('invites.adminDescription')}
+        toolbar={
+          /* 状态分组与用户管理页同款 tab：计数即筛选。必须走 toolbar 而非 children：
+             空状态的 absolute inset-0 覆盖层位于内容区内部，会把 children 里的 tabs 盖死 */
+          <ResponsiveSectionTabs
+            tabs={[
+              { value: '', label: '全部', count: items.length, icon: 'card_giftcard' },
+              { value: 'active', label: t('invites.status.active'), count: activeCount, icon: 'hourglass_empty' },
+              { value: 'used', label: t('invites.status.used'), count: usedCount, icon: 'check_circle' },
+              { value: 'revoked', label: t('invites.status.revoked'), count: revokedCount, icon: 'block' },
+            ]}
+            value={statusFilter}
+            onChange={setStatusFilter}
+            mobileTitle="邀请码状态"
+            countUnit="个"
+          />
+        }
       >
-        {/* 状态分组与用户管理页同款 tab：计数即筛选 */}
-        <ResponsiveSectionTabs
-          tabs={[
-            { value: '', label: '全部', count: items.length, icon: 'card_giftcard' },
-            { value: 'active', label: t('invites.status.active'), count: activeCount, icon: 'hourglass_empty' },
-            { value: 'used', label: t('invites.status.used'), count: usedCount, icon: 'check_circle' },
-            { value: 'revoked', label: t('invites.status.revoked'), count: revokedCount, icon: 'block' },
-          ]}
-          value={statusFilter}
-          onChange={setStatusFilter}
-          mobileTitle="邀请码状态"
-          countUnit="个"
-        />
-
         {items.length === 0 ? (
           <AdminEmptyState icon="card_giftcard" title={t('invites.emptyTitle')} description={t('invites.emptyDesc')} />
         ) : filteredItems.length === 0 ? (

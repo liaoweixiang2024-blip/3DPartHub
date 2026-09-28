@@ -137,7 +137,7 @@ export async function getSelectionProducts(
   page = 1,
   pageSize = 100,
   search = '',
-  options: { includeMatch?: boolean; includeHidden?: boolean } = {},
+  options: { includeMatch?: boolean; includeHidden?: boolean; includeComponents?: boolean } = {},
 ): Promise<{ total: number; page: number; pageSize: number; items: SelectionProduct[] }> {
   const res = await client.get(`/selections/categories/${slug}/products`, {
     params: {
@@ -146,8 +146,15 @@ export async function getSelectionProducts(
       search: search || undefined,
       include_match: options.includeMatch === false ? '0' : undefined,
       include_hidden: options.includeHidden ? '1' : undefined,
+      include_components: options.includeComponents ? '1' : undefined,
     },
   });
+  return unwrapResponse(res);
+}
+
+/** 管理端单产品详情：列表接口已剔除 components，编辑弹窗按需拉全量 */
+export async function getSelectionProductById(id: string): Promise<SelectionProduct> {
+  const res = await client.get(`/admin/selections/products/${id}`);
   return unwrapResponse(res);
 }
 
@@ -295,6 +302,57 @@ export async function batchImportProducts(
   }>,
 ): Promise<{ created: number; updated: number }> {
   const res = await client.post('/admin/selections/products/batch', { categoryId, products });
+  return unwrapResponse(res);
+}
+
+/** 批量删除产品（单次上限 1000，不可恢复） */
+export async function batchDeleteSelectionProducts(ids: string[]): Promise<{ deleted: number }> {
+  const res = await client.post('/admin/selections/products/batch-delete', { ids });
+  return unwrapResponse(res);
+}
+
+/** 批量设置产品隐藏/显示（hidden=true 不参与选型、仅管理端可见） */
+export async function batchUpdateSelectionProductsHidden(ids: string[], hidden: boolean): Promise<{ updated: number }> {
+  const res = await client.post('/admin/selections/products/batch-update-hidden', { ids, hidden });
+  return unwrapResponse(res);
+}
+
+// ========== 选型分类数据包搬运（本地站 ↔ 服务器站） ==========
+
+/** 数据包导出：勾选分类（含设置 + 产品 + 图片/PDF 资产），流式 zip 下载 */
+export async function exportSelectionCategories(categoryIds: string[]): Promise<Blob> {
+  const res = await client.post('/admin/selections/export', { categoryIds }, { responseType: 'blob' });
+  return res.data as Blob;
+}
+
+/** 数据包导入第一步：上传 zip 解析清单（暂存，返回 importId + 分类对比） */
+export async function analyzeSelectionTransfer(file: File): Promise<{
+  import_id: string;
+  categories: Array<{
+    slug: string;
+    name: string;
+    product_count: number;
+    exists: boolean;
+    current_product_count: number;
+  }>;
+  assets: { total: number; missing: number };
+}> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await client.post('/admin/selections/transfer-analyze', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return unwrapResponse(res);
+}
+
+/** 数据包导入第二步：资产落盘 + 分类按 slug 覆盖更新/新建 + 产品按 modelNo 合并（不删包外产品） */
+export async function commitSelectionTransfer(importId: string): Promise<{
+  categories: { created: number; updated: number };
+  products: { created: number; updated: number };
+  assets: { restored: number; persistFailed: number };
+  failed: Array<{ slug: string; reason: string }>;
+}> {
+  const res = await client.post('/admin/selections/transfer-commit', { importId });
   return unwrapResponse(res);
 }
 

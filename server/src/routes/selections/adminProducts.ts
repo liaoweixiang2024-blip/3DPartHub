@@ -25,6 +25,22 @@ function toJsonObject(value: unknown): Record<string, Prisma.InputJsonValue> {
 export function createSelectionAdminProductsRouter() {
   const router = Router();
 
+  // Get single product (full data incl. components — 列表接口已剔除 components，编辑弹窗按需拉取)
+  router.get('/api/admin/selections/products/:id', authMiddleware, async (req: AuthRequest, res) => {
+    if (!adminOnly(req, res)) return;
+    try {
+      const product = await prisma.selectionProduct.findUnique({ where: { id: req.params.id as string } });
+      if (!product) {
+        res.status(404).json({ detail: '产品不存在' });
+        return;
+      }
+      res.json(product);
+    } catch (err) {
+      logger.error({ err }, '[Selections] Get product error');
+      res.status(500).json({ detail: '获取产品失败' });
+    }
+  });
+
   // Create product
   router.post('/api/admin/selections/products', authMiddleware, async (req: AuthRequest, res) => {
     if (!adminOnly(req, res)) return;
@@ -200,6 +216,72 @@ export function createSelectionAdminProductsRouter() {
     } catch (err) {
       logger.error({ err }, '[Selections] Batch import error');
       res.status(500).json({ detail: '批量导入失败' });
+    }
+  });
+
+  // Batch delete products (SelectionShare 只存 productIds 字符串数组，无 FK 引用，deleteMany 安全)
+  router.post('/api/admin/selections/products/batch-delete', authMiddleware, async (req: AuthRequest, res) => {
+    if (!adminOnly(req, res)) return;
+    try {
+      const rawIds = req.body?.ids;
+      if (!Array.isArray(rawIds) || rawIds.length === 0) {
+        res.status(400).json({ detail: 'ids 必须是非空数组' });
+        return;
+      }
+      if (rawIds.length > 1000) {
+        res.status(400).json({ detail: '单次最多删除 1000 个产品' });
+        return;
+      }
+      const ids = Array.from(
+        new Set(rawIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)),
+      );
+      if (ids.length === 0) {
+        res.status(400).json({ detail: 'ids 中没有有效的产品 ID' });
+        return;
+      }
+      const { count } = await prisma.selectionProduct.deleteMany({ where: { id: { in: ids } } });
+      await invalidateSelectionCache();
+      res.json({ deleted: count });
+    } catch (err) {
+      logger.error({ err }, '[Selections] Batch delete error');
+      res.status(500).json({ detail: '批量删除失败' });
+    }
+  });
+
+  // Batch update hidden flag (updateMany 原子批量，参考 models batch-update-category)
+  router.post('/api/admin/selections/products/batch-update-hidden', authMiddleware, async (req: AuthRequest, res) => {
+    if (!adminOnly(req, res)) return;
+    try {
+      const rawIds = req.body?.ids;
+      const hidden = req.body?.hidden;
+      if (!Array.isArray(rawIds) || rawIds.length === 0) {
+        res.status(400).json({ detail: 'ids 必须是非空数组' });
+        return;
+      }
+      if (rawIds.length > 1000) {
+        res.status(400).json({ detail: '单次最多操作 1000 个产品' });
+        return;
+      }
+      if (typeof hidden !== 'boolean') {
+        res.status(400).json({ detail: 'hidden 必须是布尔值' });
+        return;
+      }
+      const ids = Array.from(
+        new Set(rawIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)),
+      );
+      if (ids.length === 0) {
+        res.status(400).json({ detail: 'ids 中没有有效的产品 ID' });
+        return;
+      }
+      const { count } = await prisma.selectionProduct.updateMany({
+        where: { id: { in: ids } },
+        data: { hidden },
+      });
+      await invalidateSelectionCache();
+      res.json({ updated: count });
+    } catch (err) {
+      logger.error({ err }, '[Selections] Batch update hidden error');
+      res.status(500).json({ detail: '批量设置隐藏失败' });
     }
   });
 

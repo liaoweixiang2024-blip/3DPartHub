@@ -245,6 +245,8 @@ const iconMap: Record<string, LucideIcon> = {
   folder_off: FolderOpen,
   folder_special: FolderClosed,
   folder_zip: FileArchive,
+  archive: FileArchive,
+  unarchive: FileArchive,
   fullscreen: Expand,
   grid_view: Grid,
   view_list: List,

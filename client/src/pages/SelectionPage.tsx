@@ -531,12 +531,12 @@ export default function SelectionPage() {
     if (search) return;
     if (!curField) return;
     if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-    const shouldScrollStepToTop = !isDesktop && stepScrollIntentRef.current === 'top';
+    const shouldScrollStepToTop = stepScrollIntentRef.current === 'top';
     if (shouldScrollStepToTop) {
       stepScrollIntentRef.current = null;
       suppressAutoAdvanceScrollRef.current = false;
       scrollTimerRef.current = setTimeout(() => {
-        const container = mobileMainRef.current;
+        const container = scrollContainerRef.current || mobileMainRef.current;
         const el = curStepRef.current || wizardWrapRef.current;
         if (!container || !el) return;
         const cRect = container.getBoundingClientRect();
@@ -560,9 +560,13 @@ export default function SelectionPage() {
         if (container) {
           const cRect = container.getBoundingClientRect();
           const eRect = el.getBoundingClientRect();
-          const target = isDesktop
-            ? eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2
-            : eRect.top - cRect.top + container.scrollTop - 8;
+          // 桌面默认居中当前步骤；但步骤比视口还高时（如带选项大图的「接头形态」）
+          // 居中会落到步骤中间 —— 改为顶端对齐，保证看到步骤标题
+          const tallStep = eRect.height >= cRect.height - 16;
+          const target =
+            isDesktop && !tallStep
+              ? eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2
+              : eRect.top - cRect.top + container.scrollTop - 8;
           container.scrollTo({ top: Math.max(0, target), behavior: isDesktop ? 'smooth' : 'auto' });
         } else {
           wizardWrapRef.current?.scrollIntoView({ behavior: 'auto', block: 'start' });
@@ -603,9 +607,12 @@ export default function SelectionPage() {
         if (container) {
           const cRect = container.getBoundingClientRect();
           const eRect = el.getBoundingClientRect();
-          const target = isDesktop
-            ? eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2
-            : eRect.top - cRect.top + container.scrollTop - 8;
+          // 同上：超高步骤不做居中，否则滚到步骤中间
+          const tallStep = eRect.height >= cRect.height - 16;
+          const target =
+            isDesktop && !tallStep
+              ? eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2
+              : eRect.top - cRect.top + container.scrollTop - 8;
           container.scrollTo({ top: Math.max(0, target), behavior: isDesktop ? 'smooth' : 'auto' });
         } else {
           wizardWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -723,12 +730,28 @@ export default function SelectionPage() {
     setExpandedKits(new Set());
   }, [setSearchDraft]);
   const resetCurrentCategory = useCallback(() => {
+    // 清空后回到第一个步骤：显式「回顶」意图，避免桌面居中公式把带大图的高步骤滚到中间
+    stepScrollIntentRef.current = 'top';
+    pendingAutoAdvanceScrollRef.current = false;
     setSpecs({});
     setManualDrafts({});
     setSkipped(new Set());
     setAutoSelectedFields(new Set());
     setSearchDraft('');
     setExpandedKits(new Set());
+    // 兜底直接回顶（curField 未变化时自动滚动 effect 不会重跑；与意图路径滚动目标一致，重复无害）
+    window.setTimeout(() => {
+      const el = wizardWrapRef.current || curStepRef.current;
+      const container = scrollContainerRef.current || mobileMainRef.current;
+      if (!el) return;
+      if (container) {
+        const cRect = container.getBoundingClientRect();
+        const eRect = el.getBoundingClientRect();
+        container.scrollTo({ top: Math.max(0, eRect.top - cRect.top + container.scrollTop - 8), behavior: 'auto' });
+      } else {
+        el.scrollIntoView({ behavior: 'auto', block: 'start' });
+      }
+    }, 40);
   }, [setSearchDraft]);
   const pickVal = useCallback((key: string, val: string) => {
     setPendingOptionKey(`${key}:${val}`);
@@ -783,6 +806,9 @@ export default function SelectionPage() {
     });
   }, [setSearchDraft]);
   const restart = useCallback(() => {
+    // 重新选择：同 resetCurrentCategory，清空后回顶
+    stepScrollIntentRef.current = 'top';
+    pendingAutoAdvanceScrollRef.current = false;
     startTransition(() => {
       setSpecs({});
       setManualDrafts({});
@@ -791,18 +817,49 @@ export default function SelectionPage() {
       setSearchDraft('');
       setExpandedKits(new Set());
     });
-  }, [setSearchDraft]);
+    window.setTimeout(() => {
+      const el = wizardWrapRef.current || curStepRef.current;
+      const container = scrollContainerRef.current || mobileMainRef.current;
+      if (!el) return;
+      if (container) {
+        const cRect = container.getBoundingClientRect();
+        const eRect = el.getBoundingClientRect();
+        container.scrollTo({ top: Math.max(0, eRect.top - cRect.top + container.scrollTop - 8), behavior: 'auto' });
+      } else {
+        el.scrollIntoView({ behavior: 'auto', block: 'start' });
+      }
+    }, 120);
+  }, []);
   const toggleInquiryProduct = useCallback(
     (product: SelectionProduct) => {
       const result = inquiryCart.toggleProduct(product);
       if (result.limitReached) {
         toast(t('selectionPage.cart.limitReached', { limit: inquiryCart.limit }), 'error');
       } else if (result.added) {
-        toast(t('selectionPage.cart.added'), 'success');
+        // 询价关闭时清单仅用于批量导出，提示文案区分
+        toast(t(canInquiry ? 'selectionPage.cart.added' : 'selectionPage.cart.addedExport'), 'success');
       }
     },
-    [inquiryCart, t, toast],
+    [canInquiry, inquiryCart, t, toast],
   );
+  // 询价关闭场景：把选中清单导出为 Excel（型号/名称/数量/单位 + 参数列并集）
+  const handleExportSelected = useCallback(async () => {
+    const items = inquiryCart.items;
+    if (!items.length) return;
+    try {
+      const { default: writeXlsxFile } = await import('write-excel-file/browser');
+      // 只导核心四列（型号/名称/数量/单位），不带参数列
+      const headers = ['型号', '名称', '数量', '单位'];
+      const rows = items.map((it) => [it.modelNo || '', it.productName, it.qty, it.unit || '']);
+      const stamp = new Date();
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const fileName = `选型清单_${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.xlsx`;
+      await writeXlsxFile([headers, ...rows], { sheet: t('selectionPage.inquiryCart.exportTitle') }).toFile(fileName);
+      toast(t('selectionPage.inquiryCart.exportedCount', { count: items.length }), 'success');
+    } catch {
+      toast(t('selectionPage.inquiryCart.exportFailed'), 'error');
+    }
+  }, [inquiryCart.items, t, toast]);
   const toggleKit = useCallback(
     (id: string) =>
       setExpandedKits((p) => {
@@ -1630,7 +1687,7 @@ export default function SelectionPage() {
                   columns={columns}
                   kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
                   selected={selectedIds.has(p.id)}
-                  onToggleSelect={canInquiry ? () => toggleInquiryProduct(visibleProduct) : undefined}
+                  onToggleSelect={() => toggleInquiryProduct(visibleProduct)}
                   onToggleInquiry={canInquiry ? () => toggleInquiryProduct(visibleProduct) : undefined}
                   onPrepareSourceUrl={prepareTicketSourceUrl}
                   onBuildSourceUrl={getTicketSourceUrl}
@@ -1738,7 +1795,7 @@ export default function SelectionPage() {
                   columns={columns}
                   kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
                   selected={selectedIds.has(p.id)}
-                  onToggleSelect={canInquiry ? () => toggleInquiryProduct(visibleProduct) : undefined}
+                  onToggleSelect={() => toggleInquiryProduct(visibleProduct)}
                   onToggleInquiry={canInquiry ? () => toggleInquiryProduct(visibleProduct) : undefined}
                   onPrepareSourceUrl={prepareTicketSourceUrl}
                   onBuildSourceUrl={getTicketSourceUrl}
@@ -1774,13 +1831,15 @@ export default function SelectionPage() {
   ) : null; /* wizard steps + results rendered separately via stepsJSX / resultsJSX */
 
   /* ── batch action bar ── */
-  const actionBar = inquiryCart.items.length > 0 && canInquiry && (
+  const actionBar = inquiryCart.items.length > 0 && (
     <div
       ref={cartActionBarRef}
       className={
         isDesktop
           ? 'relative z-10 flex shrink-0 items-center justify-between border-t border-outline-variant/15 bg-surface/95 px-3 py-2 backdrop-blur-sm md:px-4'
-          : `fixed inset-x-0 z-[70] grid grid-cols-[minmax(0,1fr)_3.75rem_4.25rem] items-center gap-1.5 border-t bg-surface-container-high px-3 py-1 ${
+          : `fixed inset-x-0 z-[70] grid items-center gap-1.5 border-t bg-surface-container-high px-3 py-1 ${
+              canInquiry ? 'grid-cols-[minmax(0,1fr)_3.75rem_4.25rem]' : 'grid-cols-[minmax(0,1fr)_6.75rem]'
+            } ${
               cartPreviewOpen
                 ? 'border-outline-variant/14 shadow-[0_-10px_24px_rgba(15,23,42,0.14)]'
                 : 'border-outline-variant/12 shadow-[0_-6px_18px_rgba(15,23,42,0.12)]'
@@ -1810,7 +1869,9 @@ export default function SelectionPage() {
           >
             <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 px-3 py-2.5 md:py-2">
               <div className="min-w-0">
-                <p className="text-sm font-bold text-on-surface">{t('selectionPage.inquiryCart.title')}</p>
+                <p className="text-sm font-bold text-on-surface">
+                  {t(canInquiry ? 'selectionPage.inquiryCart.title' : 'selectionPage.inquiryCart.exportTitle')}
+                </p>
                 <p className="text-xs text-on-surface-variant">
                   {t('selectionPage.inquiryCart.addedCount', { count: inquiryCart.items.length })}
                 </p>
@@ -1824,12 +1885,14 @@ export default function SelectionPage() {
                     {t('selectionPage.inquiryCart.clear')}
                   </button>
                 ) : null}
-                <Link
-                  to="/my-inquiries"
-                  className={`shrink-0 px-2 py-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface ${selectionPress}`}
-                >
-                  {isDesktop ? t('selectionPage.inquiryCart.editList') : t('selectionPage.inquiryCart.edit')}
-                </Link>
+                {canInquiry && (
+                  <Link
+                    to="/my-inquiries"
+                    className={`shrink-0 px-2 py-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface ${selectionPress}`}
+                  >
+                    {isDesktop ? t('selectionPage.inquiryCart.editList') : t('selectionPage.inquiryCart.edit')}
+                  </Link>
+                )}
               </div>
             </div>
             <div className="max-h-[calc(58dvh-56px)] divide-y divide-outline-variant/10 overflow-y-auto px-2 py-1 md:max-h-[300px]">
@@ -1885,7 +1948,9 @@ export default function SelectionPage() {
             >
               <Icon name="request_quote" size={16} />
             </span>
-            <span className="min-w-0 truncate leading-none">{t('selectionPage.inquiryCart.pending')}</span>
+            <span className="min-w-0 truncate leading-none">
+              {t(canInquiry ? 'selectionPage.inquiryCart.pending' : 'selectionPage.inquiryCart.selected')}
+            </span>
             <span className="shrink-0 text-xs font-semibold leading-none text-primary-container tabular-nums">
               {inquiryCart.items.length > 99
                 ? '99+'
@@ -1899,7 +1964,7 @@ export default function SelectionPage() {
           </span>
         ) : (
           <span className="inline-flex min-w-0 items-center gap-1.5">
-            {t('selectionPage.inquiryCart.pending')}{' '}
+            {t(canInquiry ? 'selectionPage.inquiryCart.pending' : 'selectionPage.inquiryCart.selected')}{' '}
             <strong className="text-on-surface">{inquiryCart.items.length}</strong>{' '}
             {t('selectionPage.inquiryCart.itemUnit')}
           </span>
@@ -1922,32 +1987,48 @@ export default function SelectionPage() {
             {t('selectionPage.inquiryCart.clear')}
           </button>
         ) : null}
-        <Link
-          to="/my-inquiries"
-          className={
-            isDesktop
-              ? `rounded-lg px-2.5 py-1.5 text-center text-xs font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`
-              : `inline-flex h-9 items-center justify-center rounded-lg px-2 text-center text-sm font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`
-          }
-        >
-          {isDesktop ? t('selectionPage.inquiryCart.myInquiries') : t('selectionPage.inquiryCart.list')}
-        </Link>
-        <button
-          onClick={() => {
-            if (!user) {
-              requireLogin(t('selectionPage.inquiryCart.loginReason'));
-              return;
+        {canInquiry ? (
+          <>
+            <Link
+              to="/my-inquiries"
+              className={
+                isDesktop
+                  ? `rounded-lg px-2.5 py-1.5 text-center text-xs font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`
+                  : `inline-flex h-9 items-center justify-center rounded-lg px-2 text-center text-sm font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`
+              }
+            >
+              {isDesktop ? t('selectionPage.inquiryCart.myInquiries') : t('selectionPage.inquiryCart.list')}
+            </Link>
+            <button
+              onClick={() => {
+                if (!user) {
+                  requireLogin(t('selectionPage.inquiryCart.loginReason'));
+                  return;
+                }
+                setInquiryOpen(true);
+              }}
+              className={
+                isDesktop
+                  ? `rounded-lg bg-primary-container px-4 py-1.5 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
+                  : `inline-flex h-9 items-center justify-center rounded-lg bg-primary-container px-2 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
+              }
+            >
+              {isDesktop ? t('selectionPage.inquiryCart.submitInquiry') : t('selectionPage.inquiryCart.submit')}
+            </button>
+          </>
+        ) : (
+          /* 询价功能关闭：清单仅用于批量导出选中型号 */
+          <button
+            onClick={() => void handleExportSelected()}
+            className={
+              isDesktop
+                ? `rounded-lg bg-primary-container px-4 py-1.5 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
+                : `inline-flex h-9 items-center justify-center rounded-lg bg-primary-container px-2 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
             }
-            setInquiryOpen(true);
-          }}
-          className={
-            isDesktop
-              ? `rounded-lg bg-primary-container px-4 py-1.5 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
-              : `inline-flex h-9 items-center justify-center rounded-lg bg-primary-container px-2 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
-          }
-        >
-          {isDesktop ? t('selectionPage.inquiryCart.submitInquiry') : t('selectionPage.inquiryCart.submit')}
-        </button>
+          >
+            {t('selectionPage.inquiryCart.exportSelected')}
+          </button>
+        )}
       </div>
     </div>
   );

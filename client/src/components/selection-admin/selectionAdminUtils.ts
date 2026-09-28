@@ -7,7 +7,7 @@ export const PRODUCT_MODEL_HEADERS = ['型号编号', '型号', 'modelNo', 'mode
 export const PRODUCT_NAME_HEADERS = ['名称', '产品名称', 'name', 'Name'];
 export type SelectionImportPolicy = Pick<
   UploadPolicy,
-  'selectionImportMaxSizeMb' | 'selectionImportMaxRows' | 'selectionImportMaxColumns'
+  'selectionImportMaxSizeMb' | 'selectionImportMaxRows' | 'selectionImportMaxColumns' | 'selectionTransferMaxSizeMb'
 >;
 
 export function getApiErrorMessage(err: unknown, fallback: string) {

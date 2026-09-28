@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { lazy, startTransition, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, memo, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useSWR, { mutate as swrMutate } from 'swr';
 import useSWRInfinite from 'swr/infinite';
@@ -174,7 +174,8 @@ function useModelAdminList(search: string, categoryId: string) {
   }, [debouncedSearch, normalizedCategoryId, setSize]);
 
   const pages = data || [];
-  const items = pages.flatMap((page) => page.items);
+  // flatMap 结果必须 memo：数组引用稳定才能让 useVisibleItems/行级 memo/useCallback 级联生效
+  const items = useMemo(() => pages.flatMap((page) => page.items), [pages]);
   const firstPage = pages[0];
   const lastPage = pages[pages.length - 1];
   const hasMore = Boolean(lastPage && lastPage.page < lastPage.totalPages);
@@ -214,7 +215,7 @@ function useMergeSuggestionPages(enabled: boolean) {
   );
 
   const pages = data || [];
-  const groups = pages.flatMap((page) => page.data);
+  const groups = useMemo(() => pages.flatMap((page) => page.data), [pages]);
   const total = pages[0]?.total ?? 0;
   const hasMore = groups.length < total;
   const isLoadingMore = Boolean(size > 0 && !data?.[size - 1] && !error);
@@ -261,7 +262,8 @@ function useDeletedModelPages(search: string, enabled: boolean, refreshVersion: 
   }, [debouncedSearch, enabled, refreshVersion, setSize]);
 
   const pages = data || [];
-  const items = pages.flatMap((page) => page.items);
+  // flatMap 结果必须 memo：数组引用稳定才能让 useVisibleItems/行级 memo/useCallback 级联生效
+  const items = useMemo(() => pages.flatMap((page) => page.items), [pages]);
   const firstPage = pages[0];
   const lastPage = pages[pages.length - 1];
   const hasMore = Boolean(lastPage && lastPage.page < lastPage.totalPages);
@@ -310,7 +312,8 @@ function useFailedModelPages(search: string, enabled: boolean, refreshVersion: n
   }, [debouncedSearch, enabled, refreshVersion, setSize]);
 
   const pages = data || [];
-  const items = pages.flatMap((page) => page.items);
+  // flatMap 结果必须 memo：数组引用稳定才能让 useVisibleItems/行级 memo/useCallback 级联生效
+  const items = useMemo(() => pages.flatMap((page) => page.items), [pages]);
   const firstPage = pages[0];
   const lastPage = pages[pages.length - 1];
   const hasMore = Boolean(lastPage && lastPage.page < lastPage.totalPages);
@@ -976,6 +979,167 @@ function ModelCategoryFilter({
   );
 }
 
+interface ModelRowHandlers {
+  onToggleSelect: (modelId: string) => void;
+  /** 由 setState setter 直接传入（接受整行模型对象） */
+  onEdit: (model: ServerModelListItem) => void;
+  onDelete: (model: ServerModelListItem) => void;
+}
+
+/** 表格行 memo 化：搜索框每键 commit 都会重渲染整个页面组件，
+    行级 props（模型对象引用 + 布尔选中态 + 稳定 handler）不变时跳过重渲染，消除打字卡顿 */
+const ModelTableRow = memo(function ModelTableRow({
+  model,
+  selected,
+  onToggleSelect,
+  onEdit,
+  onDelete,
+}: ModelRowHandlers & { model: ServerModelListItem; selected: boolean }) {
+  return (
+    <tr className="border-b border-outline-variant/10 hover:bg-surface-container-high/50 transition-colors">
+      <td className="px-4 py-3 align-middle">
+        <input
+          name="has"
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect(model.model_id)}
+          className="h-4 w-4 accent-primary-container"
+          aria-label={`选择 ${model.name}`}
+        />
+      </td>
+      <td className="px-4 py-3">
+        <Link
+          to={`/model/${model.model_id}`}
+          target="_blank"
+          rel="noopener"
+          className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+        >
+          <div className="w-10 h-10 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
+            <ModelThumbnail src={model.thumbnail_url} alt="" className="w-full h-full object-cover" />
+          </div>
+          <div className="min-w-0">
+            <span className="block truncate text-on-surface font-medium">{model.name}</span>
+            {model.group && (
+              <span className="text-[10px] text-primary font-medium">
+                {model.group.name} {model.group.is_primary ? '· 主版本' : ''} (共{model.group.variant_count}个)
+              </span>
+            )}
+          </div>
+        </Link>
+      </td>
+      <td className="px-4 py-3 text-on-surface-variant">
+        <span className="block truncate" title={model.category || ''}>
+          {model.category || '—'}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <span className="text-xs font-mono bg-surface-container-highest px-1.5 py-0.5 rounded-sm">
+          {model.format?.toUpperCase()}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-on-surface-variant font-mono">{formatSize(model.original_size)}</td>
+      <td className="px-4 py-3">
+        {model.drawing_url ? (
+          <span className="text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-sm font-medium">PDF</span>
+        ) : (
+          <span className="text-[10px] text-on-surface-variant/30">—</span>
+        )}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <div className="flex items-center justify-end gap-2">
+          <Link
+            to={`/model/${model.model_id}`}
+            target="_blank"
+            rel="noopener"
+            className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-sm transition-colors border border-outline-variant/20"
+          >
+            <Icon name="open_in_new" size={14} />
+            查看
+          </Link>
+          <button
+            onClick={() => onEdit(model)}
+            className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20"
+          >
+            <Icon name="settings" size={14} />
+            编辑
+          </button>
+          <button
+            onClick={() => onDelete(model)}
+            className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-error hover:bg-error/10 rounded-sm transition-colors border border-outline-variant/20"
+          >
+            <Icon name="close" size={14} />
+            删除
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
+/** 移动端卡片行（与桌面 ModelTableRow 同一套 memo 策略） */
+const ModelCard = memo(function ModelCard({
+  model,
+  selected,
+  onToggleSelect,
+  onEdit,
+  onDelete,
+}: ModelRowHandlers & { model: ServerModelListItem; selected: boolean }) {
+  return (
+    <Link
+      to={`/model/${model.model_id}`}
+      target="_blank"
+      rel="noopener"
+      className={`flex items-stretch rounded-lg border border-outline-variant/10 bg-surface-container-high shadow-sm transition-colors hover:bg-surface-container-highest ${
+        selected ? 'ring-1 ring-primary-container/40' : ''
+      }`}
+    >
+      <div
+        className="flex shrink-0 items-center pl-3"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
+        <input
+          name="has"
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggleSelect(model.model_id)}
+          className="h-4 w-4 accent-primary-container"
+          aria-label={`选择 ${model.name}`}
+        />
+      </div>
+      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-l-lg bg-surface-container-highest">
+        <ModelThumbnail src={model.thumbnail_url} alt="" className="w-full h-full object-cover" />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-2.5">
+        <p className="line-clamp-2 break-words text-sm font-semibold leading-snug text-on-surface">{model.name}</p>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-[10px] font-mono bg-surface-container-highest px-1 py-0.5 rounded-sm">
+            {model.format?.toUpperCase()}
+          </span>
+          <span className="text-[10px] text-on-surface-variant break-words">{model.category || '未分类'}</span>
+          <span className="text-[10px] text-on-surface-variant font-mono">{formatSize(model.original_size)}</span>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5 pr-2.5" onClick={(e) => e.preventDefault()}>
+        <button
+          onClick={() => onEdit(model)}
+          className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-on-surface rounded-sm border border-outline-variant/20"
+        >
+          <Icon name="settings" size={14} />
+        </button>
+        <button
+          onClick={() => onDelete(model)}
+          className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-error rounded-sm border border-outline-variant/20"
+        >
+          <Icon name="close" size={14} />
+        </button>
+      </div>
+    </Link>
+  );
+});
+
 function DesktopContent() {
   const { toast } = useToast();
   const {
@@ -1241,19 +1405,23 @@ function DesktopContent() {
     }
   };
 
-  const toggleSelectModel = (modelId: string) => {
-    if (selectedAllMatching) {
-      setSelectedAllMatching(false);
-      setSelectedModelIds(new Set(visibleModelIds.filter((id) => id !== modelId)));
-      return;
-    }
-    setSelectedModelIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(modelId)) next.delete(modelId);
-      else next.add(modelId);
-      return next;
-    });
-  };
+  // memo 行的稳定 handler：依赖 visibleModels（useVisibleItems 的 slice 结果，打字重渲染间引用稳定）
+  const toggleSelectModel = useCallback(
+    (modelId: string) => {
+      if (selectedAllMatching) {
+        setSelectedAllMatching(false);
+        setSelectedModelIds(new Set(visibleModels.filter((m) => m.model_id !== modelId).map((m) => m.model_id)));
+        return;
+      }
+      setSelectedModelIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(modelId)) next.delete(modelId);
+        else next.add(modelId);
+        return next;
+      });
+    },
+    [selectedAllMatching, visibleModels],
+  );
 
   const toggleSelectVisibleModels = () => {
     setSelectedAllMatching(false);
@@ -2180,88 +2348,14 @@ function DesktopContent() {
                   </thead>
                   <tbody>
                     {visibleModels.map((m) => (
-                      <tr
+                      <ModelTableRow
                         key={m.model_id}
-                        className="border-b border-outline-variant/10 hover:bg-surface-container-high/50 transition-colors"
-                      >
-                        <td className="px-4 py-3 align-middle">
-                          <input
-                            name="has"
-                            type="checkbox"
-                            checked={selectedModelIds.has(m.model_id)}
-                            onChange={() => toggleSelectModel(m.model_id)}
-                            className="h-4 w-4 accent-primary-container"
-                            aria-label={`选择 ${m.name}`}
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <Link
-                            to={`/model/${m.model_id}`}
-                            target="_blank"
-                            rel="noopener"
-                            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-                          >
-                            <div className="w-10 h-10 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
-                              <ModelThumbnail src={m.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                            </div>
-                            <div className="min-w-0">
-                              <span className="block truncate text-on-surface font-medium">{m.name}</span>
-                              {m.group && (
-                                <span className="text-[10px] text-primary font-medium">
-                                  {m.group.name} {m.group.is_primary ? '· 主版本' : ''} (共{m.group.variant_count}个)
-                                </span>
-                              )}
-                            </div>
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3 text-on-surface-variant">
-                          <span className="block truncate" title={m.category || ''}>
-                            {m.category || '—'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs font-mono bg-surface-container-highest px-1.5 py-0.5 rounded-sm">
-                            {m.format?.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-on-surface-variant font-mono">{formatSize(m.original_size)}</td>
-                        <td className="px-4 py-3">
-                          {m.drawing_url ? (
-                            <span className="text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-sm font-medium">
-                              PDF
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-on-surface-variant/30">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Link
-                              to={`/model/${m.model_id}`}
-                              target="_blank"
-                              rel="noopener"
-                              className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-sm transition-colors border border-outline-variant/20"
-                            >
-                              <Icon name="open_in_new" size={14} />
-                              查看
-                            </Link>
-                            <button
-                              onClick={() => setEditModel(m)}
-                              className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20"
-                            >
-                              <Icon name="settings" size={14} />
-                              编辑
-                            </button>
-                            <button
-                              onClick={() => setDeleteTarget(m)}
-                              className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-error hover:bg-error/10 rounded-sm transition-colors border border-outline-variant/20"
-                            >
-                              <Icon name="close" size={14} />
-                              删除
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                        model={m}
+                        selected={selectedModelIds.has(m.model_id)}
+                        onToggleSelect={toggleSelectModel}
+                        onEdit={setEditModel}
+                        onDelete={setDeleteTarget}
+                      />
                     ))}
                     {models.length > 0 && (
                       <tr>
@@ -2720,19 +2814,23 @@ function MobileContent() {
     }
   };
 
-  const toggleSelectModel = (modelId: string) => {
-    if (selectedAllMatching) {
-      setSelectedAllMatching(false);
-      setSelectedModelIds(new Set(visibleModelIds.filter((id) => id !== modelId)));
-      return;
-    }
-    setSelectedModelIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(modelId)) next.delete(modelId);
-      else next.add(modelId);
-      return next;
-    });
-  };
+  // memo 行的稳定 handler：依赖 visibleModels（useVisibleItems 的 slice 结果，打字重渲染间引用稳定）
+  const toggleSelectModel = useCallback(
+    (modelId: string) => {
+      if (selectedAllMatching) {
+        setSelectedAllMatching(false);
+        setSelectedModelIds(new Set(visibleModels.filter((m) => m.model_id !== modelId).map((m) => m.model_id)));
+        return;
+      }
+      setSelectedModelIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(modelId)) next.delete(modelId);
+        else next.add(modelId);
+        return next;
+      });
+    },
+    [selectedAllMatching, visibleModels],
+  );
 
   const toggleSelectVisibleModels = () => {
     setSelectedAllMatching(false);
@@ -3587,61 +3685,14 @@ function MobileContent() {
         ) : (
           <div className="admin-tab-panel flex flex-col gap-3">
             {visibleModels.map((m) => (
-              <Link
+              <ModelCard
                 key={m.model_id}
-                to={`/model/${m.model_id}`}
-                target="_blank"
-                rel="noopener"
-                className={`flex items-stretch rounded-lg border border-outline-variant/10 bg-surface-container-high shadow-sm transition-colors hover:bg-surface-container-highest ${
-                  selectedModelIds.has(m.model_id) ? 'ring-1 ring-primary-container/40' : ''
-                }`}
-              >
-                <div
-                  className="flex shrink-0 items-center pl-3"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                >
-                  <input
-                    name="has"
-                    type="checkbox"
-                    checked={selectedModelIds.has(m.model_id)}
-                    onChange={() => toggleSelectModel(m.model_id)}
-                    className="h-4 w-4 accent-primary-container"
-                    aria-label={`选择 ${m.name}`}
-                  />
-                </div>
-                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-l-lg bg-surface-container-highest">
-                  <ModelThumbnail src={m.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                </div>
-                <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-2.5">
-                  <p className="line-clamp-2 break-words text-sm font-semibold leading-snug text-on-surface">
-                    {m.name}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-[10px] font-mono bg-surface-container-highest px-1 py-0.5 rounded-sm">
-                      {m.format?.toUpperCase()}
-                    </span>
-                    <span className="text-[10px] text-on-surface-variant break-words">{m.category || '未分类'}</span>
-                    <span className="text-[10px] text-on-surface-variant font-mono">{formatSize(m.original_size)}</span>
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5 pr-2.5" onClick={(e) => e.preventDefault()}>
-                  <button
-                    onClick={() => setEditModel(m)}
-                    className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-on-surface rounded-sm border border-outline-variant/20"
-                  >
-                    <Icon name="settings" size={14} />
-                  </button>
-                  <button
-                    onClick={() => setDeleteTarget(m)}
-                    className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-error rounded-sm border border-outline-variant/20"
-                  >
-                    <Icon name="close" size={14} />
-                  </button>
-                </div>
-              </Link>
+                model={m}
+                selected={selectedModelIds.has(m.model_id)}
+                onToggleSelect={toggleSelectModel}
+                onEdit={setEditModel}
+                onDelete={setDeleteTarget}
+              />
             ))}
             {models.length > 0 && (
               <InfiniteLoadTrigger

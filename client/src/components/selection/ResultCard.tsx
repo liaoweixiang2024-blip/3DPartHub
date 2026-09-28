@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnDef, SelectionProduct, SelectionComponent } from '../../api/selections';
@@ -52,6 +52,8 @@ export function ResultCard({
     product.categoryCatalogPdf && isSafeUrl(product.categoryCatalogPdf) ? product.categoryCatalogPdf : null;
   const isCatalogImage = catalogPdf && /\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(catalogPdf);
   const [showCatalog, setShowCatalog] = useState(true);
+  // 画册放大弹窗（图片放大查看 / PDF 直接渲染内容）
+  const [catalogZoom, setCatalogZoom] = useState(false);
   const { toast } = useToast();
   const displayName = displayProductName(product);
   const primaryTitle = product.modelNo || displayName || product.name;
@@ -70,6 +72,16 @@ export function ResultCard({
     downloadKitList(product, comps, kitListTitle);
     toast(t('selectionResult.toasts.downloadedList', { title: kitListTitle }), 'success');
   };
+
+  // Esc 关闭画册放大弹窗
+  useEffect(() => {
+    if (!catalogZoom) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCatalogZoom(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [catalogZoom]);
 
   return (
     <div
@@ -209,23 +221,37 @@ export function ResultCard({
 
       {catalogPdf && (
         <div className="border-t border-outline-variant/10">
-          <button
-            onClick={() => setShowCatalog((v) => !v)}
-            className={`w-full px-3 md:px-4 py-1.5 flex items-center justify-between text-xs text-on-surface-variant hover:bg-surface-container-high/30 ${selectionPress}`}
-          >
+          {/* 标题行与子零件清单同构：左侧标题，右侧描边小按钮组 */}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 md:px-4 py-2 md:py-2.5 text-xs md:text-sm text-on-surface-variant">
             <span className="flex items-center gap-1">
               <Icon name="menu_book" size={14} />
               {t('selectionResult.catalogMaterials')}
             </span>
-            <Icon name={showCatalog ? 'expand_less' : 'expand_more'} size={16} />
-          </button>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                onClick={() => setShowCatalog((v) => !v)}
+                className={`inline-flex items-center gap-1 rounded-md border border-outline-variant/20 px-2 py-1 hover:bg-surface-container-high/40 ${selectionPress}`}
+              >
+                <Icon name={showCatalog ? 'visibility_off' : 'visibility'} size={14} />
+                <span>{showCatalog ? t('selectionResult.collapseCatalog') : t('selectionResult.viewCatalog')}</span>
+              </button>
+              <button
+                onClick={() => setCatalogZoom(true)}
+                className={`inline-flex items-center gap-1 rounded-md border border-outline-variant/20 px-2 py-1 hover:bg-surface-container-high/40 ${selectionPress}`}
+              >
+                <Icon name="zoom_in" size={14} />
+                <span>{t('selectionResult.zoomCatalog')}</span>
+              </button>
+            </div>
+          </div>
           {showCatalog && (
             <div className="px-3 md:px-4 pb-3">
               {isCatalogImage ? (
                 <img
                   src={catalogPdf}
                   alt={t('selectionResult.catalog')}
-                  className="max-h-80 rounded border border-outline-variant/10 object-contain"
+                  onClick={() => setCatalogZoom(true)}
+                  className="max-h-80 cursor-zoom-in rounded border border-outline-variant/10 object-contain transition-opacity hover:opacity-90"
                 />
               ) : (
                 <iframe
@@ -240,34 +266,44 @@ export function ResultCard({
       )}
 
       <div className="border-t border-outline-variant/10 px-3 md:px-4 py-2 md:py-2.5 flex items-center gap-1.5 md:gap-2 flex-wrap">
-        {onToggleInquiry && (
+        {onToggleInquiry ? (
           <button
             onClick={onToggleInquiry}
-            className={`inline-flex items-center gap-1 px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-bold rounded-lg transition-colors ${
+            className={`inline-flex items-center gap-1 px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium rounded-lg transition-colors ${
               selected
                 ? 'border border-primary-container/35 bg-primary-container/10 text-primary-container hover:bg-primary-container/15'
-                : 'bg-primary-container text-on-primary hover:opacity-90'
+                : 'border border-transparent bg-primary-container text-on-primary hover:opacity-90'
             } ${selectionPress}`}
           >
             <Icon name={selected ? 'check' : 'add'} size={14} />
-            <span>{selected ? t('selectionResult.addedInquiry') : t('selectionResult.addInquiry')}</span>
+            {/* 两态文案叠格（一显一隐）：按钮宽度恒取较长者，切换状态时后续按钮零位移 */}
+            <span className="grid">
+              <span className="col-start-1 row-start-1 invisible">{t('selectionResult.addedInquiry')}</span>
+              <span className="col-start-1 row-start-1">
+                {selected ? t('selectionResult.addedInquiry') : t('selectionResult.addInquiry')}
+              </span>
+            </span>
           </button>
-        )}
-        {catalogPdf && (
-          <a
-            href={catalogPdf}
-            target="_blank"
-            rel="noopener"
-            onClick={(event) => {
-              event.preventDefault();
-              openDocumentUrl(catalogPdf, { title: t('selectionResult.productCatalog') });
-            }}
-            className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
+        ) : onToggleSelect ? (
+          /* 询价关闭：清单用于批量导出 —— 显式「添加到清单」按钮（与勾选框同状态） */
+          <button
+            onClick={onToggleSelect}
+            className={`inline-flex items-center gap-1 px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium rounded-lg transition-colors ${
+              selected
+                ? 'border border-primary-container/35 bg-primary-container/10 text-primary-container hover:bg-primary-container/15'
+                : 'border border-transparent bg-primary-container text-on-primary hover:opacity-90'
+            } ${selectionPress}`}
           >
-            <Icon name="menu_book" size={14} />
-            <span>{t('selectionResult.catalog')}</span>
-          </a>
-        )}
+            <Icon name={selected ? 'check' : 'add'} size={14} />
+            {/* 同上：两态文案叠格防宽度跳动 */}
+            <span className="grid">
+              <span className="col-start-1 row-start-1 invisible">{t('selectionResult.addToList')}</span>
+              <span className="col-start-1 row-start-1">
+                {selected ? t('selectionResult.addedList') : t('selectionResult.addToList')}
+              </span>
+            </span>
+          </button>
+        ) : null}
         {product.pdfUrl && isSafeUrl(product.pdfUrl) && (
           <a
             href={product.pdfUrl}
@@ -313,6 +349,59 @@ export function ResultCard({
           <span>{t('selectionResult.support')}</span>
         </button>
       </div>
+
+      {/* 画册放大弹窗：图片放大查看 / PDF 直接渲染内容，头部保留新窗口打开（原底部画册按钮的能力并入这里） */}
+      {catalogZoom && catalogPdf && (
+        <div
+          className="fixed inset-0 z-[320] flex items-center justify-center bg-black/70 p-3 sm:p-6"
+          onClick={() => setCatalogZoom(false)}
+        >
+          <div
+            className="flex min-h-0 w-full max-w-5xl flex-1 flex-col overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-low shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3">
+              <div className="flex min-w-0 items-center gap-1.5 text-sm font-bold text-on-surface">
+                <Icon name="menu_book" size={16} className="shrink-0 text-primary-container" />
+                <span className="truncate">
+                  {primaryTitle} · {t('selectionResult.catalogMaterials')}
+                </span>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  onClick={() => openDocumentUrl(catalogPdf, { title: t('selectionResult.productCatalog') })}
+                  aria-label={t('selectionResult.productCatalog')}
+                  className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+                >
+                  <Icon name="open_in_new" size={16} />
+                </button>
+                <button
+                  onClick={() => setCatalogZoom(false)}
+                  aria-label={t('common.close')}
+                  className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+                >
+                  <Icon name="close" size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-surface-container-lowest p-2 sm:p-4">
+              {isCatalogImage ? (
+                <img
+                  src={catalogPdf}
+                  alt={t('selectionResult.catalog')}
+                  className="max-h-full max-w-full rounded object-contain"
+                />
+              ) : (
+                <iframe
+                  src={catalogPdf}
+                  className="h-full min-h-[60dvh] w-full rounded"
+                  title={t('selectionResult.catalogPdf')}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

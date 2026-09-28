@@ -226,8 +226,9 @@ export function AdminEmptyState({ icon, title, description, action, className }:
     <div
       className={mergeClassName(
         // 绝对定位铺满内容区、顶部按视口比例锚定：位置不受上方 tabs/工具栏（流内兄弟）与
-        // 描述文案行数影响，全站切换页面时空状态图标位置固定一致（内容区已挂 relative）
-        'absolute inset-0 flex min-h-[360px] flex-col items-center justify-start px-4 pt-[16dvh] text-center',
+        // 描述文案行数影响，全站切换页面时空状态图标位置固定一致（内容区已挂 relative）。
+        // 覆盖层本身 pointer-events-none：纯展示，不拦截流内兄弟（tabs/筛选行）的点击；仅 action 恢复交互
+        'pointer-events-none absolute inset-0 flex min-h-[360px] flex-col items-center justify-start px-4 pt-[16dvh] text-center',
         className,
       )}
     >
@@ -238,7 +239,7 @@ export function AdminEmptyState({ icon, title, description, action, className }:
       {description ? (
         <p className="mt-1 max-w-sm text-xs leading-relaxed text-on-surface-variant">{description}</p>
       ) : null}
-      {action ? <div className="mt-5 flex items-center justify-center">{action}</div> : null}
+      {action ? <div className="pointer-events-auto mt-5 flex items-center justify-center">{action}</div> : null}
     </div>
   );
 }

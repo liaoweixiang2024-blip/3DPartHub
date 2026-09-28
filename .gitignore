@@ -32,6 +32,7 @@ server/static/_safety_snapshots/
 server/static/watermark/
 server/static/drawings/
 server/static/option-images/
+server/static/selection-assets/
 server/static/ticket-attachments/
 server/static/html-previews/
 server/static/logo/
