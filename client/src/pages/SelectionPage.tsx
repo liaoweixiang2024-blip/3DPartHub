@@ -1789,7 +1789,8 @@ export default function SelectionPage() {
       )}
     </div>
   ) : search ? (
-    <div className="px-4 md:px-6 py-4 md:py-6">
+    /* 移动端 px-0 与步骤区同口径：搜索结果卡和标题卡左右对齐（面板透明，内边距只会在移动端造成缩进） */
+    <div className="px-0 md:px-6 py-4 md:py-6">
       {pageHeader}
       {filteredTotal > 0 ? (
         <div className="relative min-h-[220px]">
@@ -2420,7 +2421,9 @@ export default function SelectionPage() {
       {phase === 'sub' && subContent}
       {phase === 'wizard' &&
         (wizardContent || (
-          <div ref={wizardWrapRef} className="px-4 py-4 md:px-5 md:py-5">
+          // 移动端 px-0：面板在选型页是透明的，这层内边距会让选项卡比标题卡窄一截（左右对不齐）；
+          // 桌面保留 md:px-5 作为滚动面板的内容内边距
+          <div ref={wizardWrapRef} className="px-0 py-4 md:px-5 md:py-5">
             {pageHeader}
             <div className="space-y-0">
               <AnimatePresence mode="wait" initial={false}>
