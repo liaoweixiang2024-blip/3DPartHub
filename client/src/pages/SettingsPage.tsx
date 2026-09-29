@@ -2603,6 +2603,12 @@ function normalizeUploadPolicyForSave(value: unknown) {
     chunkSizeMb: clampNumber(policy.chunkSizeMb, DEFAULT_UPLOAD_POLICY.chunkSizeMb, 1, 1024),
     chunkThresholdMb: clampNumber(policy.chunkThresholdMb, DEFAULT_UPLOAD_POLICY.chunkThresholdMb, 1, 102400),
     optionImageMaxSizeMb: clampNumber(policy.optionImageMaxSizeMb, DEFAULT_UPLOAD_POLICY.optionImageMaxSizeMb, 1, 100),
+    selectionPdfMaxSizeMb: clampNumber(
+      policy.selectionPdfMaxSizeMb,
+      DEFAULT_UPLOAD_POLICY.selectionPdfMaxSizeMb,
+      1,
+      200,
+    ),
     selectionImportMaxSizeMb: clampNumber(
       policy.selectionImportMaxSizeMb,
       DEFAULT_UPLOAD_POLICY.selectionImportMaxSizeMb,
@@ -3514,6 +3520,17 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
             min={1}
             value={policy.optionImageMaxSizeMb}
             onChange={(e) => update({ optionImageMaxSizeMb: toNumber(e.target.value, policy.optionImageMaxSizeMb) })}
+            className={numberInputClass}
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs text-on-surface-variant">画册/规格书 PDF 上限 MB</span>
+          <input
+            name="selection-pdf-max-size-mb"
+            type="number"
+            min={1}
+            value={policy.selectionPdfMaxSizeMb}
+            onChange={(e) => update({ selectionPdfMaxSizeMb: toNumber(e.target.value, policy.selectionPdfMaxSizeMb) })}
             className={numberInputClass}
           />
         </label>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnDef, SelectionProduct, SelectionComponent } from '../../api/selections';
@@ -9,6 +9,7 @@ import { isSafeUrl } from '../../lib/sanitizeHtml';
 import Icon from '../shared/Icon';
 import SafeImage from '../shared/SafeImage';
 import { useToast } from '../shared/Toast';
+import { CatalogZoomModal } from './CatalogZoomModal';
 import { displayProductName, selectionMotion, selectionPress } from './selectionUtils';
 
 export function ResultCard({
@@ -52,7 +53,7 @@ export function ResultCard({
     product.categoryCatalogPdf && isSafeUrl(product.categoryCatalogPdf) ? product.categoryCatalogPdf : null;
   const isCatalogImage = catalogPdf && /\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(catalogPdf);
   const [showCatalog, setShowCatalog] = useState(true);
-  // 画册放大弹窗（图片放大查看 / PDF 直接渲染内容）
+  // 画册放大弹窗（图片缩放平移 / PDF 直接渲染内容，见 CatalogZoomModal）
   const [catalogZoom, setCatalogZoom] = useState(false);
   const { toast } = useToast();
   const displayName = displayProductName(product);
@@ -72,16 +73,6 @@ export function ResultCard({
     downloadKitList(product, comps, kitListTitle);
     toast(t('selectionResult.toasts.downloadedList', { title: kitListTitle }), 'success');
   };
-
-  // Esc 关闭画册放大弹窗
-  useEffect(() => {
-    if (!catalogZoom) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setCatalogZoom(false);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [catalogZoom]);
 
   return (
     <div
@@ -352,57 +343,15 @@ export function ResultCard({
         </button>
       </div>
 
-      {/* 画册放大弹窗：图片放大查看 / PDF 直接渲染内容，头部保留新窗口打开（原底部画册按钮的能力并入这里） */}
+      {/* 画册放大弹窗（portal 到 body + 图片缩放平移都在组件内）：卡片在选型页的
+          transform 动画容器内，弹窗必须脱离该包含块才能全屏置顶 */}
       {catalogZoom && catalogPdf && (
-        <div
-          className="fixed inset-0 z-[320] flex items-center justify-center bg-black/70 p-3 sm:p-6"
-          onClick={() => setCatalogZoom(false)}
-        >
-          <div
-            className="flex min-h-0 w-full max-w-5xl flex-1 flex-col overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-low shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3">
-              <div className="flex min-w-0 items-center gap-1.5 text-sm font-bold text-on-surface">
-                <Icon name="menu_book" size={16} className="shrink-0 text-primary-container" />
-                <span className="truncate">
-                  {primaryTitle} · {t('selectionResult.catalogMaterials')}
-                </span>
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  onClick={() => openDocumentUrl(catalogPdf, { title: t('selectionResult.productCatalog') })}
-                  aria-label={t('selectionResult.productCatalog')}
-                  className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-                >
-                  <Icon name="open_in_new" size={16} />
-                </button>
-                <button
-                  onClick={() => setCatalogZoom(false)}
-                  aria-label={t('common.close')}
-                  className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-                >
-                  <Icon name="close" size={18} />
-                </button>
-              </div>
-            </div>
-            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-surface-container-lowest p-2 sm:p-4">
-              {isCatalogImage ? (
-                <img
-                  src={catalogPdf}
-                  alt={t('selectionResult.catalog')}
-                  className="max-h-full max-w-full rounded object-contain"
-                />
-              ) : (
-                <iframe
-                  src={catalogPdf}
-                  className="h-full min-h-[60dvh] w-full rounded"
-                  title={t('selectionResult.catalogPdf')}
-                />
-              )}
-            </div>
-          </div>
-        </div>
+        <CatalogZoomModal
+          productTitle={primaryTitle}
+          src={catalogPdf}
+          isImage={!!isCatalogImage}
+          onClose={() => setCatalogZoom(false)}
+        />
       )}
     </div>
   );

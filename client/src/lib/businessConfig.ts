@@ -41,6 +41,7 @@ export interface UploadPolicy {
   chunkThresholdMb: number;
   optionImageMaxSizeMb: number;
   optionImageMimePattern: string;
+  selectionPdfMaxSizeMb: number;
   selectionImportMaxSizeMb: number;
   selectionImportMaxRows: number;
   selectionImportMaxColumns: number;
@@ -164,6 +165,7 @@ export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
   chunkThresholdMb: 20,
   optionImageMaxSizeMb: 5,
   optionImageMimePattern: 'image\\/(png|jpe?g|gif|webp|svg\\+xml)',
+  selectionPdfMaxSizeMb: 50,
   selectionImportMaxSizeMb: 5,
   selectionImportMaxRows: 10000,
   selectionImportMaxColumns: 200,
@@ -210,6 +212,7 @@ export function normalizeUploadPolicy(policy: UploadPolicy): UploadPolicy {
     chunkSizeMb: clamp(policy.chunkSizeMb, DEFAULT_UPLOAD_POLICY.chunkSizeMb, 1, 1024),
     chunkThresholdMb: clamp(policy.chunkThresholdMb, DEFAULT_UPLOAD_POLICY.chunkThresholdMb, 1, 102400),
     optionImageMaxSizeMb: clamp(policy.optionImageMaxSizeMb, DEFAULT_UPLOAD_POLICY.optionImageMaxSizeMb, 1, 100),
+    selectionPdfMaxSizeMb: clamp(policy.selectionPdfMaxSizeMb, DEFAULT_UPLOAD_POLICY.selectionPdfMaxSizeMb, 1, 200),
     selectionImportMaxSizeMb: clamp(
       policy.selectionImportMaxSizeMb,
       DEFAULT_UPLOAD_POLICY.selectionImportMaxSizeMb,

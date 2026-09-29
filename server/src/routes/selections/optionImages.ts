@@ -24,7 +24,13 @@ const PRODUCT_ASSET_EXTENSIONS: Record<string, string> = {
   ...OPTION_IMAGE_EXTENSIONS,
   'application/pdf': 'pdf',
 };
-const PRODUCT_PDF_MAX_BYTES = 20 * 1024 * 1024;
+/** 画册/规格书 PDF 上限（product-asset 端点）：走 uploadPolicy 配置（默认 50MB，管理端可调） */
+function productPdfMaxBytes(uploadPolicy: UploadPolicy): number {
+  const configuredMb = Number(uploadPolicy.selectionPdfMaxSizeMb);
+  const fallbackMb = Number(DEFAULT_UPLOAD_POLICY.selectionPdfMaxSizeMb);
+  const maxMb = Number.isFinite(configuredMb) && configuredMb > 0 ? configuredMb : fallbackMb;
+  return maxMb * 1024 * 1024;
+}
 
 class MaxBytesExceededError extends Error {
   constructor(readonly maxBytes: number) {
@@ -125,7 +131,7 @@ function optionImageUpload(req: AuthRequest, res: Response, next: NextFunction) 
 function productAssetUpload(req: AuthRequest, res: Response, next: NextFunction) {
   getBusinessConfig()
     .then(({ uploadPolicy }) => {
-      const maxBytes = Math.max(optionImageMaxBytes(uploadPolicy), PRODUCT_PDF_MAX_BYTES);
+      const maxBytes = Math.max(optionImageMaxBytes(uploadPolicy), productPdfMaxBytes(uploadPolicy));
       const upload = multer({
         defParamCharset: 'utf-8',
         dest: productAssetDir,
@@ -210,7 +216,7 @@ export function createSelectionOptionImagesRouter() {
         const contentType = normalizeMimeType(file.mimetype);
         const ext = productAssetExtFromMimeType(contentType);
         const isImage = Boolean(imageExtFromMimeType(contentType));
-        const maxBytes = isImage ? optionImageMaxBytes(uploadPolicy) : PRODUCT_PDF_MAX_BYTES;
+        const maxBytes = isImage ? optionImageMaxBytes(uploadPolicy) : productPdfMaxBytes(uploadPolicy);
 
         if (!ext || (!isImage && contentType !== 'application/pdf')) {
           cleanupUploadedFile(file);

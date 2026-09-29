@@ -99,6 +99,7 @@ export const DEFAULT_UPLOAD_POLICY_FOR_SETTINGS: UploadPolicy = {
   chunkThresholdMb: 20,
   optionImageMaxSizeMb: 5,
   optionImageMimePattern: 'image\\/(png|jpe?g|gif|webp|svg\\+xml)',
+  selectionPdfMaxSizeMb: 50,
   selectionImportMaxSizeMb: 5,
   selectionImportMaxRows: 10000,
   selectionImportMaxColumns: 200,

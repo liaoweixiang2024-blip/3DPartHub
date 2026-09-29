@@ -1426,8 +1426,9 @@ function Content() {
       await updateCategory(activeCat!.id, { optionImages: updated });
       mutateCats();
       toast('图片已上传', 'success');
-    } catch {
-      toast('上传失败', 'error');
+    } catch (err) {
+      // 带服务端原因（如「图片不能超过 5MB」），失败不改动现有数据
+      toast(getApiErrorMessage(err, '上传失败'), 'error');
     } finally {
       setUploadingVal(null);
     }
@@ -1468,8 +1469,8 @@ function Content() {
       try {
         await uploadOptCatalog(optImgField, targetVal, pdfFile);
         if (zone === 'image') toast('PDF 已上传到画册资料（画册区才收 PDF）', 'info');
-      } catch {
-        toast('上传 PDF 失败', 'error');
+      } catch (err) {
+        toast(getApiErrorMessage(err, '上传 PDF 失败'), 'error');
       }
       return;
     }
@@ -1479,8 +1480,8 @@ function Content() {
       if (zone === 'catalog') {
         try {
           await uploadOptCatalog(optImgField, targetVal, imageFile);
-        } catch {
-          toast('上传画册失败', 'error');
+        } catch (err) {
+          toast(getApiErrorMessage(err, '上传画册失败'), 'error');
         }
         return;
       }
@@ -1495,8 +1496,8 @@ function Content() {
         if (zone === 'catalog') {
           try {
             await uploadOptCatalog(optImgField, targetVal, file);
-          } catch {
-            toast('上传画册失败', 'error');
+          } catch (err) {
+            toast(getApiErrorMessage(err, '上传画册失败'), 'error');
           }
           return;
         }
@@ -3255,8 +3256,8 @@ function Content() {
               if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
                 try {
                   await uploadOptCatalog(optImgField, editOptVal, file);
-                } catch {
-                  toast('上传 PDF 失败', 'error');
+                } catch (err) {
+                  toast(getApiErrorMessage(err, '上传 PDF 失败'), 'error');
                 }
                 return;
               }
@@ -3429,8 +3430,8 @@ function Content() {
                                 ) {
                                   try {
                                     await uploadOptCatalog(optImgField, editOptVal, f);
-                                  } catch {
-                                    toast('上传失败', 'error');
+                                  } catch (err) {
+                                    toast(getApiErrorMessage(err, '上传失败'), 'error');
                                   }
                                 } else {
                                   toast('画册只支持图片或 PDF 文件', 'error');
@@ -3452,8 +3453,8 @@ function Content() {
                                   if (f) {
                                     try {
                                       await uploadOptCatalog(optImgField, editOptVal, f);
-                                    } catch {
-                                      toast('上传失败', 'error');
+                                    } catch (err) {
+                                      toast(getApiErrorMessage(err, '上传失败'), 'error');
                                     }
                                   }
                                   e.target.value = '';
