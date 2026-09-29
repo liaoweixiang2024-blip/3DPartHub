@@ -2509,7 +2509,11 @@ export default function SelectionPage() {
     <>
       <AdminPageShell
         mobileMainRef={mobileMainRef}
-        mobileMainClassName="min-h-0"
+        /* 禁 iOS 橡皮筋回弹：滚动器到顶继续下拉时整段内容（含冻结头）会被拖下再弹回，
+           看起来不稳定。scrollbar-hidden 全局类只给了 overscroll-behavior-y: contain
+           （仅阻断滚动链、不消自身回弹），且无 layer 全局 CSS 压过 Tailwind 工具类，
+           故用 ! 前缀强制 overscroll-behavior: none（iOS 16+ 生效） */
+        mobileMainClassName="min-h-0 !overscroll-none"
         mobileContentClassName={`flex min-h-full flex-col gap-3 px-3 py-3 pt-0 ${hideMobileBottomNav ? 'pb-3' : 'pb-safe-nav'}`}
         hideMobileBottomNav={hideMobileBottomNav}
       >
