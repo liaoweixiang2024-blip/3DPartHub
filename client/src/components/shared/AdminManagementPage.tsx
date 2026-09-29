@@ -315,8 +315,10 @@ export function AdminManagementPage({
         /* 整块冻结：背景与滚动容器底色一致（移动端 surface / 桌面 surface-dim），
            盖住卡片间隙防止滚动内容透出；z-40 压过表头粘性层的 20/30。
            不加投影：常驻阴影会在浅色模式下把标题卡+统计+工具栏框出一个矩形
-           （背景与页面同色的纯描边效果，深色模式下黑阴影不可见） */
-        <div className="sticky top-0 z-40 flex flex-col gap-3 bg-surface pb-3 md:gap-4 md:bg-surface-dim md:pb-4">
+           （背景与页面同色的纯描边效果，深色模式下黑阴影不可见）。
+           顶部呼吸间距放在块内（pt-4），使用方需同步去掉滚动容器包装层的顶部
+           内边距（pt-0），使静止位=吸顶位——标题/工具栏从滚动第一像素起零位移 */
+        <div className="sticky top-0 z-40 flex flex-col gap-3 bg-surface pt-4 pb-3 md:gap-4 md:bg-surface-dim md:pb-4">
           {heroNode}
           {statsNode}
           {toolbarNode}

@@ -2510,7 +2510,7 @@ export default function SelectionPage() {
       <AdminPageShell
         mobileMainRef={mobileMainRef}
         mobileMainClassName="min-h-0"
-        mobileContentClassName={`flex min-h-full flex-col gap-3 px-3 py-3 ${hideMobileBottomNav ? 'pb-3' : 'pb-safe-nav'}`}
+        mobileContentClassName={`flex min-h-full flex-col gap-3 px-3 py-3 pt-0 ${hideMobileBottomNav ? 'pb-3' : 'pb-safe-nav'}`}
         hideMobileBottomNav={hideMobileBottomNav}
       >
         <AdminManagementPage
@@ -2518,7 +2518,9 @@ export default function SelectionPage() {
           description={shellDescription}
           actions={shellActions}
           toolbar={selectionToolbar}
-          /* 移动端标题+工具栏整块吸顶（标题固定不下滚；向导阶段搜索框也常驻）；
+          /* 移动端标题+工具栏整块吸顶（标题固定不下滚；向导阶段搜索框也常驻），
+             配合上方 mobileContentClassName 的 pt-0 实现「静止位=吸顶位」：
+             滚动第一像素起标题/搜索框零位移，只有大类卡片与选项内容滚动；
              桌面端标题本就在滚动容器外，无需吸顶 */
           headerSticky={!isDesktop}
           className="app-public-tool-page app-public-tool-page-selection !h-auto min-h-full flex flex-col gap-3"
