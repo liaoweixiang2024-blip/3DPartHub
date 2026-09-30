@@ -315,6 +315,13 @@ app.use('/static', async (req, res, next) => {
 });
 
 // 云优先服务：配了云就从云端流式代理（支持 Range），未配云端 / 云端 miss 时回退 express.static 本地。
+// API GET 响应必须每次带 etag 再验证：没有显式 no-cache 时浏览器会「启发式缓存」
+// JSON（实测模型详情被缓存住旧 gltf_url，叠加静态 GLB 的 max-age=1d，普通刷新全程
+// 零网络请求——用户看到的一直是旧模型，误判为修复无效）
+app.use('/api', (req, res, next) => {
+  if (req.method === 'GET') res.set('Cache-Control', 'no-cache');
+  next();
+});
 app.use('/static', cloudFirstStatic);
 
 app.use(

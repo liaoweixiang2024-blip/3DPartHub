@@ -22,7 +22,7 @@ import {
   purgeModelFromCloud,
   removeModelFiles,
 } from '../../services/modelFiles.js';
-import { MODEL_STATUS } from '../../services/modelStatus.js';
+import { MODEL_STATUS, type ModelStatus } from '../../services/modelStatus.js';
 import { generateThumbnail } from '../../services/thumbnail.js';
 import { UPLOAD_REQUEST_TIMEOUT_MS } from '../../lib/uploadLimits.js';
 import { createNotification } from '../notifications.js';
@@ -124,6 +124,31 @@ function updateReconvertJob_progress(job: ReconvertJob, percent: number, message
   job.stage = 'processing';
   job.percent = Math.max(job.percent, Math.min(99, Math.round(percent)));
   job.message = message;
+}
+
+/** PROCESSING 视为已死的时间阈值：子进程超时 15 分钟 + 余量。
+ *  任务进程被杀（发版/重启）会让 status 永远停在 PROCESSING，后续重试全部 409
+ *  ——超过该时长按可重试处理（原子 updateMany 条件里放行）。 */
+const STALE_PROCESSING_MS = 20 * 60_000;
+
+/** 重转失败时恢复模型：回到动手前的状态，而不是标 FAILED。
+ *  重转的对象常常是「预览已可用但缺面」的 COMPLETED 模型——修复引擎失败把整个
+ *  模型打成 FAILED 会让详情页直接打不开（GLB 明明还在），用户被迫删模型重传。 */
+async function restoreModelAfterFailedReconvert(
+  prisma: PrismaClient,
+  m: { id: string; status: string; gltfUrl: string | null },
+) {
+  await prisma.model
+    .update({
+      where: { id: m.id },
+      data: {
+        status: m.status as ModelStatus,
+        // 子进程可能在失败前已覆写 GLB（如缩略图阶段才出错）：版本号打散浏览器缓存
+        ...(m.gltfUrl ? { gltfUrl: `${m.gltfUrl.split('?')[0]}?v=${Date.now().toString(36)}` } : {}),
+      },
+    })
+    .catch(() => {});
+  await cacheDelByPrefix('cache:models:');
 }
 
 function createReconvertJob(modelId: string, engine: 'standard' | 'gmsh'): ReconvertJob {
@@ -335,7 +360,11 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
           return;
         }
 
-        if (m.status === MODEL_STATUS.QUEUED || m.status === MODEL_STATUS.PROCESSING) {
+        // PROCESSING 且 updatedAt 未超时才挡：卡死任务（进程被杀）超时后允许重试
+        const isLiveProcessing =
+          (m.status === MODEL_STATUS.QUEUED || m.status === MODEL_STATUS.PROCESSING) &&
+          Date.now() - m.updatedAt.getTime() < STALE_PROCESSING_MS;
+        if (isLiveProcessing) {
           res.status(409).json({ detail: '模型正在转换中，请稍后重试' });
           return;
         }
@@ -356,7 +385,13 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         }
 
         const statusUpdate = await prisma.model.updateMany({
-          where: { id, status: { notIn: [MODEL_STATUS.QUEUED, MODEL_STATUS.PROCESSING] } },
+          where: {
+            id,
+            OR: [
+              { status: { notIn: [MODEL_STATUS.QUEUED, MODEL_STATUS.PROCESSING] } },
+              { updatedAt: { lt: new Date(Date.now() - STALE_PROCESSING_MS) } },
+            ],
+          },
           data: { status: MODEL_STATUS.PROCESSING },
         });
         if (statusUpdate.count === 0) {
@@ -444,12 +479,9 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
               },
             });
           } catch (err: unknown) {
-            await prisma.model
-              .update({
-                where: { id },
-                data: { status: MODEL_STATUS.FAILED },
-              })
-              .catch(() => {});
+            // 失败恢复到动手前状态（如 COMPLETED）：不能把原本预览正常的模型打成 FAILED，
+            // 否则详情页直接「转换失败，暂无预览」打不开，用户被迫删模型重传
+            await restoreModelAfterFailedReconvert(prisma, m);
             logger.error({ err }, 'Re-convert failed');
             Object.assign(job, {
               stage: 'error' as const,
@@ -487,7 +519,10 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
           res.status(404).json({ detail: '模型不存在' });
           return;
         }
-        if (m.status === MODEL_STATUS.QUEUED || m.status === MODEL_STATUS.PROCESSING) {
+        if (
+          (m.status === MODEL_STATUS.QUEUED || m.status === MODEL_STATUS.PROCESSING) &&
+          Date.now() - m.updatedAt.getTime() < STALE_PROCESSING_MS
+        ) {
           res.status(409).json({ detail: '模型正在转换中，请稍后重试' });
           return;
         }
@@ -503,7 +538,13 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         }
 
         const statusUpdate = await prisma.model.updateMany({
-          where: { id, status: { notIn: [MODEL_STATUS.QUEUED, MODEL_STATUS.PROCESSING] } },
+          where: {
+            id,
+            OR: [
+              { status: { notIn: [MODEL_STATUS.QUEUED, MODEL_STATUS.PROCESSING] } },
+              { updatedAt: { lt: new Date(Date.now() - STALE_PROCESSING_MS) } },
+            ],
+          },
           data: { status: MODEL_STATUS.PROCESSING },
         });
         if (statusUpdate.count === 0) {
@@ -565,12 +606,9 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
               },
             });
           } catch (err: unknown) {
-            await prisma.model
-              .update({
-                where: { id },
-                data: { status: MODEL_STATUS.FAILED },
-              })
-              .catch(() => {});
+            // 失败恢复到动手前状态：修复的对象通常预览本来就可用（只是缺面），
+            // 修复失败绝不能把模型打成 FAILED——否则详情页「转换失败」直接打不开
+            await restoreModelAfterFailedReconvert(prisma, m);
             logger.error({ err }, '[conversion] gmsh re-convert failed');
             const message = err instanceof Error ? err.message : '修复引擎重转失败';
             Object.assign(job, {

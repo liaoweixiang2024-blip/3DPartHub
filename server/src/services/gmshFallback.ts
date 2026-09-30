@@ -124,13 +124,10 @@ function parseMsh2(text: string): Msh2Mesh | null {
 /** 顶点法线与「参考法线」夹角阈值（弧度）——超过则不并入平滑，保留棱边锐利 */
 const SMOOTH_ANGLE_COS = Math.cos((35 * Math.PI) / 180);
 
-/**
- * 由共享节点网格生成平滑顶点法线（角度阈值法）：
- * 每个顶点收集邻接面法线，与种子面法线夹角 < 35° 的才平均——
- * 圆柱/球面相邻面法线夹角小，平滑成连续渐变；棱边两侧夹角大，保持锐利。
- * 这与主引擎 OCCT 顶点法线的观感一致。
- */
-function computeSmoothNormals(positions: number[], indices: number[]): number[] {
+/** 由共享节点网格生成平滑顶点法线（角度阈值法）——converter 的精确补丁注入后共用：
+ * 每个顶点收集邻接面法线，与种子面法线夹角 < 35° 的才平均——圆柱/球面平滑成连续渐变，
+ * 棱边保持锐利，与主引擎 OCCT 顶点法线观感一致。 */
+export function computeSmoothNormals(positions: number[], indices: number[]): number[] {
   const vertexCount = positions.length / 3;
   const faceCount = indices.length / 3;
 
@@ -201,9 +198,13 @@ function computeSmoothNormals(positions: number[], indices: number[]): number[] 
 function gmshArgs(inputPath: string, mshPath: string, clmax: number, clmin: number) {
   // msh2（ASCII）：节点在单元间共享，才能做角度阈值平滑法线
   // （STL 逐三角独立顶点 + 面法线 → flat shading，圆柱/球面呈多面体棱面）
+  // -2 = 只网格化表面：预览只消费面单元（parseMsh2 跳过体单元），体网格纯浪费，
+  //   而且正是失败主因——个别曲面网格化失败会连带 volume 失败（实测 periodic
+  //   surface 网格化失败时 -3 全盘报错退出，-2 下其余面全部正常产出）。
+  //   注意不能去掉网格化 flag：没有 -2/-3 时 gmsh 会开图形界面等待交互、永不退出。
   return [
     inputPath,
-    '-3',
+    '-2',
     '-format',
     'msh2',
     '-o',
@@ -211,12 +212,24 @@ function gmshArgs(inputPath: string, mshPath: string, clmax: number, clmin: numb
     '-clmax',
     clmax.toFixed(4),
     '-clcurv',
-    '20',
+    '30',
     '-clmin',
     clmin.toFixed(4),
     '-v',
     '2',
   ];
+}
+
+/** 产物驱动的成功判定：gmsh 对个别失败曲面会以非零码退出，但其余面已正常写入
+ *  msh——预览只要解析出三角形就可用（缺一个曲面远好于整个修复失败）。
+ *  每次尝试前先清掉旧产物，避免把上一次的残留当成本次结果。 */
+function tryParseMsh(mshPath: string): Msh2Mesh | null {
+  if (!existsSync(mshPath)) return null;
+  try {
+    return parseMsh2(readFileSync(mshPath, 'utf8'));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -234,13 +247,14 @@ export async function convertStepViaGmshAsync(
     tmpDir = mkdtempSync(join(tmpdir(), 'gmsh-fallback-'));
     const mshPath = join(tmpDir, 'out.msh');
     const baseSize = Math.max(1, estimatedModelSizeMm);
-    const attempts = [Math.min(2, baseSize / 120), Math.min(1, baseSize / 240), Math.min(0.5, baseSize / 480), 0.2];
-    const clmin = Math.max(0.05, baseSize / 1000);
-    let ok = false;
+    const attempts = [Math.min(2, baseSize / 160), Math.min(1, baseSize / 240), Math.min(0.5, baseSize / 480), 0.2];
+    const clmin = Math.max(0.03, baseSize / 1600);
+    let mesh: Msh2Mesh | null = null;
     let lastErr: unknown = null;
     const gmshBin = resolveGmshBin();
     if (!gmshBin) return null;
     for (const clmax of attempts) {
+      rmSync(mshPath, { force: true });
       const err = await new Promise<string | null>((resolve) => {
         const child = spawn(gmshBin, gmshArgs(inputPath, mshPath, clmax, clmin), {
           stdio: ['ignore', 'ignore', 'pipe'],
@@ -264,20 +278,17 @@ export async function convertStepViaGmshAsync(
         });
       });
       if (err) {
+        // 非零退出码不代表产物无效（个别曲面失败仍写出其余面）——先看产物再定
         lastErr = new Error(err);
-        continue;
       }
-      if (existsSync(mshPath)) {
-        ok = true;
-        break;
-      }
+      mesh = tryParseMsh(mshPath);
+      if (mesh) break;
+      if (!err) lastErr = new Error('gmsh 未产出网格文件');
     }
-    if (!ok) {
+    if (!mesh) {
       if (lastErr) throw lastErr;
       return null;
     }
-    const mesh = parseMsh2(readFileSync(mshPath, 'utf8'));
-    if (!mesh) return null;
     const normals = computeSmoothNormals(mesh.positions, mesh.indices);
     return {
       attributes: {
@@ -323,56 +334,37 @@ export function convertStepViaGmsh(
     // clmax 阶梯重试：粗网格快但多 volume 装配易边界相交失败，失败自动加密一档
     // （实测浮球装配在 clmax>2 时报 segment-facet intersection，0.5 档成功）
     const baseSize = Math.max(1, estimatedModelSizeMm);
-    const attempts = [Math.min(2, baseSize / 120), Math.min(1, baseSize / 240), Math.min(0.5, baseSize / 480), 0.2];
+    const attempts = [Math.min(2, baseSize / 160), Math.min(1, baseSize / 240), Math.min(0.5, baseSize / 480), 0.2];
     // 曲率自适应（对齐主引擎精度）：
     // - clcurv 20：每 2π 弧度至少 20 段（18°/段），小圆角/小孔按曲率细分而不是被
     //   clmax 切平——否则 R1 的圆角只有 3 段，观感明显比主引擎粗
     // - clmin = size/1000：与主引擎 linearDeflection（bbox 比例 0.001）同基准的
     //   最小边长下限，防止 clcurv 对微小特征无限细分（实测无下限时浮球装配
     //   冲到 220 万三角/300MB+，加上限后 45.6 万——与主引擎同量级）
-    const clmin = Math.max(0.05, baseSize / 1000);
-    let ok = false;
+    const clmin = Math.max(0.03, baseSize / 1600);
+    let mesh: Msh2Mesh | null = null;
     let lastErr: unknown = null;
     const gmshBin = resolveGmshBin();
     if (!gmshBin) return null;
     for (const clmax of attempts) {
+      rmSync(mshPath, { force: true });
       try {
-        execFileSync(
-          // msh2（ASCII）：节点在单元间共享，才能做角度阈值平滑法线
-          // （STL 逐三角独立顶点 + 面法线 → flat shading，圆柱/球面呈多面体棱面）
-          gmshBin,
-          [
-            inputPath,
-            '-3',
-            '-format',
-            'msh2',
-            '-o',
-            mshPath,
-            '-clmax',
-            clmax.toFixed(4),
-            '-clcurv',
-            '20',
-            '-clmin',
-            clmin.toFixed(4),
-            '-v',
-            '2',
-          ],
-          { timeout: 300_000, stdio: ['ignore', 'ignore', 'pipe'] },
-        );
-        if (existsSync(mshPath)) {
-          ok = true;
-          break;
-        }
+        execFileSync(gmshBin, gmshArgs(inputPath, mshPath, clmax, clmin), {
+          timeout: 300_000,
+          stdio: ['ignore', 'ignore', 'pipe'],
+        });
       } catch (err) {
+        // 非零退出码不代表产物无效（个别曲面失败仍写出其余面）——先看产物再定
         lastErr = err;
       }
+      mesh = tryParseMsh(mshPath);
+      if (mesh) break;
+      if (!lastErr) lastErr = new Error('gmsh 未产出网格文件');
     }
-    if (!ok) {
+    if (!mesh) {
       if (lastErr) throw lastErr;
       return null;
     }
-    const mesh = parseMsh2(readFileSync(mshPath, 'utf8'));
-    if (!mesh) return null;
     const normals = computeSmoothNormals(mesh.positions, mesh.indices);
     return {
       attributes: {

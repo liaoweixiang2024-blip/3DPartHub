@@ -125,8 +125,9 @@ export default function EditDialog({
         final.result?.thumbnail_warning ? 'info' : 'success',
       );
       ok = true;
-    } catch {
-      toast('重新生成失败', 'error');
+    } catch (err) {
+      // 带上真实原因（如「转换子进程异常退出」「gmsh 转换失败」），只弹「重新生成失败」无法定位
+      toast(err instanceof Error && err.message ? err.message : '重新生成失败', 'error');
     } finally {
       setRegenerating(false);
     }

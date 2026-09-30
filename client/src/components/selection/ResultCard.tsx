@@ -52,7 +52,8 @@ export function ResultCard({
   const catalogPdf =
     product.categoryCatalogPdf && isSafeUrl(product.categoryCatalogPdf) ? product.categoryCatalogPdf : null;
   const isCatalogImage = catalogPdf && /\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(catalogPdf);
-  const [showCatalog, setShowCatalog] = useState(true);
+  // 画册默认折叠，用户点「查看画册」再展开
+  const [showCatalog, setShowCatalog] = useState(false);
   // 画册放大弹窗（图片缩放平移 / PDF 直接渲染内容，见 CatalogZoomModal）
   const [catalogZoom, setCatalogZoom] = useState(false);
   const { toast } = useToast();
