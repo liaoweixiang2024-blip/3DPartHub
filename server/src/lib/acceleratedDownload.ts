@@ -2,7 +2,10 @@ import { createReadStream, statSync } from 'node:fs';
 import { extname, relative, resolve, sep } from 'node:path';
 import type { Request, Response } from 'express';
 import { config } from './config.js';
+import { createLogger } from './logger.js';
 import { getCachedSettings } from './settings.js';
+
+const log = createLogger({ component: 'accelerated-download' });
 
 type Disposition = 'attachment' | 'inline';
 
@@ -123,6 +126,7 @@ export function sendAcceleratedFile(
   }
 
   let fileSize = 0;
+  let fileMtimeMs = 0;
   try {
     const stat = statSync(absolutePath);
     if (!stat.isFile()) {
@@ -130,6 +134,7 @@ export function sendAcceleratedFile(
       return;
     }
     fileSize = stat.size;
+    fileMtimeMs = stat.mtimeMs;
   } catch {
     res.status(404).json({ detail: '文件不存在' });
     return;
@@ -141,6 +146,13 @@ export function sendAcceleratedFile(
   res.setHeader('Cache-Control', cacheControl);
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Content-Length', String(fileSize));
+  // 断点续传验证器（RFC 7233）：中断重连时客户端带 If-Range 校验文件未变才续传，
+  // 缺验证器时部分浏览器/下载工具（Safari、迅雷/IDM 等）会放弃续传、整单从零重下——
+  // 大文件（GB 级备份）下载被网络抖动打断后表现为「快完成了又从头开始」。
+  const etag = `"${fileSize}-${fileMtimeMs}"`;
+  const lastModified = new Date(fileMtimeMs).toUTCString();
+  res.setHeader('ETag', etag);
+  res.setHeader('Last-Modified', lastModified);
 
   if (req.method === 'HEAD') {
     res.status(200).end();
@@ -162,6 +174,10 @@ export function sendAcceleratedFile(
   }
 
   const range = parseRangeHeader(req.headers.range, fileSize);
+  // If-Range 匹配才续传（RFC 7233 §3.2）：验证器不符说明文件已变化，回退整单 200，
+  // 客户端不会把新旧两段拼成坏文件。无 If-Range 头的裸 Range 请求照旧 206。
+  const ifRange = Array.isArray(req.headers['if-range']) ? req.headers['if-range'][0] : req.headers['if-range'];
+  const ifRangeMatches = !ifRange || ifRange === etag || (ifRange === lastModified && !ifRange.startsWith('W/'));
   let streamOptions: { start?: number; end?: number } | undefined;
   if (req.headers.range) {
     if (!range) {
@@ -171,14 +187,24 @@ export function sendAcceleratedFile(
       res.end();
       return;
     }
-    streamOptions = { start: range.start, end: range.end };
-    res.status(206);
-    res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${fileSize}`);
-    res.setHeader('Content-Length', String(range.end - range.start + 1));
+    if (ifRangeMatches) {
+      streamOptions = { start: range.start, end: range.end };
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${fileSize}`);
+      res.setHeader('Content-Length', String(range.end - range.start + 1));
+    }
+    // If-Range 不匹配：忽略 Range，按整单 200 下发（Content-Length 已是全量大小）
   }
 
   const stream = createReadStream(absolutePath, streamOptions);
-  stream.on('error', () => stream.destroy());
+  stream.on('error', (err) => {
+    // 读流失败必须留痕且在连接层掐断：只 destroy 流会让响应以「短于 Content-Length
+    // 的正常结束」收尾，客户端可能把截断文件当下载成功保存；destroy 响应则明确
+    // 标记中断，浏览器/下载工具会走断点续传（配合上面的 ETag/If-Range 可靠恢复）。
+    log.error({ err, filePath: absolutePath }, 'File download stream failed');
+    stream.destroy();
+    res.destroy();
+  });
   res.on('close', () => {
     if (!stream.destroyed) stream.destroy();
   });
