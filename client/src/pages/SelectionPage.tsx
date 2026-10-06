@@ -1098,7 +1098,7 @@ export default function SelectionPage() {
           className={
             isDesktop
               ? 'flex aspect-[2/1] w-44 shrink-0 items-center justify-center bg-surface-container-low text-primary-container/40'
-              : 'm-2 flex h-14 w-20 shrink-0 items-center justify-center rounded-lg bg-surface-container-high/45 text-primary-container/45'
+              : 'm-2 flex h-14 w-20 shrink-0 items-center justify-center rounded-lg bg-(--selection-thumb-bg) text-primary-container/45'
           }
         >
           <Icon name={fallbackIcon} size={isDesktop ? 32 : 28} />
@@ -1111,7 +1111,7 @@ export default function SelectionPage() {
         className={
           isDesktop
             ? 'aspect-[2/1] w-44 shrink-0 overflow-hidden'
-            : 'm-2 h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-surface-container-high/45'
+            : 'm-2 h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-(--selection-thumb-bg)'
         }
       >
         <SafeImage
@@ -2477,7 +2477,11 @@ export default function SelectionPage() {
         };
 
   const phaseContent = (
-    <motion.div key={selectionPhaseKey} {...phaseMotionProps} className="min-w-0 transform-gpu">
+    // 不挂 transform-gpu：它给整个列表造常驻 GPU 合成层，iOS 触摸时再把按住的
+    // 分类卡提成子层，半透明卡背景就叠在自己图层的纯白 tile 上——按住/滑动的
+    // 那张卡整张变纯白。入场动画期间 framer-motion 会临时建层（0.16s 后自动
+    // 释放），不需要常驻层提示。
+    <motion.div key={selectionPhaseKey} {...phaseMotionProps} className="min-w-0">
       {phase === 'group' && groupContent}
       {phase === 'sub' && subContent}
       {phase === 'wizard' &&

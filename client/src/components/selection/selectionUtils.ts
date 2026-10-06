@@ -190,10 +190,13 @@ export function mobileCategoryCardClass(active: boolean) {
   // GPU 合成层，iOS 滚动时层间合成会出现「按住的卡背景变白/顶部分隔线显形」的
   // 渲染瑕疵（个人设置页行无此物也不出问题）；入场动画由 framer-motion 临时管理，
   // 结束后自动清 transform，不需要常驻层提示。
-  return `group relative flex w-full select-none items-stretch overflow-hidden border-0 border-t border-outline-variant/12 text-left first:border-t-0 first:rounded-t-xl last:rounded-b-xl ${selectionMotion} md:focus-visible:z-10 md:focus-visible:outline md:focus-visible:outline-2 md:focus-visible:outline-primary-container/60 ${
+  // 背景/边框必须用压平的不透明色（--selection-card-* 变量，见 global.css）：
+  // 半透明背景被 iOS 提成独立合成层后会叠在图层自身的纯白 tile 上，按住的卡
+  // 整张变纯白——压平成不透明后任何层状态下颜色都不可能变。
+  return `group relative flex w-full select-none items-stretch overflow-hidden border-0 border-t border-(--selection-card-border) text-left first:border-t-0 first:rounded-t-xl last:rounded-b-xl ${selectionMotion} md:focus-visible:z-10 md:focus-visible:outline md:focus-visible:outline-2 md:focus-visible:outline-primary-container/60 ${
     active
-      ? 'z-[1] bg-primary-container/8 shadow-[inset_3px_0_0_var(--color-primary-container),0_6px_16px_rgba(249,115,22,0.10)]'
-      : 'bg-surface-container-low/45 shadow-[0_1px_3px_rgba(15,23,42,0.06)]'
+      ? 'z-[1] bg-(--selection-card-bg-active) shadow-[inset_3px_0_0_var(--color-primary-container),0_6px_16px_rgba(249,115,22,0.10)]'
+      : 'bg-(--selection-card-bg) shadow-[0_1px_3px_rgba(15,23,42,0.06)]'
   }`;
 }
 

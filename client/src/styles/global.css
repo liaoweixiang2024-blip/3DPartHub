@@ -620,3 +620,17 @@ a,
 [data-selection-category-card] * {
   pointer-events: none;
 }
+
+/* 大分类卡的背景/边框必须「预压平成不透明色」：半透明背景（/45、/8、边框 /12）
+   在 iOS 触摸时被提成独立合成层后，颜色直接叠在图层自身的纯白 tile 上——
+   按住/滑动的那张卡会整张变纯白（半透明白盖过页面暖底）。这是 WebKit 的
+   渲染行为，与任何 CSS 状态无关（Chromium 中按住全程计算样式零变化可证）。
+   下面用 color-mix 把「透明」换成页面底色（--color-surface，即根节点 bg-surface），
+   混色公式与原 /透明度 完全一致，视觉不变，但颜色不透明——任何合成层状态下
+   都不可能再变白/变深。缩略图槽同理（挂在卡片上供子元素继承）。 */
+[data-selection-category-card] {
+  --selection-card-bg: color-mix(in srgb, var(--color-surface-container-low) 45%, var(--color-surface));
+  --selection-card-bg-active: color-mix(in srgb, var(--color-primary-container) 8%, var(--selection-card-bg));
+  --selection-card-border: color-mix(in srgb, var(--color-outline-variant) 12%, var(--selection-card-bg));
+  --selection-thumb-bg: color-mix(in srgb, var(--color-surface-container-high) 45%, var(--selection-card-bg));
+}
