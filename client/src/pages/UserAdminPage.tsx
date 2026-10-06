@@ -235,6 +235,16 @@ export default function UserAdminPage() {
     }
   }
 
+  // 解除登录锁定（登录防爆破：邮箱 5 次失败出验证码 / 30 次临时锁号 / IP 20 次锁网络，均 15 分钟自动解除）
+  async function handleUnlockLogin(user: UserItem) {
+    try {
+      await client.post('/admin/users/unlock-login', { email: user.email });
+      toast(`已解锁 ${user.username || user.email} 的登录`, 'success');
+    } catch (err: unknown) {
+      toast(getErrorMessage(err, '解锁失败'), 'error');
+    }
+  }
+
   async function handleDelete(userId: string) {
     try {
       await client.delete(`/admin/users/${userId}`);
@@ -538,6 +548,14 @@ export default function UserAdminPage() {
                     aria-label={u.disabled ? '启用' : '禁用'}
                   />
                   <AdminIconButton icon="edit" onClick={() => setEditTarget(u)} size="icon-sm" aria-label="编辑用户" />
+                  <AdminIconButton
+                    icon="vpn_key"
+                    onClick={() => handleUnlockLogin(u)}
+                    size="icon-sm"
+                    variant="secondary"
+                    aria-label="解锁登录"
+                    title="解锁登录（清除该账号登录失败锁定/验证码状态）"
+                  />
                   <AdminIconButton
                     icon="delete"
                     onClick={() => setDeleteTarget({ id: u.id, username: u.username })}

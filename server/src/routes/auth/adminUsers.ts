@@ -11,6 +11,7 @@ import { prisma } from '../../lib/prisma.js';
 import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { clearLoginLockState } from './session.js';
 
 const RESET_TOKEN_TTL_SECONDS = 1800;
 const PASSWORD_MIN_LENGTH = 8;
@@ -485,6 +486,35 @@ export function createAdminUsersRouter() {
         res.json({ ok: true });
       } catch {
         res.status(500).json({ detail: '发送重置邮件失败' });
+      }
+    },
+  );
+
+  // ===== Unlock login (clear login failure counters) =====
+  // 登录防爆破三层：邮箱 5 次失败→图形验证码 / 30 次→临时锁号 / IP 20 次→网络锁。
+  // 锁号与网络锁默认 15 分钟自动解除；此接口供管理员立即解锁被误伤的用户。
+  router.post(
+    '/api/admin/users/unlock-login',
+    authMiddleware,
+    requireRole('ADMIN'),
+    async (req: AuthRequest, res: Response) => {
+      const body = (req.body ?? {}) as { email?: unknown; ip?: unknown };
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+      if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        res.status(400).json({ detail: '邮箱格式无效' });
+        return;
+      }
+      const ip = typeof body.ip === 'string' ? body.ip : undefined;
+      try {
+        const user = await prisma.user.findUnique({ where: { email }, select: { id: true, email: true } });
+        if (!user) {
+          res.status(404).json({ detail: '用户不存在' });
+          return;
+        }
+        await clearLoginLockState({ email: user.email, ip });
+        res.json({ ok: true, email: user.email });
+      } catch {
+        res.status(500).json({ detail: '解锁失败' });
       }
     },
   );

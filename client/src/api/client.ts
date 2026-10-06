@@ -76,14 +76,15 @@ let failedQueue: Array<{
 }> = [];
 let refreshInProgress = false;
 
-// 会话失效的「提示 + 登出 + 跳登录页」全局只执行一次：
-// 并发请求同时吃 401 时（如开启浏览门槛后打开首页），不去重会叠一排「登录状态已失效」toast。
+// 会话失效的「登出 + 跳登录页」全局只执行一次：
+// 并发请求同时吃 401 时（如开启浏览门槛后打开首页），不去重会重复处理。
 let sessionExpiredHandled = false;
 
 function handleSessionExpiredOnce() {
   if (sessionExpiredHandled) return;
   sessionExpiredHandled = true;
-  notifyGlobalError(tToast('sessionExpired', 'Your session has expired. Please log in again'));
+  // 不弹右上角错误提示：跳到登录页（带回跳地址）本身已说明「请重新登录」，
+  // 再叠一条错误 toast 只会打扰
   useAuthStore.getState().logout();
   // 带上当前位置，登录后可回跳；已是 /login 则不再跳
   if (!window.location.pathname.startsWith('/login')) {

@@ -436,7 +436,7 @@ export default function CategoryNavPage() {
   const nodesOfGroup = (groupId: string) => modelSection?.nodes.filter((n) => n.groupId === groupId) ?? [];
 
   return (
-    <PublicPageShell className="bg-surface-dim">
+    <PublicPageShell className="bg-surface-dim" mobilePadded>
       <AdminManagementPage className="category-nav-page" title={pageTitle} description={pageDescription}>
         <AdminContentPanel scroll className="flex flex-col overflow-y-auto">
           {/* 原文件 body：p-3 sm:p-8 max-w-[1300px] mx-auto——背景与页头 hero 同色（surface-container-low）。

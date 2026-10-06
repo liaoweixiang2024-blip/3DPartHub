@@ -17,6 +17,11 @@ interface PublicPageShellProps {
   onMobileMenuToggle?: () => void;
   showMobileBottomNav?: boolean;
   keepMobileDrawerMounted?: boolean;
+  /** 移动端补标准内容包装层（px-4 py-4 + 底部安全区）：默认分支无内边距，
+      供全屏自管布局页（模型详情/登录/分享）使用；标准管理结构页
+      （AdminManagementPage + AdminPageHero）传 true——否则标题卡贴死顶栏与屏幕边缘，
+      与 AdminPageShell 页面（自带该包装层）间距不一致 */
+  mobilePadded?: boolean;
 }
 
 export function PublicPageShell({
@@ -27,6 +32,7 @@ export function PublicPageShell({
   onMobileMenuToggle,
   showMobileBottomNav = true,
   keepMobileDrawerMounted = false,
+  mobilePadded = false,
 }: PublicPageShellProps) {
   const inLayout = useContext(ShellLayoutContext);
   const isDesktop = useMediaQuery('(min-width: 768px)');
@@ -61,6 +67,10 @@ export function PublicPageShell({
       );
     }
     // Mobile inside layout — wrap in flex container so children with flex-1 get proper height
+    if (mobilePadded) {
+      // 标准内容包装层：与 AdminPageShell 移动端同款间距（16px + 底部安全区）
+      return <div className="flex h-full min-h-0 flex-1 flex-col px-4 py-4 pb-safe-nav">{children}</div>;
+    }
     return <div className="flex h-full min-h-0 flex-1 flex-col">{children}</div>;
   }
 
@@ -90,7 +100,7 @@ export function PublicPageShell({
         (keepMobileDrawerMounted || navOpen ? (
           <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
         ) : null)}
-      {children}
+      {mobilePadded ? <div className="flex min-h-0 flex-1 flex-col px-4 py-4 pb-safe-nav">{children}</div> : children}
       {showMobileBottomNav ? <BottomNav /> : null}
     </div>
   );

@@ -83,6 +83,8 @@ export default function LoginPage() {
   const [captchaSvg, setCaptchaSvg] = useState('');
   const [captchaId, setCaptchaId] = useState('');
   const [captchaText, setCaptchaText] = useState('');
+  // 登录模式：该邮箱失败达到阈值后服务端要求图形验证码（防爆破；不锁号，输对验证码仍可登录）
+  const [loginNeedsCaptcha, setLoginNeedsCaptcha] = useState(false);
 
   // Email code state
   const [emailCode, setEmailCode] = useState('');
@@ -162,6 +164,9 @@ export default function LoginPage() {
     else if (!validateEmail(email)) errs.email = t('auth.errors.emailInvalid');
     if (!password) errs.password = t('auth.errors.passwordRequired');
     else if (password.length < 8) errs.password = t('auth.errors.passwordMin');
+    if (mode === 'login' && loginNeedsCaptcha && !captchaText) {
+      errs.captchaText = t('auth.errors.captchaRequired');
+    }
     if (mode === 'register') {
       const usernameError = validateRegisterUsername(username, publicSettings, t);
       if (usernameError) errs.username = usernameError;
@@ -193,7 +198,12 @@ export default function LoginPage() {
 
     try {
       if (mode === 'login') {
-        const result = await authApi.login({ email, password, rememberMe });
+        const result = await authApi.login({
+          email,
+          password,
+          rememberMe,
+          ...(loginNeedsCaptcha ? { captchaId, captchaText } : {}),
+        });
         login(result.user, result.tokens, rememberMe);
         navigate(from, { replace: true });
       } else {
@@ -214,7 +224,19 @@ export default function LoginPage() {
       setApiError(
         getErrorMessage(err, mode === 'login' ? t('auth.errors.loginFailed') : t('auth.errors.registerFailed')),
       );
-      if (mode === 'register') refreshCaptcha();
+      if (mode === 'register') {
+        refreshCaptcha();
+      } else {
+        // 登录失败达到阈值：服务端在响应里带 captchaRequired → 登录表单升级出验证码
+        const data = (err as { response?: { data?: { captchaRequired?: boolean } } })?.response?.data;
+        if (data?.captchaRequired && !loginNeedsCaptcha) {
+          setLoginNeedsCaptcha(true);
+          refreshCaptcha();
+        } else if (loginNeedsCaptcha) {
+          // 已在验证码模式：验证码是一次性的，失败后刷新重取
+          refreshCaptcha();
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -226,11 +248,41 @@ export default function LoginPage() {
     setApiError('');
     setEmailCode('');
     setCaptchaText('');
+    setLoginNeedsCaptcha(false);
     setPhone('');
     setCompany('');
     addressRef.current = '';
     setInviteCode('');
   };
+
+  // 图形验证码块：注册模式常驻；登录模式仅在失败达到阈值（服务端要求）后出现
+  const captchaField = (
+    <div>
+      <AppFormLabel uppercase>{t('auth.captcha')}</AppFormLabel>
+      <div className="flex gap-2 items-center">
+        <AppTextInput
+          type="text"
+          value={captchaText}
+          onChange={(e) => setCaptchaText(e.target.value)}
+          className="min-w-0 flex-1 px-3"
+          error={Boolean(errors.captchaText)}
+          fieldSize="lg"
+          placeholder={t('auth.codePlaceholder')}
+          maxLength={6}
+        />
+        {captchaSvg && (
+          <button
+            type="button"
+            onClick={refreshCaptcha}
+            className="shrink-0 cursor-pointer rounded-sm overflow-hidden border border-outline-variant/30 hover:opacity-80 transition-opacity [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(captchaSvg) }}
+            style={{ width: 150, height: 44 }}
+          />
+        )}
+      </div>
+      {errors.captchaText && <span className={APP_FIELD_ERROR_CLASS}>{errors.captchaText}</span>}
+    </div>
+  );
 
   return (
     <PublicPageShell showMobileBottomNav={false}>
@@ -341,33 +393,7 @@ export default function LoginPage() {
               {errors.email && <span className={APP_FIELD_ERROR_CLASS}>{errors.email}</span>}
             </div>
 
-            {mode === 'register' && (
-              <div>
-                <AppFormLabel uppercase>{t('auth.captcha')}</AppFormLabel>
-                <div className="flex gap-2 items-center">
-                  <AppTextInput
-                    type="text"
-                    value={captchaText}
-                    onChange={(e) => setCaptchaText(e.target.value)}
-                    className="min-w-0 flex-1 px-3"
-                    error={Boolean(errors.captchaText)}
-                    fieldSize="lg"
-                    placeholder={t('auth.codePlaceholder')}
-                    maxLength={6}
-                  />
-                  {captchaSvg && (
-                    <button
-                      type="button"
-                      onClick={refreshCaptcha}
-                      className="shrink-0 cursor-pointer rounded-sm overflow-hidden border border-outline-variant/30 hover:opacity-80 transition-opacity [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
-                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(captchaSvg) }}
-                      style={{ width: 150, height: 44 }}
-                    />
-                  )}
-                </div>
-                {errors.captchaText && <span className={APP_FIELD_ERROR_CLASS}>{errors.captchaText}</span>}
-              </div>
-            )}
+            {mode === 'register' && captchaField}
 
             {mode === 'register' && (
               <div>
@@ -419,6 +445,9 @@ export default function LoginPage() {
               </div>
               {errors.password && <span className={APP_FIELD_ERROR_CLASS}>{errors.password}</span>}
             </div>
+
+            {/* 登录失败达到阈值后服务端要求验证码（防爆破，输对即可正常登录，账号不会被锁死） */}
+            {mode === 'login' && loginNeedsCaptcha && captchaField}
 
             {mode === 'register' && (
               <div>

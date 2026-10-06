@@ -125,6 +125,12 @@ export function isBrowseLoginRequiredError(error: unknown): boolean {
   );
 }
 
+/** 会话过期 401：client.ts 拦截器已统一承接（登出 + 跳登录页，不弹错误 toast），
+ *  SWR 全局 onError 等兜底漏斗对这类错误静默，避免跳转瞬间闪一条「登录状态已过期」。 */
+export function isSessionExpiredError(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 401 && !isBrowseLoginRequiredError(error);
+}
+
 export function getRateLimitRetrySeconds(error: unknown) {
   if (!isRateLimitError(error)) return null;
 

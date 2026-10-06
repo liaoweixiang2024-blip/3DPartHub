@@ -181,10 +181,13 @@ export const mobileCategoryListClass = 'mx-auto flex w-full flex-col';
 export const mobileCategoryPanelClass = 'p-0';
 
 export function mobileCategoryCardClass(active: boolean) {
-  return `group relative flex w-full transform-gpu items-stretch overflow-hidden border-0 border-t border-outline-variant/12 text-left will-change-transform first:border-t-0 first:rounded-t-xl last:rounded-b-xl ${selectionMotion} active:bg-surface-container-high/70 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-container/60 ${
+  // 不写 hover/active 视觉样式：iOS WebKit 触摸滚动时 :hover/:active 会全程粘在
+  // 手指落点那张卡上不释放（整卡变深+阴影抬起，像被选中）；按压反馈由渲染处的
+  // framer-motion whileTap 提供（pointercancel 时正确释放，不会粘住）
+  return `group relative flex w-full transform-gpu items-stretch overflow-hidden border-0 border-t border-outline-variant/12 text-left will-change-transform first:border-t-0 first:rounded-t-xl last:rounded-b-xl ${selectionMotion} focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-container/60 ${
     active
       ? 'z-[1] bg-primary-container/8 shadow-[inset_3px_0_0_var(--color-primary-container),0_6px_16px_rgba(249,115,22,0.10)]'
-      : 'bg-surface-container-low/45 shadow-[0_1px_3px_rgba(15,23,42,0.06)] hover:z-[1] hover:bg-surface-container hover:shadow-[0_6px_16px_rgba(15,23,42,0.10)]'
+      : 'bg-surface-container-low/45 shadow-[0_1px_3px_rgba(15,23,42,0.06)]'
   }`;
 }
 

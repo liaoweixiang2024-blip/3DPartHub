@@ -8,7 +8,12 @@ import { GlobalPageRefreshIndicator } from './components/shared/PageRefreshFallb
 import RouteProgress from './components/shared/RouteProgress';
 import { ToastProvider } from './components/shared/Toast';
 import { i18n } from './i18n';
-import { isBrowseLoginRequiredError, isRateLimitError, notifyGlobalError } from './lib/errorNotifications';
+import {
+  isBrowseLoginRequiredError,
+  isRateLimitError,
+  isSessionExpiredError,
+  notifyGlobalError,
+} from './lib/errorNotifications';
 import { motionDuration, motionEase } from './lib/motion';
 import { getPublicSettingsSnapshot } from './lib/publicSettings';
 import Router from './router';
@@ -26,7 +31,8 @@ export default function App() {
         // 浏览门槛 401 重试必然再 401（锁屏承接即可），不浪费请求
         shouldRetryOnError: (error) => !isRateLimitError(error) && !isBrowseLoginRequiredError(error),
         onError: (error) => {
-          if (isRateLimitError(error)) return;
+          // 会话过期 401 由 client.ts 拦截器统一承接（登出+跳登录页），这里静默防跳转瞬间闪错误 toast
+          if (isRateLimitError(error) || isSessionExpiredError(error)) return;
           notifyGlobalError(error, i18n.t('app.dataLoadFailed'));
         },
       }}

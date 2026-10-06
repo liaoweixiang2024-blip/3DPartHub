@@ -25,6 +25,9 @@ export interface LoginRequest {
   email: string;
   password: string;
   rememberMe?: boolean;
+  /** 登录失败达到阈值后服务端要求图形验证码（响应带 captchaRequired: true）时随请求提交 */
+  captchaId?: string;
+  captchaText?: string;
 }
 
 export interface RegisterRequest {

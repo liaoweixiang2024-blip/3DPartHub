@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
@@ -7,6 +8,7 @@ import { authApi } from '../api/auth';
 import { listShares, type ShareLink } from '../api/shares';
 import { AdminPageHero } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import DialogOverlay from '../components/shared/DialogOverlay';
 import { AppSwitch } from '../components/shared/FormControls';
 import Icon from '../components/shared/Icon';
 import { PageBody, PageHeader } from '../components/shared/PagePrimitives';
@@ -343,22 +345,23 @@ function EmailChangeDialog({
   const inputClass =
     'w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none';
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-surface-dim/70 backdrop-blur-sm p-3 sm:p-4"
-          onClick={onClose}
+        <DialogOverlay
+          zIndex={50}
+          bottomOnMobile
+          aboveBottomNav
+          backdropClassName="bg-surface-dim/70 backdrop-blur-sm"
+          className="p-3 sm:p-4"
+          onClose={onClose}
         >
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-surface-container-low rounded-t-lg sm:rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-md p-4 sm:p-6 max-h-[calc(100dvh-1.5rem)] overflow-y-auto"
+            className="bg-surface-container-low rounded-t-lg sm:rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-md p-4 sm:p-6 max-h-full overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-headline text-lg font-semibold text-on-surface">
@@ -528,9 +531,10 @@ function EmailChangeDialog({
               </div>
             </div>
           </motion.div>
-        </motion.div>
+        </DialogOverlay>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
 
@@ -1045,11 +1049,13 @@ function MobileContent() {
   );
 
   return (
-    /* app-page：主题把 hero 卡片的 CSS 变量定义在 .app-page 祖先上，缺了标题卡会变裸文本 */
-    <div className="app-page flex min-h-full flex-col">
+    /* app-page：主题把 hero 卡片的 CSS 变量定义在 .app-page 祖先上，缺了标题卡会变裸文本。
+        h-full + 壳层包装层同款（见 ProfilePage 的 mobileContentClassName）：整页固定为视口高，
+        标题卡钉死不动，内容在 PageBody 内部滚动——与分类管理/审计日志等管理页一致 */
+    <div className="app-page flex h-full min-h-0 flex-col">
       {/* hero 放在 PageBody（带进场动画）之外：标题卡与其他管理页一致保持静止，避免切入时整块上滑抖动 */}
       <AdminPageHero title={t('profile.title')} description={t('profile.description')} />
-      <PageBody className="mt-4 pb-20 space-y-4">
+      <PageBody className="mt-4 flex-1 min-h-0 space-y-4 overflow-y-auto scrollbar-hidden pb-20">
         {/* Avatar + basic info */}
         <div className="flex items-center gap-4 rounded-lg bg-surface-container-high p-4">
           <input
@@ -1330,5 +1336,9 @@ export default function ProfilePage() {
   useDocumentTitle(t('profile.title'));
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  return <AdminPageShell>{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>;
+  return (
+    <AdminPageShell mobileContentClassName="flex h-full min-h-0 flex-col px-4 py-4 pb-safe-nav">
+      {isDesktop ? <DesktopContent /> : <MobileContent />}
+    </AdminPageShell>
+  );
 }

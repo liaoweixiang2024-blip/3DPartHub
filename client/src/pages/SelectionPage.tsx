@@ -1227,7 +1227,9 @@ export default function SelectionPage() {
       data-selection-category-card
       className={isDesktop ? selectionCategoryCardClass(active) : mobileCategoryCardClass(active)}
       whileHover={!isDesktop || prefersReducedMotion ? undefined : { y: -1 }}
-      whileTap={prefersReducedMotion ? undefined : isDesktop ? { scale: 0.985 } : { scale: 0.996, opacity: 0.9 }}
+      // 移动端不按 whileTap：滑动列表的手势本身就是「先按下再拖动」，按下即出的按压动画
+      // 会在滚动接管前闪一下；点击确认改由 pressedCategoryKey 的选中高亮承担
+      whileTap={prefersReducedMotion || !isDesktop ? undefined : { scale: 0.985 }}
       {...(isDesktop ? categoryItemMotionProps(index) : mobileCategoryItemMotionProps)}
     >
       {categoryMedia(image, icon, previewSeed)}

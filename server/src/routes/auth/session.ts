@@ -30,7 +30,15 @@ import { clearAuthCookies, readCookie, REFRESH_COOKIE, setAuthCookies } from './
 
 const DUMMY_HASH = '$2a$12$LiVmGbGyGZkP1WQOB7SXOOJ7JqBhDmuOg2WjFwvCSCmXFGpOFHHze';
 const LOGIN_FAIL_PREFIX = 'login_fail:';
-const LOGIN_MAX_FAILS = 5;
+/** 同一邮箱失败 ≥ 此值后要求图形验证码（不锁号）：真用户输对验证码仍可登录，
+ *  陌生人知道邮箱恶意输错密码锁不死账号，只会让该邮箱登录多一步验证码 */
+const LOGIN_CAPTCHA_AFTER_FAILS = 5;
+/** 保底硬锁：要求验证码后仍持续失败到该值（验证码被 OCR/打码平台破解的迹象），
+ *  临时锁号防爆破。阈值远高于验证码阈值——真人忘密码会走重置，
+ *  几乎不可能「连续输对 30 次验证码 + 密码全错」。计数窗口同 LOGIN_LOCK_SECONDS，
+ *  管理端可随时手动解锁（unlock-login 接口）。 */
+const LOGIN_HARD_LOCK_FAILS = 30;
+/** 失败计数窗口：首次失败后 15 分钟自动清零（无新失败则不再要求验证码） */
 const LOGIN_LOCK_SECONDS = 900;
 const MAX_EMAIL_LENGTH = 254;
 
@@ -61,8 +69,9 @@ async function getLoginFailureCount(email: string): Promise<number> {
   return Number(val) || 0;
 }
 
-// 按邮箱的失败计数防针对单账号爆破；另加按 IP 的失败计数防跨账号撞库 + 减轻
-// 「用受害者邮箱错密码触发锁定」的定向骚扰（单 IP 骚扰会被 IP 锁拦截）。
+// 按邮箱的失败计数只用于触发图形验证码（见 LOGIN_CAPTCHA_AFTER_FAILS）；
+// 硬锁定只按 IP 维度：防跨账号撞库 + 「用受害者邮箱错密码」的定向骚扰只会被
+// 攻击者自己的 IP 锁拦住，受害者从任何网络仍可正常登录（多一步验证码而已）。
 const LOGIN_FAIL_IP_PREFIX = 'login_fail_ip:';
 const LOGIN_IP_MAX_FAILS = 20;
 const LOGIN_IP_LOCK_SECONDS = 900;
@@ -82,6 +91,18 @@ async function getLoginIpFailureCount(ip: string): Promise<number> {
 
 async function clearLoginIpFailures(ip: string): Promise<void> {
   await redis.del(`${LOGIN_FAIL_IP_PREFIX}${ip}`);
+}
+
+/** 管理端解锁登录：清空该邮箱（及可选 IP）的登录失败计数，
+ *  「账号已临时锁定」与 IP 锁立即解除，无需等 15 分钟计数窗口过期。 */
+export async function clearLoginLockState(target: { email?: string; ip?: string }): Promise<void> {
+  const keys: string[] = [];
+  const normalized = normalizeEmailInput(target.email);
+  if (normalized) keys.push(`${LOGIN_FAIL_PREFIX}${normalized}`);
+  if (typeof target.ip === 'string' && target.ip.trim() && target.ip.length <= 64) {
+    keys.push(`${LOGIN_FAIL_IP_PREFIX}${target.ip.trim()}`);
+  }
+  if (keys.length) await redis.del(...keys);
 }
 
 export function createAuthSessionRouter() {
@@ -334,13 +355,48 @@ export function createAuthSessionRouter() {
         getLoginFailureCount(normalizedEmail),
         getLoginIpFailureCount(clientIp),
       ]);
-      if (failCount >= LOGIN_MAX_FAILS) {
-        res.status(429).json({ detail: `登录失败次数过多，请${Math.ceil(LOGIN_LOCK_SECONDS / 60)}分钟后重试` });
-        return;
-      }
       if (ipFailCount >= LOGIN_IP_MAX_FAILS) {
         res.status(429).json({ detail: '该网络登录失败次数过多，请稍后再试' });
         return;
+      }
+      // 保底硬锁（见 LOGIN_HARD_LOCK_FAILS 注释）：验证码阶段的持续失败说明验证码
+      // 正被破解，此时锁号兜底防爆破；真用户可联系管理员立即解锁
+      if (failCount >= LOGIN_HARD_LOCK_FAILS) {
+        res.status(429).json({
+          detail: '该账号已被临时锁定，请联系管理员解锁或稍后再试',
+          code: 'ACCOUNT_LOCKED',
+        });
+        return;
+      }
+
+      // 邮箱维度达到阈值 → 要求图形验证码（不锁号）：爆破方每次尝试都要先过验证码，
+      // 真用户输对验证码照常登录——恶意输错密码再也无法把别人账号锁死。
+      const captchaRequired = failCount >= LOGIN_CAPTCHA_AFTER_FAILS;
+      if (captchaRequired) {
+        const { captchaId, captchaText } = (req.body ?? {}) as { captchaId?: unknown; captchaText?: unknown };
+        if (typeof captchaId !== 'string' || typeof captchaText !== 'string' || !captchaId || !captchaText) {
+          res.status(401).json({
+            detail: '该账号登录失败次数较多，请输入图形验证码后重试',
+            code: 'CAPTCHA_REQUIRED',
+            captchaRequired: true,
+          });
+          return;
+        }
+        const captchaOk = await verifyCaptcha(captchaId, captchaText);
+        if (!captchaOk) {
+          // 验证码错误只计入 IP 计数（不记邮箱：真人手误不该加速阈值），防脚本穷举验证码
+          const totalIpFails = await recordLoginFailureByIp(clientIp);
+          if (totalIpFails >= LOGIN_IP_MAX_FAILS) {
+            res.status(429).json({ detail: '该网络登录失败次数过多，请稍后再试' });
+            return;
+          }
+          res.status(401).json({
+            detail: '图形验证码不正确，请重新输入',
+            code: 'CAPTCHA_INVALID',
+            captchaRequired: true,
+          });
+          return;
+        }
       }
 
       const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
@@ -350,13 +406,22 @@ export function createAuthSessionRouter() {
           recordLoginFailure(normalizedEmail),
           recordLoginFailureByIp(clientIp),
         ]);
-        if (totalFails >= LOGIN_MAX_FAILS) {
-          res.status(429).json({ detail: `登录失败次数过多，请${Math.ceil(LOGIN_LOCK_SECONDS / 60)}分钟后重试` });
-        } else if (totalIpFails >= LOGIN_IP_MAX_FAILS) {
+        if (totalIpFails >= LOGIN_IP_MAX_FAILS) {
           res.status(429).json({ detail: '该网络登录失败次数过多，请稍后再试' });
-        } else {
-          res.status(401).json({ detail: '邮箱或密码错误' });
+          return;
         }
+        if (totalFails >= LOGIN_HARD_LOCK_FAILS) {
+          res.status(429).json({
+            detail: '该账号已被临时锁定，请联系管理员解锁或稍后再试',
+            code: 'ACCOUNT_LOCKED',
+          });
+          return;
+        }
+        // 带 captchaRequired 标记：达到阈值后前端立即在登录表单上出验证码输入
+        res.status(401).json({
+          detail: '邮箱或密码错误',
+          captchaRequired: totalFails >= LOGIN_CAPTCHA_AFTER_FAILS,
+        });
         return;
       }
 

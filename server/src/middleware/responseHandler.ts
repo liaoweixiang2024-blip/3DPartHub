@@ -25,7 +25,8 @@ export function responseHandler(req: AuthRequest, res: Response, next: NextFunct
       const { detail, message, code, ...rest } = payload;
       const safeExtras: Record<string, unknown> = {};
       if (code && typeof code === 'string') safeExtras.code = code;
-      const allowedKeys = ['status', 'total', 'page', 'pageSize', 'items', 'data'];
+      // captchaRequired：登录失败达到阈值时让前端登录表单升级出图形验证码（session.ts）
+      const allowedKeys = ['status', 'total', 'page', 'pageSize', 'items', 'data', 'captchaRequired'];
       for (const k of allowedKeys) {
         if (k in rest) safeExtras[k] = rest[k];
       }
