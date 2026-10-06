@@ -186,7 +186,11 @@ export function mobileCategoryCardClass(active: boolean) {
   // pressedCategoryKey 的选中高亮承担（active=true 样式），不用任何按下即现的反馈。
   // select-none：按住文字拖动会触发 iOS 文本拖选，选中高亮看起来像「背景变白」。
   // focus-visible 仅桌面：移动端键盘可达性场景极少，触摸导致的 focus 不应显示轮廓。
-  return `group relative flex w-full transform-gpu select-none items-stretch overflow-hidden border-0 border-t border-outline-variant/12 text-left will-change-transform first:border-t-0 first:rounded-t-xl last:rounded-b-xl ${selectionMotion} md:focus-visible:z-10 md:focus-visible:outline md:focus-visible:outline-2 md:focus-visible:outline-primary-container/60 ${
+  // 不挂 will-change-transform / transform-gpu：两者都会给几十张卡各造一个常驻
+  // GPU 合成层，iOS 滚动时层间合成会出现「按住的卡背景变白/顶部分隔线显形」的
+  // 渲染瑕疵（个人设置页行无此物也不出问题）；入场动画由 framer-motion 临时管理，
+  // 结束后自动清 transform，不需要常驻层提示。
+  return `group relative flex w-full select-none items-stretch overflow-hidden border-0 border-t border-outline-variant/12 text-left first:border-t-0 first:rounded-t-xl last:rounded-b-xl ${selectionMotion} md:focus-visible:z-10 md:focus-visible:outline md:focus-visible:outline-2 md:focus-visible:outline-primary-container/60 ${
     active
       ? 'z-[1] bg-primary-container/8 shadow-[inset_3px_0_0_var(--color-primary-container),0_6px_16px_rgba(249,115,22,0.10)]'
       : 'bg-surface-container-low/45 shadow-[0_1px_3px_rgba(15,23,42,0.06)]'

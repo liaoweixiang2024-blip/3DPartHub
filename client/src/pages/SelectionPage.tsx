@@ -124,6 +124,11 @@ export default function SelectionPage() {
   } = useImeSafeSearchInput();
   const search = useDebouncedValue(searchDraft.trim(), 250);
   const [pressedCategoryKey, setPressedCategoryKey] = useState<string | null>(null);
+  /* 触摸拖动吞点击守卫：iOS 把「按住慢慢拖」判成 tap 时仍会派发 click（位移小/滚动接管慢），
+     点击高亮（pressedCategoryKey → 卡片变白+顶线显形）就会在滑动时闪现。记录 touchstart 起点，
+     位移超过 10px 的触摸一律吞掉 click——真实点击（原地点按）不受影响 */
+  const categoryTouchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const swallowCategoryClickRef = useRef(false);
   const [pendingOptionKey, setPendingOptionKey] = useState<string | null>(null);
 
   /* recently viewed subcategories (localStorage) */
@@ -1235,13 +1240,46 @@ export default function SelectionPage() {
   ) => (
     <motion.button
       key={key}
-      onClick={onClick}
+      onClick={(e) => {
+        // 拖动结束派发的 click 一律吞掉（见 categoryTouchStartRef 注释）
+        if (swallowCategoryClickRef.current) {
+          swallowCategoryClickRef.current = false;
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        onClick();
+      }}
+      onTouchStart={(e) => {
+        const touch = e.touches[0];
+        if (touch) categoryTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+        swallowCategoryClickRef.current = false;
+      }}
+      onTouchEnd={(e) => {
+        const start = categoryTouchStartRef.current;
+        categoryTouchStartRef.current = null;
+        if (!start) return;
+        const touch = e.changedTouches[0];
+        if (!touch) return;
+        if (Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > 10) {
+          swallowCategoryClickRef.current = true;
+        }
+      }}
       data-selection-category-card
       className={isDesktop ? selectionCategoryCardClass(active) : mobileCategoryCardClass(active)}
-      whileHover={!isDesktop || prefersReducedMotion ? undefined : { y: -1 }}
-      // 移动端不按 whileTap：滑动列表的手势本身就是「先按下再拖动」，按下即出的按压动画
-      // 会在滚动接管前闪一下；点击确认改由 pressedCategoryKey 的选中高亮承担
-      whileTap={prefersReducedMotion || !isDesktop ? undefined : { scale: 0.985 }}
+      // 悬停/按压反馈只给真鼠标：pointerType==='mouse' 才设置 data-mouse-* 属性（样式
+      // 见 selectionCategoryCardClass 的 data-[mouse-*] 变体）。iPad/横屏手机虽 ≥768px
+      // 走桌面类，但触摸设置不了这些属性——按住滑动零反馈。:hover/:active 伪类和
+      // framer-motion whileTap/whileHover 在触摸设备上都会粘在落点卡上，全部不用。
+      onPointerEnter={(e) => {
+        if (e.pointerType === 'mouse') e.currentTarget.setAttribute('data-mouse-hover', 'true');
+      }}
+      onPointerLeave={(e) => e.currentTarget.removeAttribute('data-mouse-hover')}
+      onPointerDown={(e) => {
+        if (e.pointerType === 'mouse') e.currentTarget.setAttribute('data-mouse-press', 'true');
+      }}
+      onPointerUp={(e) => e.currentTarget.removeAttribute('data-mouse-press')}
+      onPointerCancel={(e) => e.currentTarget.removeAttribute('data-mouse-press')}
       {...(isDesktop ? categoryItemMotionProps(index) : mobileCategoryItemMotionProps)}
     >
       {categoryMedia(image, icon, previewSeed)}
@@ -1253,8 +1291,9 @@ export default function SelectionPage() {
         <Icon
           name={active ? 'check' : 'chevron_right'}
           size={17}
-          // group-hover 仅桌面：iOS 滑动分类列表时 :hover 粘在落点卡上，箭头会变橙像被选中
-          className={`shrink-0 text-on-surface-variant/45 transition-colors ${isDesktop ? 'group-hover:text-primary-container' : ''}`}
+          // 变橙同样只给真鼠标：data-mouse-hover 只有 pointerType==='mouse' 能设置，
+          // 触摸设备（含 ≥768px 的 iPad/横屏手机）滑动时 :hover 粘在落点也不会变橙
+          className="shrink-0 text-on-surface-variant/45 transition-colors group-data-[mouse-hover=true]:text-primary-container"
         />
       </div>
     </motion.button>

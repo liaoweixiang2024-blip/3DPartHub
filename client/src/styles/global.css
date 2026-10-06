@@ -600,3 +600,23 @@ a,
 .category-nav-page .app-page-hero-inner {
   min-height: 44px;
 }
+
+/* 选型大分类卡：触摸按住拖动绝对零反馈（全宽度，含 ≥768px 的 iPad/横屏手机——
+   它们走桌面卡片类，触摸同样不能有反馈）。
+   子元素（缩略图/文字/图标）一律不响应指针——触摸只命中卡片 button 本身：
+   - 图片长按不再呼出 iOS 系统预览（抬起动画/放大镜）
+   - 文字不可拖选（选中高亮像「背景变白」）
+   - -webkit-touch-callout:none 关掉长按呼出菜单
+   点击由 button 的 click 承担，真点击的选中高亮不受影响（拖动已被 JS 位移守卫吞掉）。
+   桌面鼠标不受影响：卡内没有可交互子元素，事件本来就落在 button 上，
+   悬停/按压反馈由 data-mouse-* 属性驱动（见 selectionCategoryCardClass）。 */
+[data-selection-category-card],
+[data-selection-category-card] * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+[data-selection-category-card] * {
+  pointer-events: none;
+}
