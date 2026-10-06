@@ -48,7 +48,7 @@ import {
   productImportHeaders,
   generatableProductColumns,
   productAssetKind,
-  parseGenerateValues,
+  parseGenerateEntries,
   inferGenerateTemplates,
   buildGeneratedProductDrafts,
   type GeneratedProductDraft,
@@ -1370,7 +1370,7 @@ function Content() {
     if (!generateCat) errors.push('请先选择分类');
     if (!selectableColumns.length) errors.push('当前分类没有可组合生成的选择列');
     selectableColumns.forEach((col) => {
-      if (parseGenerateValues(generateOptionTexts[col.key] || '').length === 0) {
+      if (parseGenerateEntries(generateOptionTexts[col.key] || '').length === 0) {
         errors.push(`${col.label || col.key} 没有填写可选值`);
       }
     });

@@ -159,19 +159,46 @@ export type GeneratedProductDraft = {
   specs: Record<string, string>;
 };
 
-export function parseGenerateValues(text: string): string[] {
-  return Array.from(
-    new Set(
-      text
-        .split(/\r?\n|,|，/)
-        .map((item) => item.trim())
-        .filter(Boolean),
-    ),
-  );
+/** 一个待组合选项：value 存进参数值（选型页展示/匹配用），code 用于拼型号 */
+export type GenerateOptionEntry = { value: string; code: string };
+
+/**
+ * 解析生成选项：一行一个（也支持逗号分隔），默认选项值直接拼型号。
+ * 型号代码与参数值不同时写 `代码|显示名`（如 `02|2分 (1/4)` 生成型号段 02、参数存 2分 (1/4)）；
+ * 竖线前留空表示该段不进型号（如 `|无球阀开关`）。
+ */
+export function parseGenerateEntries(text: string): GenerateOptionEntry[] {
+  const seen = new Set<string>();
+  const entries: GenerateOptionEntry[] = [];
+  for (const item of text.split(/\r?\n|,|，/)) {
+    const raw = item.trim();
+    if (!raw) continue;
+    const pipe = raw.indexOf('|');
+    const value = (pipe >= 0 ? raw.slice(pipe + 1) : raw).trim();
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    entries.push({ value, code: (pipe >= 0 ? raw.slice(0, pipe) : raw).trim() });
+  }
+  return entries;
 }
 
 export function renderGenerateTemplate(template: string, specs: Record<string, string>) {
   return template.replace(/\[([^\]]+)\]/g, (_match, key: string) => specs[key] ?? '');
+}
+
+/** 型号模板用代码渲染；有代码为空的段时收缩多出来的连续分隔符（`A--B`→`A-B`、`A-`→`A`） */
+export function renderModelTemplate(template: string, codes: Record<string, string>) {
+  let hasEmptySegment = false;
+  const text = template.replace(/\[([^\]]+)\]/g, (_match, key: string) => {
+    const code = (codes[key] ?? '').trim();
+    if (!code) hasEmptySegment = true;
+    return code;
+  });
+  if (!hasEmptySegment) return text;
+  return text
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .trim();
 }
 
 export function placeholdersFromText(text?: string | null) {
@@ -273,33 +300,33 @@ export function buildGeneratedProductDrafts(params: {
 }) {
   const selectableColumns = generatableProductColumns(params.columns);
   const optionEntries = selectableColumns
-    .map((col) => ({ col, values: parseGenerateValues(params.optionTexts[col.key] || '') }))
-    .filter((item) => item.values.length > 0);
+    .map((col) => ({ col, entries: parseGenerateEntries(params.optionTexts[col.key] || '') }))
+    .filter((item) => item.entries.length > 0);
   if (!optionEntries.length) return [];
 
   const results: GeneratedProductDraft[] = [];
   const limit = params.limit ?? 10000;
 
-  function walk(index: number, specs: Record<string, string>) {
+  function walk(index: number, specs: Record<string, string>, codes: Record<string, string>) {
     if (results.length >= limit) return;
     if (index >= optionEntries.length) {
       if (isExcludedByRules(specs, params.excludeRules, params.columns)) return;
       const fallbackModel = optionEntries
-        .map(({ col }) => specs[col.key])
+        .map(({ col }) => codes[col.key])
         .filter(Boolean)
         .join('-');
-      const modelNo = renderGenerateTemplate(params.modelTemplate, specs).trim() || fallbackModel;
+      const modelNo = renderModelTemplate(params.modelTemplate, codes) || fallbackModel;
       const name = renderGenerateTemplate(params.nameTemplate, specs).trim() || modelNo;
       results.push({ name, modelNo, specs: { ...specs } });
       return;
     }
 
-    const { col, values } = optionEntries[index];
-    for (const value of values) {
-      walk(index + 1, { ...specs, [col.key]: value });
+    const { col, entries } = optionEntries[index];
+    for (const entry of entries) {
+      walk(index + 1, { ...specs, [col.key]: entry.value }, { ...codes, [col.key]: entry.code });
     }
   }
 
-  walk(0, {});
+  walk(0, {}, {});
   return results;
 }

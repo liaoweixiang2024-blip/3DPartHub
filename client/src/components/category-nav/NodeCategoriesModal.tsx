@@ -102,7 +102,9 @@ export default function NodeCategoriesModal({
                   key={i}
                   type="button"
                   onClick={() => onModelCategoryClick?.(it.modelCategoryId!)}
-                  className={`hover-card flex items-center justify-center gap-3 rounded-xl bg-surface-container-high/90 px-4 py-3 shadow-lg backdrop-blur-sm transition-shadow hover:shadow-xl ${
+                  // hover 效果仅桌面（hover-card 的 :hover 已在 global.css 门控）：
+                  // iOS 滑动弹窗内分类网格时 :hover/:active 粘在落点卡上像被选中
+                  className={`hover-card flex items-center justify-center gap-3 rounded-xl bg-surface-container-high/90 px-4 py-3 shadow-lg backdrop-blur-sm transition-shadow md:hover:shadow-xl ${
                     items.length === 1 ? 'mx-auto w-full max-w-xs flex-row' : 'flex-col pb-4 pt-3'
                   }`}
                 >

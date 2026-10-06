@@ -547,14 +547,19 @@ a,
   will-change: opacity;
 }
 
-/* 分类选型导航（/category-nav）——悬停卡片样式（smc_23 版式，投影颜色跟配色方案主色） */
+/* 分类选型导航（/category-nav）——悬停卡片样式（smc_23 版式，投影颜色跟配色方案主色）。
+   :hover 效果只在桌面（≥768px）生效：iOS WebKit 触摸滚动时 :hover 会全程粘在手指
+   落点卡上不释放（上浮+投影，像被选中）；不用 (hover:hover) 查询——触摸主指针
+   设备插鼠标会被误杀，min-width 与全站 isDesktop 断点一致 */
 .hover-card {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.hover-card:hover {
-  transform: translateY(-2px);
-  filter: drop-shadow(0 6px 12px color-mix(in srgb, var(--color-primary) 22%, transparent));
+@media (min-width: 768px) {
+  .hover-card:hover {
+    transform: translateY(-2px);
+    filter: drop-shadow(0 6px 12px color-mix(in srgb, var(--color-primary) 22%, transparent));
+  }
 }
 
 /* 节点分类弹窗中央大图：默认 SMC 插画（h-20/h-24）强制放大到 hero 尺寸 */

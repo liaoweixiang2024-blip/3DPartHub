@@ -1241,7 +1241,8 @@ export default function SelectionPage() {
         <Icon
           name={active ? 'check' : 'chevron_right'}
           size={17}
-          className="shrink-0 text-on-surface-variant/45 transition-colors group-hover:text-primary-container"
+          // group-hover 仅桌面：iOS 滑动分类列表时 :hover 粘在落点卡上，箭头会变橙像被选中
+          className={`shrink-0 text-on-surface-variant/45 transition-colors ${isDesktop ? 'group-hover:text-primary-container' : ''}`}
         />
       </div>
     </motion.button>
@@ -1339,10 +1340,14 @@ export default function SelectionPage() {
             type="button"
             onClick={isAutoSelected ? undefined : () => dropVal(field)}
             disabled={isAutoSelected}
+            // 移动端已完成步骤卡不带 hover/按压：iOS 滑动步骤列表时 :hover/:active 会全程
+            // 粘在落点卡上（淡橙底变深+缩放，像被选中）；点击取消的确认由卡片消失本身承担
             className={`flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left md:px-4 ${
               isAutoSelected
                 ? 'cursor-default border-outline-variant/10 bg-surface-container-low/55 text-on-surface-variant/55'
-                : `border-primary-container/12 bg-primary-container/8 hover:bg-primary-container/15 ${selectionPress}`
+                : isDesktop
+                  ? `border-primary-container/12 bg-primary-container/8 hover:bg-primary-container/15 ${selectionPress}`
+                  : 'border-primary-container/12 bg-primary-container/8'
             }`}
           >
             <div
@@ -1479,10 +1484,12 @@ export default function SelectionPage() {
                         key={opt}
                         onClick={() => pickVal(field, opt)}
                         disabled={pendingOptionKey !== null}
-                        className={`inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all active:scale-[0.97] disabled:cursor-wait disabled:opacity-80 ${
+                        // 移动端不带 active:scale/hover：滑动选项列表时 :active 会全程粘在落点
+                        // 按钮上（缩小状态保持到抬手才弹回）；点击确认由 pending/选中样式承担
+                        className={`inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all disabled:cursor-wait disabled:opacity-80 ${isDesktop ? 'active:scale-[0.97]' : ''} ${
                           pending
                             ? 'border-primary-container/45 bg-primary-container/10 text-primary-container shadow-sm'
-                            : 'border-outline-variant/20 bg-surface-container-low text-on-surface hover:border-primary-container/40'
+                            : `border-outline-variant/20 bg-surface-container-low text-on-surface ${isDesktop ? 'hover:border-primary-container/40' : ''}`
                         }`}
                       >
                         {pending ? <Icon name="refresh" size={13} className="animate-spin" /> : null}
@@ -1514,10 +1521,12 @@ export default function SelectionPage() {
                           key={val}
                           onClick={() => pickVal(field, val)}
                           disabled={pendingOptionKey !== null}
-                          className={`group relative flex flex-col items-stretch rounded-xl border transition-all duration-150 active:scale-[0.97] ${
+                          // 移动端不带 active:scale/选中放大/hover：滑动列表时 :active 会粘在落点
+                          // 卡上全程缩小、抬手弹回（弹跳感）；选中确认由边框+阴影+对勾承担
+                          className={`group relative flex flex-col items-stretch rounded-xl border transition-all duration-150 ${isDesktop ? 'active:scale-[0.97]' : ''} ${
                             pending || selected
-                              ? 'border-primary-container shadow-sm scale-[1.02]'
-                              : 'border-outline-variant/20 bg-surface-container-low hover:border-primary-container/40'
+                              ? `border-primary-container shadow-sm ${isDesktop ? 'scale-[1.02]' : ''}`
+                              : `border-outline-variant/20 bg-surface-container-low ${isDesktop ? 'hover:border-primary-container/40' : ''}`
                           } disabled:cursor-wait disabled:opacity-80`}
                         >
                           {/* Image area */}
@@ -1565,10 +1574,11 @@ export default function SelectionPage() {
                           key={val}
                           onClick={() => pickVal(field, val)}
                           disabled={pendingOptionKey !== null}
-                          className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-all active:scale-95 disabled:cursor-wait disabled:opacity-80 sm:px-4 sm:py-2.5 ${
+                          // 移动端不带 active:scale/hover（同上：滑动时 :active/:hover 粘滞）
+                          className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-all disabled:cursor-wait disabled:opacity-80 sm:px-4 sm:py-2.5 ${isDesktop ? 'active:scale-95' : ''} ${
                             pending
                               ? 'border-primary-container/45 bg-primary-container/10 text-primary-container shadow-sm'
-                              : 'border-outline-variant/20 bg-surface-container text-on-surface hover:border-primary-container/50 hover:bg-primary-container/5'
+                              : `border-outline-variant/20 bg-surface-container text-on-surface ${isDesktop ? 'hover:border-primary-container/50 hover:bg-primary-container/5' : ''}`
                           }`}
                         >
                           {pending ? <Icon name="refresh" size={13} className="animate-spin" /> : null}
@@ -1916,7 +1926,8 @@ export default function SelectionPage() {
                 return (
                   <div
                     key={item.id}
-                    className="flex min-w-0 items-start gap-2 px-2 py-2.5 hover:bg-surface-container md:rounded-lg md:py-2"
+                    // 清单可滚动：移动端行不带 hover 底色（iOS 滑动粘滞）
+                    className="flex min-w-0 items-start gap-2 px-2 py-2.5 md:rounded-lg md:py-2 md:hover:bg-surface-container"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-on-surface">{getInquiryCartItemTitle(item)}</p>
@@ -1930,7 +1941,7 @@ export default function SelectionPage() {
                     </div>
                     <button
                       onClick={() => inquiryCart.removeItem(item.id)}
-                      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`}
+                      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-on-surface-variant md:hover:bg-surface-container-high md:hover:text-on-surface ${isDesktop ? selectionPress : selectionMotion}`}
                       aria-label={t('selectionPage.inquiryCart.removeAria')}
                     >
                       <Icon name="close" size={16} />
@@ -1948,7 +1959,7 @@ export default function SelectionPage() {
         className={
           isDesktop
             ? `inline-flex min-h-8 min-w-0 flex-none items-center justify-start gap-1.5 rounded-lg px-2 py-1 text-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`
-            : `inline-flex h-9 min-w-0 items-center justify-between gap-2 rounded-lg text-sm font-semibold text-on-surface hover:text-on-surface ${selectionPress}`
+            : 'inline-flex h-9 min-w-0 items-center justify-between gap-2 rounded-lg text-sm font-semibold text-on-surface'
         }
         aria-expanded={cartPreviewOpen}
       >
@@ -2009,7 +2020,7 @@ export default function SelectionPage() {
               className={
                 isDesktop
                   ? `rounded-lg px-2.5 py-1.5 text-center text-xs font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`
-                  : `inline-flex h-9 items-center justify-center rounded-lg px-2 text-center text-sm font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`
+                  : 'inline-flex h-9 items-center justify-center rounded-lg px-2 text-center text-sm font-medium text-on-surface-variant'
               }
             >
               {isDesktop ? t('selectionPage.inquiryCart.myInquiries') : t('selectionPage.inquiryCart.list')}
@@ -2025,7 +2036,7 @@ export default function SelectionPage() {
               className={
                 isDesktop
                   ? `rounded-lg bg-primary-container px-4 py-1.5 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
-                  : `inline-flex h-9 items-center justify-center rounded-lg bg-primary-container px-2 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
+                  : 'inline-flex h-9 items-center justify-center rounded-lg bg-primary-container px-2 text-sm font-bold text-on-primary'
               }
             >
               {isDesktop ? t('selectionPage.inquiryCart.submitInquiry') : t('selectionPage.inquiryCart.submit')}
@@ -2038,7 +2049,7 @@ export default function SelectionPage() {
             className={
               isDesktop
                 ? `rounded-lg bg-primary-container px-4 py-1.5 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
-                : `inline-flex h-9 items-center justify-center rounded-lg bg-primary-container px-2 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
+                : 'inline-flex h-9 items-center justify-center rounded-lg bg-primary-container px-2 text-sm font-bold text-on-primary'
             }
           >
             {t('selectionPage.inquiryCart.exportSelected')}
@@ -2092,7 +2103,8 @@ export default function SelectionPage() {
               <span className="shrink-0 text-on-surface">{t('selectionPage.select')}</span>
               <button
                 onClick={goToGroupCategories}
-                className={`max-w-[6.25rem] truncate text-on-surface-variant hover:text-primary-container ${selectionPress}`}
+                // 冻结头随列表滚动：移动端不带 hover/按压（iOS 粘滞）
+                className="max-w-[6.25rem] truncate text-on-surface-variant"
               >
                 {group.name}
               </button>
@@ -2100,34 +2112,28 @@ export default function SelectionPage() {
               <button
                 type="button"
                 onClick={resetCurrentCategory}
-                className={`min-w-0 flex-1 truncate text-left text-primary-container ${selectionPress}`}
+                className="min-w-0 flex-1 truncate text-left text-primary-container"
               >
                 {liveCat.name}
               </button>
             </>
           ) : liveCat ? (
             <>
-              <button
-                onClick={goHome}
-                className={`max-w-[5.25rem] truncate text-on-surface-variant hover:text-primary-container ${selectionPress}`}
-              >
+              <button onClick={goHome} className="max-w-[5.25rem] truncate text-on-surface-variant">
                 {pageTitle}
               </button>
               <Icon name="chevron_right" size={14} className="shrink-0 text-on-surface-variant/35" />
               <button
                 type="button"
                 onClick={resetCurrentCategory}
-                className={`min-w-0 flex-1 truncate text-left text-primary-container ${selectionPress}`}
+                className="min-w-0 flex-1 truncate text-left text-primary-container"
               >
                 {liveCat.name}
               </button>
             </>
           ) : group ? (
             <>
-              <button
-                onClick={goHome}
-                className={`max-w-[5.25rem] truncate text-on-surface-variant hover:text-primary-container ${selectionPress}`}
-              >
+              <button onClick={goHome} className="max-w-[5.25rem] truncate text-on-surface-variant">
                 {pageTitle}
               </button>
               <Icon name="chevron_right" size={14} className="shrink-0 text-on-surface-variant/35" />
@@ -2160,8 +2166,9 @@ export default function SelectionPage() {
               key={k}
               onClick={() => dropVal(k)}
               disabled={autoSelected}
+              // 横向滚动条内：移动端不带 hover（滑动换看参数时落点文字会变橙粘住）
               className={`min-w-[4.9rem] shrink-0 px-2 text-left transition-colors ${index > 0 ? 'border-l border-outline-variant/12' : ''} ${
-                autoSelected ? 'cursor-default text-on-surface-variant/45' : 'hover:text-primary-container'
+                autoSelected ? 'cursor-default text-on-surface-variant/45' : ''
               }`}
             >
               <span className="block truncate text-[9px] leading-3 text-on-surface-variant">
@@ -2182,7 +2189,7 @@ export default function SelectionPage() {
             setSkipped(new Set());
             setAutoSelectedFields(new Set());
           }}
-          className="shrink-0 border-l border-outline-variant/12 px-2 text-[10px] font-medium text-on-surface-variant transition-colors hover:text-primary-container"
+          className="shrink-0 border-l border-outline-variant/12 px-2 text-[10px] font-medium text-on-surface-variant"
         >
           {t('selectionPage.inquiryCart.clear')}
         </button>
@@ -2368,7 +2375,8 @@ export default function SelectionPage() {
           onClick={() => handleShare(false)}
           disabled={isCategorySharePending}
           data-tooltip-ignore
-          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface disabled:opacity-50 ${selectionPress}`}
+          // 冻结头右侧：移动端不带 hover/按压（iOS 粘滞）
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant disabled:opacity-50"
           aria-label={isCategorySharePending ? t('selectionPage.generating') : t('selectionPage.share.categoryLink')}
         >
           <Icon name="share" size={15} />
@@ -2376,7 +2384,7 @@ export default function SelectionPage() {
         <button
           onClick={goHome}
           data-tooltip-ignore
-          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant"
           aria-label={t('selectionPage.allCategories')}
         >
           <Icon name="inventory_2" size={15} />

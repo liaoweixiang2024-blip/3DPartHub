@@ -9,7 +9,7 @@ import {
   AppTextInput,
 } from '../shared/FormControls';
 import SearchField from '../shared/SearchField';
-import { parseGenerateValues } from './selectionAdminUtils';
+import { parseGenerateEntries } from './selectionAdminUtils';
 import type { GeneratedProductDraft } from './selectionAdminUtils';
 
 export interface ProductGeneratorModalProps {
@@ -116,7 +116,8 @@ export function ProductGeneratorModal({
                 placeholder={`如：${generateTemplateExample}`}
               />
               <span className={APP_FIELD_HELP_CLASS}>
-                只把需要组成型号的字段写进模板，例如 `[系列]-[规格]`，不要把所有参数都拼进去。
+                只把需要组成型号的字段写进模板，例如
+                `[系列]-[规格]`，不要把所有参数都拼进去；字段按选项里填的「代码」拼入型号。
               </span>
             </label>
             <label>
@@ -134,7 +135,7 @@ export function ProductGeneratorModal({
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {selectableGenerateColumns.map((col) => {
-              const values = parseGenerateValues(generateOptionTexts[col.key] || '');
+              const values = parseGenerateEntries(generateOptionTexts[col.key] || '');
               return (
                 <label
                   key={col.key}
@@ -153,10 +154,14 @@ export function ProductGeneratorModal({
                       setGenerateOptionTexts((prev) => ({ ...prev, [col.key]: e.target.value }));
                       setGeneratePreview([]);
                     }}
-                    placeholder="一行一个选项，也支持逗号分隔"
+                    placeholder={'一行一个选项；拼型号的代码不同时写 代码|显示名，如 02|2分 (1/4)'}
                     rows={5}
                     className="resize-y text-xs"
                   />
+                  <span className={APP_FIELD_HELP_CLASS}>
+                    型号代码与参数值不同时写「代码|显示名」（如 `02|2分 (1/4)`：型号拼 02，参数存 2分
+                    (1/4)）；竖线前留空表示不进型号（如 `|无球阀开关`）。
+                  </span>
                 </label>
               );
             })}

@@ -114,13 +114,14 @@ function SlotCard({ label, small, node, catalogOf, onOpenModal, children }: Slot
         {small ? (
           <span
             className={`mt-1 text-xs font-medium ${
-              clickable ? 'text-on-surface-variant group-hover:text-primary' : 'text-on-surface-variant'
+              // group-hover 仅桌面：iOS 滑动网格时 :hover 粘在落点卡上，标签会变主色像被选中
+              clickable ? 'text-on-surface-variant md:group-hover:text-primary' : 'text-on-surface-variant'
             }`}
           >
             {label}
           </span>
         ) : (
-          <div className="mt-1 flex items-center space-x-1 text-xs font-semibold text-on-surface group-hover:text-primary">
+          <div className="mt-1 flex items-center space-x-1 text-xs font-semibold text-on-surface md:group-hover:text-primary">
             <PlayDot size={12} fontSize={7} />
             <span>{label}</span>
           </div>
