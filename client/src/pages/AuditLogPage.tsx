@@ -844,7 +844,8 @@ function AuditLogContent() {
     anchor.href = url;
     anchor.download = `audit_logs_${formatExportTimestamp()}.json`;
     anchor.click();
-    URL.revokeObjectURL(url);
+    // 延迟回收：同步 revoke 可能赶在浏览器异步读取 blob 前，下载内容被截断
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     toast(`已导出 ${selectedLogs.length} 条日志`, 'success');
   }
 

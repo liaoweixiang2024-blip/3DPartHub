@@ -317,8 +317,13 @@ export function AdminManagementPage({
            不加投影：常驻阴影会在浅色模式下把标题卡+统计+工具栏框出一个矩形
            （背景与页面同色的纯描边效果，深色模式下黑阴影不可见）。
            顶部呼吸间距放在块内（pt-4），使用方需同步去掉滚动容器包装层的顶部
-           内边距（pt-0），使静止位=吸顶位——标题/工具栏从滚动第一像素起零位移 */
-        <div className="sticky top-0 z-40 flex flex-col gap-3 bg-surface pt-4 pb-3 md:gap-4 md:bg-surface-dim md:pb-4">
+           内边距（pt-0），使静止位=吸顶位——标题/工具栏从滚动第一像素起零位移。
+           data-sticky-header：滚动定位补偿用（如选型页把当前步骤滚到吸顶头下方，
+           否则步骤标题/首排选项卡会被整块吞掉——头高约 176px≈一整排图片卡） */
+        <div
+          data-sticky-header
+          className="sticky top-0 z-40 flex flex-col gap-3 bg-surface pt-4 pb-3 md:gap-4 md:bg-surface-dim md:pb-4"
+        >
           {heroNode}
           {statsNode}
           {toolbarNode}

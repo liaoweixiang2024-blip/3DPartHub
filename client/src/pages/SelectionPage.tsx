@@ -526,6 +526,18 @@ export default function SelectionPage() {
   }, [columns, curField, filterAutoAdvance, filteredTotal, isLoading, manualFields, options, search]);
 
   /* auto-scroll to current step — desktop uses container.scrollTo to avoid sidebar shift */
+
+  /* 移动端吸顶头（标题+搜索框+已选条，约 176px）会整块盖住滚动定位的目标元素
+     （一整排图片选项卡的高度），滚动 target 需减去头在滚动容器里的实际高度。
+     桌面端标题在滚动容器外，返回 0 不影响。 */
+  const stickyHeaderOffset = (container: HTMLElement) => {
+    if (isDesktop) return 0;
+    const header = container.parentElement?.querySelector<HTMLElement>('[data-sticky-header]');
+    if (!header) return 0;
+    const offset = header.getBoundingClientRect().bottom - container.getBoundingClientRect().top;
+    return offset > 0 ? offset : 0;
+  };
+
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (search) return;
@@ -541,7 +553,7 @@ export default function SelectionPage() {
         if (!container || !el) return;
         const cRect = container.getBoundingClientRect();
         const eRect = el.getBoundingClientRect();
-        const target = eRect.top - cRect.top + container.scrollTop - 8;
+        const target = eRect.top - cRect.top + container.scrollTop - stickyHeaderOffset(container) - 8;
         container.scrollTo({ top: Math.max(0, target), behavior: 'auto' });
       }, 0);
       return () => {
@@ -566,7 +578,7 @@ export default function SelectionPage() {
           const target =
             isDesktop && !tallStep
               ? eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2
-              : eRect.top - cRect.top + container.scrollTop - 8;
+              : eRect.top - cRect.top + container.scrollTop - stickyHeaderOffset(container) - 8;
           container.scrollTo({ top: Math.max(0, target), behavior: isDesktop ? 'smooth' : 'auto' });
         } else {
           wizardWrapRef.current?.scrollIntoView({ behavior: 'auto', block: 'start' });
@@ -612,7 +624,7 @@ export default function SelectionPage() {
           const target =
             isDesktop && !tallStep
               ? eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2
-              : eRect.top - cRect.top + container.scrollTop - 8;
+              : eRect.top - cRect.top + container.scrollTop - stickyHeaderOffset(container) - 8;
           container.scrollTo({ top: Math.max(0, target), behavior: isDesktop ? 'smooth' : 'auto' });
         } else {
           wizardWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -651,7 +663,7 @@ export default function SelectionPage() {
       if (container) {
         const cRect = container.getBoundingClientRect();
         const eRect = el.getBoundingClientRect();
-        const target = eRect.top - cRect.top + container.scrollTop - 18;
+        const target = eRect.top - cRect.top + container.scrollTop - stickyHeaderOffset(container) - 18;
         container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
       } else {
         wizardWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });

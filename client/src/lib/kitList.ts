@@ -62,5 +62,6 @@ export function downloadKitList(
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  // 延迟回收：同步 revoke 可能赶在浏览器异步读取 blob 前，下载内容被截断
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

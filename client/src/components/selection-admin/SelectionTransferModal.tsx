@@ -32,16 +32,13 @@ function useEscapeToClose(open: boolean, enabled: boolean, onClose: () => void) 
   }, [open, enabled, onClose]);
 }
 
-/** blob 触发浏览器下载（照 ModelAdminPage 模型导出的写法） */
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+/** blob 触发浏览器下载：走 downloadBrowserBlob（revoke 带 60s 延迟）。
+ *  不能在 a.click() 后同步 revokeObjectURL：浏览器下载是异步读 blob 的，
+ *  包一大（数据包带图片资产可到几十 MB）revoke 会先于读取完成，下载到的 zip 被截断，
+ *  导入端报「无法读取压缩包或 manifest 损坏」。 */
+async function downloadBlob(blob: Blob, filename: string) {
+  const { downloadBrowserBlob } = await import('../../lib/browserDownload');
+  await downloadBrowserBlob(blob, filename);
 }
 
 // ========== 导出弹窗 ==========
@@ -82,7 +79,7 @@ export function SelectionExportModal({
     setExporting(true);
     try {
       const blob = await exportSelectionCategories(ids);
-      downloadBlob(blob, `选型导出-${ids.length}个分类-${new Date().toISOString().slice(0, 10)}.zip`);
+      await downloadBlob(blob, `选型导出-${ids.length}个分类-${new Date().toISOString().slice(0, 10)}.zip`);
       toast(`已导出 ${ids.length} 个分类（含设置、产品与图片）`, 'success');
       onClose();
     } catch (err) {

@@ -1679,14 +1679,10 @@ function DesktopContent() {
     setExportingSelection(true);
     try {
       const blob = await modelApi.exportModels(ids);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `模型导出-${ids.length}个-${new Date().toISOString().slice(0, 10)}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      // 走 downloadBrowserBlob：同步 revokeObjectURL 会在浏览器异步读取 blob 前把 URL
+      // 作废，模型包几十 MB 时下载到的是截断 zip（选型数据包导出同款坑已修）
+      const { downloadBrowserBlob } = await import('../lib/browserDownload');
+      await downloadBrowserBlob(blob, `模型导出-${ids.length}个-${new Date().toISOString().slice(0, 10)}.zip`);
       toast(`已导出 ${ids.length} 个模型（转换失败的模型不会包含在内）`, 'success');
     } catch (err) {
       toast(err instanceof Error ? err.message : '导出失败', 'error');
