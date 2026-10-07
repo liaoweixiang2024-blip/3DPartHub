@@ -7851,9 +7851,11 @@ function Content() {
                                       onClick={() => setExpandedVersion(expanded ? null : entry.version)}
                                       className="w-full text-left"
                                     >
-                                      <div className="flex flex-wrap items-center gap-2">
+                                      {/* 单行布局：徽章/日期/箭头不收缩，长标题弹性截断省略号——
+                                          flex-wrap 会让长标题换行，一条记录占多行破坏时间线节奏 */}
+                                      <div className="flex items-center gap-2 min-w-0">
                                         <span
-                                          className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
+                                          className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border shrink-0 ${
                                             isCurrent
                                               ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                                               : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant/20'
@@ -7862,15 +7864,17 @@ function Content() {
                                           {entry.version}
                                         </span>
                                         {isCurrent && (
-                                          <span className="text-[10px] font-medium text-emerald-400">当前版本</span>
+                                          <span className="text-[10px] font-medium text-emerald-400 shrink-0">
+                                            当前版本
+                                          </span>
                                         )}
                                         {publishedText && (
-                                          <span className="text-[11px] text-on-surface-variant/70">
+                                          <span className="text-[11px] text-on-surface-variant/70 shrink-0">
                                             {publishedText}
                                           </span>
                                         )}
                                         {entry.title && (
-                                          <span className="text-xs text-on-surface/90 min-w-0 truncate max-w-full">
+                                          <span className="flex-1 min-w-0 truncate text-xs text-on-surface/90">
                                             {entry.title}
                                           </span>
                                         )}
