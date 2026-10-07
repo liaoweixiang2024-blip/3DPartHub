@@ -9,6 +9,12 @@ import { revokeAllTokensBefore } from '../../lib/jwt.js';
 import { hashPassword } from '../../lib/password.js';
 import { prisma } from '../../lib/prisma.js';
 import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
+import {
+  CONTACT_PHONE_SETTING_MESSAGE,
+  getSetting,
+  isValidContactPhoneSetting,
+  normalizeContactPhoneSetting,
+} from '../../lib/settings.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { clearLoginLockState } from './session.js';
@@ -286,6 +292,23 @@ export function createAdminUsersRouter() {
     if (typeof body.mustChangePassword === 'boolean') data.mustChangePassword = body.mustChangePassword;
     if (typeof body.canInvite === 'boolean') data.canInvite = body.canInvite;
 
+    // 管理员改邮箱：普通用户走「换绑邮箱」双向验证（旧邮箱收不到码时无解，如默认种子邮箱），
+    // 管理员操作本身是受信通道（登录 + 审计日志），允许直改；格式与唯一性仍强校验。
+    let emailChanged = false;
+    if (body.email !== undefined) {
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+      if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        res.status(400).json({ detail: '邮箱格式无效' });
+        return;
+      }
+      const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      if (existing && existing.id !== userId) {
+        res.status(409).json({ detail: '该邮箱已被其他账号使用' });
+        return;
+      }
+      data.email = email;
+    }
+
     const wantRole = USER_ROLES.includes(body.role as UserRole) ? (body.role as UserRole) : undefined;
     const wantDisabled = typeof body.disabled === 'boolean' ? body.disabled : undefined;
 
@@ -294,9 +317,16 @@ export function createAdminUsersRouter() {
       const updated = await prisma.$transaction(async (tx) => {
         const current = await tx.user.findUnique({
           where: { id: userId },
-          select: { id: true, role: true, disabled: true },
+          select: { id: true, role: true, disabled: true, email: true },
         });
         if (!current) throw fail('P2025', 'NOT_FOUND');
+
+        // 邮箱未变化时从 data 剔除，避免空更新或误触发登录态作废
+        if (data.email && data.email === current.email) {
+          delete data.email;
+        } else if (data.email) {
+          emailChanged = true;
+        }
 
         if (wantRole && wantRole !== current.role) {
           if (userId === actorId) throw fail('SELF', 'SELF');
@@ -338,11 +368,12 @@ export function createAdminUsersRouter() {
         });
       });
 
-      if (roleOrDisableChanged) {
+      if (roleOrDisableChanged || emailChanged) {
+        // 邮箱是登录凭证：换绑后作废旧令牌强制重新登录（与自助换绑邮箱一致），并清用户缓存
         await Promise.all([
           revokeAllTokensBefore(userId, nowSeconds()).catch(() => {}),
           cacheDel(`auth:user:${userId}`).catch(() => {}),
-          invalidateUserStatsCache(),
+          ...(roleOrDisableChanged ? [invalidateUserStatsCache()] : []),
         ]);
       }
       res.json({ data: updated });
@@ -424,6 +455,90 @@ export function createAdminUsersRouter() {
   );
 
   // ===== Reset password (set temp password) =====
+  // ===== Create user（管理员直建账号） =====
+  // 与注册同一套校验策略（用户名/密码/邮箱/手机号），但管理员操作可信：
+  // 免邮箱验证码、免邀请码；默认强制首次登录改密（管理员设的是转交用的临时密码）。
+  router.post('/api/admin/users', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const username = typeof body.username === 'string' ? body.username.trim() : '';
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+    const role = queryRole(body.role) ?? 'VIEWER';
+    const company = typeof body.company === 'string' ? body.company.trim() : '';
+    const department = typeof body.department === 'string' ? body.department.trim() : '';
+    const phone = normalizeContactPhoneSetting(body.phone);
+
+    const passwordMinLength = Math.max(
+      6,
+      Math.floor(Number(await getSetting<number>('security_password_min_length')) || 8),
+    );
+    const usernameMinLength = Math.max(
+      1,
+      Math.floor(Number(await getSetting<number>('security_username_min_length')) || 2),
+    );
+    const usernameMaxLength = Math.max(
+      usernameMinLength,
+      Math.floor(Number(await getSetting<number>('security_username_max_length')) || 32),
+    );
+
+    if (password.length < passwordMinLength || password.length > 128) {
+      res.status(400).json({ detail: `密码长度应在${passwordMinLength}-128位之间` });
+      return;
+    }
+    if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ detail: '邮箱格式不正确' });
+      return;
+    }
+    if (username.length < usernameMinLength || username.length > usernameMaxLength) {
+      res.status(400).json({ detail: `用户名长度应在${usernameMinLength}-${usernameMaxLength}位之间` });
+      return;
+    }
+    if (!/^[\p{L}\p{N}_\-.]+$/u.test(username)) {
+      res.status(400).json({ detail: '用户名只能包含字母、数字、下划线、连字符和点' });
+      return;
+    }
+    if (
+      body.phone !== undefined &&
+      body.phone !== null &&
+      body.phone !== '' &&
+      !isValidContactPhoneSetting(body.phone)
+    ) {
+      res.status(400).json({ detail: CONTACT_PHONE_SETTING_MESSAGE });
+      return;
+    }
+
+    try {
+      const existing = await prisma.user.findFirst({
+        where: { OR: [{ username }, { email }] },
+        select: { id: true },
+      });
+      if (existing) {
+        res.status(409).json({ detail: '用户名或邮箱已存在' });
+        return;
+      }
+
+      const passwordHash = await hashPassword(password);
+      const created = await prisma.user.create({
+        data: {
+          username,
+          email,
+          passwordHash,
+          role,
+          company: company || null,
+          department: department || null,
+          phone: phone || null,
+          // 管理员设的密码视为转交用的临时密码，默认强制首登改密（可显式关掉）
+          mustChangePassword: body.mustChangePassword !== false,
+        },
+        select: userListItemSelect,
+      });
+      await invalidateUserStatsCache();
+      res.status(201).json(created);
+    } catch {
+      res.status(500).json({ detail: '创建用户失败' });
+    }
+  });
+
   router.post(
     '/api/admin/users/:id/reset-password',
     authMiddleware,

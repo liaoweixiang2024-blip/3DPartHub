@@ -3,9 +3,11 @@ import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
+import UserCreateDialog from '../components/admin/UserCreateDialog';
 import UserEditDialog, { type AdminUserDetail } from '../components/admin/UserEditDialog';
 import { AdminIconButton } from '../components/shared/AdminControls';
 import { AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import AdminSortMenu from '../components/shared/AdminSortMenu';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import AdminRefreshButton from '../components/shared/AdminRefreshButton';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -130,6 +132,7 @@ export default function UserAdminPage() {
   const [sort, setSort] = useState('created_at');
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; username: string } | null>(null);
   const [editTarget, setEditTarget] = useState<UserItem | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [adminConfirm, setAdminConfirm] = useState<{ userId: string; username: string } | null>(null);
   const [batchRole, setBatchRole] = useState('');
   const [batchConfirm, setBatchConfirm] = useState<{ action: 'role' | 'disable' | 'enable'; role?: string } | null>(
@@ -326,21 +329,15 @@ export default function UserAdminPage() {
         {stats?.disabled ? <p className="mt-1 text-[11px] text-error">已禁用 {stats.disabled} 人</p> : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          name="sort"
-          value={sort}
-          onChange={(e) => setSort(e.target.value)}
-          // iOS Safari 原生 select 不继承 font-size，需显式声明；text-sm(14px) 同时避免聚焦自动放大
-          className="shrink-0 rounded-md border border-outline-variant/20 bg-surface-container-high px-2 py-1.5 text-sm text-on-surface"
-          style={{ fontSize: '0.875rem' }}
-          aria-label="排序"
+        <AdminSortMenu value={sort} options={SORT_OPTIONS} onChange={setSort} ariaLabel="排序" />
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-outline-variant/20 bg-surface-container-high px-2.5 py-1.5 text-sm text-on-surface-variant hover:text-on-surface"
         >
-          {SORT_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+          <Icon name="person_add" size={14} />
+          新增用户
+        </button>
         <button
           type="button"
           onClick={handleExport}
@@ -586,6 +583,7 @@ export default function UserAdminPage() {
           onSaved={() => refreshAll()}
         />
       ) : null}
+      {createOpen ? <UserCreateDialog onClose={() => setCreateOpen(false)} onCreated={() => refreshAll()} /> : null}
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}

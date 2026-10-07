@@ -64,14 +64,17 @@ function fetchJsonFromGithub(path: string): Promise<unknown> {
       timeout: 10000,
     };
     const req = https.get(options, (res) => {
-      let data = '';
+      // 必须先攒 Buffer 再整体转 utf-8：逐块 += 会把跨 TCP 分块边界的多字节字符
+      // （中文 3 字节 UTF-8）拆成两段无效字节，各自变成 U+FFFD——版本时间线
+      // 「有些描述显示 ���」的根因，是否中招取决于正文汉字是否恰好落在块边界
+      const chunks: Buffer[] = [];
       res.on('data', (chunk) => {
-        data += chunk;
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       });
       res.on('end', () => {
         try {
           if (res.statusCode === 200) {
-            resolve(JSON.parse(data));
+            resolve(JSON.parse(Buffer.concat(chunks).toString('utf-8')));
           } else {
             resolve(null);
           }

@@ -172,6 +172,7 @@ import {
   Smartphone,
   Monitor,
   MonitorSmartphone,
+  UserPlus,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
@@ -309,6 +310,7 @@ const iconMap: Record<string, LucideIcon> = {
   computer: Monitor,
   devices: MonitorSmartphone,
   help: HelpCircle,
+  person_add: UserPlus,
 
   // 3D Viewer controls
   square: Square,

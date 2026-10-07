@@ -74,6 +74,7 @@ export default function UserEditDialog({
   onSaved: () => void;
 }) {
   const { toast } = useToast();
+  const [email, setEmail] = useState(user.email);
   const [role, setRole] = useState(user.role);
   const [company, setCompany] = useState(user.company ?? '');
   const [phone, setPhone] = useState(user.phone ?? '');
@@ -96,6 +97,7 @@ export default function UserEditDialog({
 
   // 切换用户时重置表单
   useEffect(() => {
+    setEmail(user.email);
     setRole(user.role);
     setCompany(user.company ?? '');
     setPhone(user.phone ?? '');
@@ -109,6 +111,7 @@ export default function UserEditDialog({
 
   const roleChanged = role !== user.role;
   const disabledChanged = disabled !== user.disabled;
+  const emailChanged = email.trim().toLowerCase() !== user.email;
 
   async function handleSave() {
     setSaving(true);
@@ -123,14 +126,21 @@ export default function UserEditDialog({
         canInvite,
       };
       if (roleChanged) payload.role = role;
+      if (emailChanged) payload.email = email.trim();
       await client.put(`/admin/users/${user.id}`, payload);
       // 如果改的是当前登录用户，立即把 canInvite 同步到前端 store，
       // 无需重新登录即可看到「我的邀请码」入口的显隐变化
       const me = useAuthStore.getState().user;
       if (me && me.id === user.id) {
-        useAuthStore.getState().updateUser({ canInvite });
+        useAuthStore
+          .getState()
+          .updateUser({ canInvite, ...(emailChanged ? { email: email.trim().toLowerCase() } : {}) });
       }
-      toast('已保存', 'success');
+      toast(
+        emailChanged ? '已保存。邮箱已更换，该账号需用新邮箱重新登录' : '已保存',
+        'success',
+        emailChanged ? 6000 : undefined,
+      );
       onSaved();
       onClose();
     } catch (err) {
@@ -202,6 +212,20 @@ export default function UserEditDialog({
 
         {/* Body */}
         <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+          <div>
+            <span className={labelClass}>邮箱（登录账号）</span>
+            <input
+              name="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={inputClass}
+            />
+            {emailChanged ? (
+              <p className="mt-1 text-[11px] text-error">邮箱已修改：保存后该账号将登出，需用新邮箱重新登录</p>
+            ) : null}
+          </div>
+
           <div>
             <span className={labelClass}>角色</span>
             <select name="role" value={role} onChange={(e) => setRole(e.target.value)} className={inputClass}>
