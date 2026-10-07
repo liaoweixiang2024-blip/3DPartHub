@@ -5856,7 +5856,12 @@ async function commitRestoreFilePlan(plan: RestoreFilePlan, job: RestoreJob): Pr
 
       const dir = item.label;
       if (dir === 'thumbnails') {
-        thumbnailCount = countFilesRecursive(item.destination, (name) => name.endsWith('.png'));
+        // 与备份侧 getBackupStats 同口径（.png + .jpg）：缩略图绝大多数是 jpg，
+        // 只数 .png 会把全量恢复报成「2 张缩略图」（实际 6670）
+        thumbnailCount = countFilesRecursive(
+          item.destination,
+          (name) => name.endsWith('.png') || name.endsWith('.jpg'),
+        );
         addLog(job, `缩略图恢复完成: ${thumbnailCount} 张`);
       } else if (dir === 'originals') {
         restoredSourceFiles = countFilesRecursive(item.destination, isStepFileName);

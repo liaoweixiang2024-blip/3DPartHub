@@ -1,4 +1,9 @@
-import { cancelPreparedBrowserDownload, downloadBrowserFile, prepareBrowserDownload } from '../lib/browserDownload';
+import {
+  cancelPreparedBrowserDownload,
+  downloadBrowserFile,
+  prepareBrowserDownload,
+  probeRangeDownloadSupport,
+} from '../lib/browserDownload';
 import { BACKUP_CHUNK_SIZE_BYTES, BACKUP_DIRECT_UPLOAD_THRESHOLD_BYTES } from '../lib/uploadLimits';
 import { getAccessToken } from '../stores';
 import client from './client';
@@ -866,7 +871,7 @@ export async function pollBackupProgress(
   });
 }
 
-export async function downloadBackup(id: string): Promise<void> {
+export async function downloadBackup(id: string): Promise<{ rangeSupported: boolean | null }> {
   // Get a short-lived one-time download token, then open download
   const preparedWindow = prepareBrowserDownload();
   try {
@@ -878,7 +883,11 @@ export async function downloadBackup(id: string): Promise<void> {
         ? `/api/settings/backup/download/${encodeURIComponent(id)}/${encodeURIComponent(created.token)}`
         : '');
     if (!url) throw new Error('获取下载令牌失败');
+    // 下载前体检：GB 级备份对断点续传敏感，代理/CDN 剥 Range 会让中断后整单重下。
+    // 串行只多一个 1 字节请求的 RTT；探测失败(null)不阻塞下载。
+    const rangeSupported = await probeRangeDownloadSupport(url);
     await downloadBrowserFile(url, { preparedWindow });
+    return { rangeSupported };
   } catch (error) {
     cancelPreparedBrowserDownload(preparedWindow);
     throw error;

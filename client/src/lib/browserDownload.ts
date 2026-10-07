@@ -375,6 +375,30 @@ async function fetchBlobDownload(href: string, options: DownloadRequestOptions =
   return { blob, fileName: sanitizeFileName(fileName) };
 }
 
+/**
+ * 探测下载链路是否支持 Range 断点续传（GB 级大文件下载前的体检）。
+ * 发一个只要 1 字节的 Range 请求，只看响应状态码：206=链路支持续传；
+ * 200=中间层（代理/CDN）剥掉了 Range 头回全量——浏览器并行分段与中断续传
+ * 都会被迫整单重下。拿到状态码立即 abort 断流，不接收 body（200 时最多
+ * 漏掉 TCP 窗口内的几 KB）。返回 null=探测本身失败（不阻塞下载，静默跳过）。
+ */
+export async function probeRangeDownloadSupport(href: string): Promise<boolean | null> {
+  const controller = new AbortController();
+  try {
+    const response = await fetch(href, {
+      headers: { Range: 'bytes=0-0' },
+      credentials: 'include',
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    return response.status === 206;
+  } catch {
+    return null;
+  } finally {
+    controller.abort();
+  }
+}
+
 export async function downloadBrowserFile(href: string, options: DownloadRequestOptions = {}): Promise<void> {
   if (!href) return;
 

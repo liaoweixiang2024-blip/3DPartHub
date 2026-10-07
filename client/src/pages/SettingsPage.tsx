@@ -5847,7 +5847,11 @@ function Content() {
 
   async function handleDownloadBackup(id: string) {
     try {
-      await downloadBackup(id);
+      const { rangeSupported } = await downloadBackup(id);
+      // 下载已正常发起；这是链路体检结果：代理/CDN 剥 Range 时大文件中断后会整单重下
+      if (rangeSupported === false) {
+        toast('当前网络链路不支持断点续传：下载若中断将从头上重新下载，建议网络稳定时下载', 'info');
+      }
     } catch {
       toast('下载失败', 'error');
     }
