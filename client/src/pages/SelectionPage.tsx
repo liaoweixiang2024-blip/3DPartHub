@@ -2331,6 +2331,67 @@ export default function SelectionPage() {
   const groupProductTotal =
     group?.children.reduce((sum, child) => sum + (catBySlug.get(child.slug)?.productCount ?? 0), 0) ?? 0;
 
+  /* 向导已选 chips 条：纵向滚轮转横向滚动 + 鼠标按住拖动平移。条本身可滚
+     （overflow-x-auto），但鼠标滚轮只有纵向分量、对横向条无效，原生也不支持按住拖动，
+     滚动条又被 scrollbar-none 隐藏——都不补的话用户完全无从滚动（「选项固定住了
+     不能横向滚动」的反馈正是这里）。触控板原生横滑（deltaX）不劫持；条没溢出时也
+     不劫持，页面滚动行为不变。拖动超过阈值后松手不触发 chip 点击（防止拖动变成掉选）。 */
+  const wizardChipsStripRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = wizardChipsStripRef.current;
+    if (!el || !isDesktop) return;
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      if (el.scrollWidth <= el.clientWidth + 2) return;
+      event.preventDefault();
+      el.scrollLeft += event.deltaY;
+    };
+    let dragging = false;
+    let dragStartX = 0;
+    let dragStartScroll = 0;
+    let dragMoved = false;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'mouse' || event.button !== 0) return;
+      dragging = true;
+      dragMoved = false;
+      dragStartX = event.clientX;
+      dragStartScroll = el.scrollLeft;
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!dragging || event.buttons !== 1) return;
+      const dx = event.clientX - dragStartX;
+      if (!dragMoved && Math.abs(dx) < 5) return;
+      if (!dragMoved) {
+        dragMoved = true;
+        el.style.userSelect = 'none';
+      }
+      el.scrollLeft = dragStartScroll - dx;
+    };
+    const onPointerUp = () => {
+      dragging = false;
+      if (dragMoved) el.style.userSelect = '';
+    };
+    const onClickCapture = (event: MouseEvent) => {
+      if (dragMoved) {
+        event.preventDefault();
+        event.stopPropagation();
+        dragMoved = false;
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    el.addEventListener('click', onClickCapture, true);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      el.removeEventListener('click', onClickCapture, true);
+    };
+  }, [isDesktop, phase]);
+
   const toolbarSummary =
     phase === 'group' ? (
       <div className="flex min-w-0 items-center gap-4 overflow-x-auto scrollbar-none text-xs text-on-surface-variant">
@@ -2367,7 +2428,10 @@ export default function SelectionPage() {
         </span>
       </div>
     ) : phase === 'wizard' ? (
-      <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto scrollbar-none md:gap-2">
+      <div
+        ref={wizardChipsStripRef}
+        className="flex min-w-0 items-center gap-1.5 overflow-x-auto scrollbar-none md:gap-2"
+      >
         <span className="shrink-0 whitespace-nowrap text-xs text-on-surface-variant tabular-nums">
           {t('selectionPage.selectedProgress', { selected: specKeys.length, total: fields.length })}
         </span>
