@@ -108,7 +108,13 @@
   box-shadow: 0 1px 2px color-mix(in srgb, var(--color-shadow) 4%, transparent);
 }
 
-[data-interface-theme='workbench'] .app-public-tool-page-selection [data-selection-category-card]:hover {
+/* 悬停变亮只给真鼠标（data-mouse-hover 由卡片 pointerenter 且 pointerType==='mouse' 设置）：
+   触摸管线实测：手指点按/按住/拖动 65px/松手，:hover 全程粘在落点卡上 → 这条规则
+   把卡染成 surface-container-lowest（浅色主题=纯白），即移动端滑动分类卡变白的真凶。
+   触摸设置不了 data 属性，物理上无法触发；桌面鼠标动画不变。 */
+[data-interface-theme='workbench']
+  .app-public-tool-page-selection
+  [data-selection-category-card][data-mouse-hover='true'] {
   border-color: color-mix(in srgb, var(--color-primary-container) 24%, var(--color-outline-variant));
   background: var(--color-surface-container-lowest);
 }
