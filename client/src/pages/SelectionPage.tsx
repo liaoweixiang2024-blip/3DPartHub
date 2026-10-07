@@ -62,6 +62,16 @@ import { useAuthStore } from '../stores/useAuthStore';
 
 /* ══════════════ Main Page ══════════════ */
 
+/* 移动端冻结头（data-sticky-header）盖在滚动容器顶部的实际高度。
+   滚动定位必须减掉它，否则内容会被钉在冻结头底下（桌面端标题在滚动容器外，返回 0）。 */
+const stickyHeaderOffsetOf = (container: HTMLElement, isDesktop: boolean) => {
+  if (isDesktop) return 0;
+  const header = container.parentElement?.querySelector<HTMLElement>('[data-sticky-header]');
+  if (!header) return 0;
+  const offset = header.getBoundingClientRect().bottom - container.getBoundingClientRect().top;
+  return offset > 0 ? offset : 0;
+};
+
 export default function SelectionPage() {
   const { t } = useTranslation();
   const { settings: settingsData } = usePublicSettings();
@@ -535,13 +545,7 @@ export default function SelectionPage() {
   /* 移动端吸顶头（标题+搜索框+已选条，约 176px）会整块盖住滚动定位的目标元素
      （一整排图片选项卡的高度），滚动 target 需减去头在滚动容器里的实际高度。
      桌面端标题在滚动容器外，返回 0 不影响。 */
-  const stickyHeaderOffset = (container: HTMLElement) => {
-    if (isDesktop) return 0;
-    const header = container.parentElement?.querySelector<HTMLElement>('[data-sticky-header]');
-    if (!header) return 0;
-    const offset = header.getBoundingClientRect().bottom - container.getBoundingClientRect().top;
-    return offset > 0 ? offset : 0;
-  };
+  const stickyHeaderOffset = (container: HTMLElement) => stickyHeaderOffsetOf(container, isDesktop);
 
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -558,7 +562,9 @@ export default function SelectionPage() {
         if (!container || !el) return;
         const cRect = container.getBoundingClientRect();
         const eRect = el.getBoundingClientRect();
-        if (eRect.top < cRect.top + 4) {
+        // 对「冻结头底边」而不是容器顶比较：移动端头部盖住容器顶部一段，
+        // 只对容器顶比较会漏掉「步骤夹在容器顶和头底边之间」的半遮状态
+        if (eRect.top < cRect.top + stickyHeaderOffset(container) + 4) {
           const target = eRect.top - cRect.top + container.scrollTop - stickyHeaderOffset(container) - 8;
           container.scrollTo({ top: Math.max(0, target), behavior: 'auto' });
         }
@@ -595,7 +601,7 @@ export default function SelectionPage() {
           if (!container || !el) return;
           const cRect = container.getBoundingClientRect();
           const eRect = el.getBoundingClientRect();
-          if (eRect.top < cRect.top + 4) {
+          if (eRect.top < cRect.top + stickyHeaderOffset(container) + 4) {
             const target = eRect.top - cRect.top + container.scrollTop - stickyHeaderOffset(container) - 8;
             container.scrollTo({ top: Math.max(0, target), behavior: 'auto' });
           }
@@ -679,7 +685,7 @@ export default function SelectionPage() {
               if (!el2 || !c2) return;
               const cr = c2.getBoundingClientRect();
               const er = el2.getBoundingClientRect();
-              if (er.top < cr.top + 4) {
+              if (er.top < cr.top + stickyHeaderOffset(c2) + 4) {
                 const t = er.top - cr.top + c2.scrollTop - stickyHeaderOffset(c2) - 8;
                 c2.scrollTo({ top: Math.max(0, t), behavior: 'auto' });
               }
@@ -714,8 +720,14 @@ export default function SelectionPage() {
   useEffect(() => {
     if (search || curField || phase !== 'wizard' || isLoading || filteredTotal <= 0) return;
     if (resultRevealTimerRef.current) clearTimeout(resultRevealTimerRef.current);
-    resultRevealTimerRef.current = setTimeout(() => {
-      if (Date.now() - lastUserScrollAtRef.current < 260) return;
+    const reveal = (attempt: number) => {
+      /* 用户刚滚动过先不抢滚动，但不能就此放弃：滚轮/触控板惯性会持续几百毫秒地
+         续期时间戳，「滚到最后一项顺手点击」的揭示滚动曾被惯性事件直接吞掉
+         （选完最后一项结果偶发不往上滚）。改为稍后重试，惯性结束就能滚到位。 */
+      if (Date.now() - lastUserScrollAtRef.current < 260) {
+        if (attempt < 4) resultRevealTimerRef.current = setTimeout(() => reveal(attempt + 1), 320);
+        return;
+      }
       const el = resultRef.current;
       if (!el) return;
 
@@ -723,12 +735,15 @@ export default function SelectionPage() {
       if (container) {
         const cRect = container.getBoundingClientRect();
         const eRect = el.getBoundingClientRect();
+        // 结果顶部已在视口上半区才视为「用户自己滚到/看到了」——刚探进底沿不算
+        if (eRect.top < cRect.top + cRect.height / 2) return;
         const target = eRect.top - cRect.top + container.scrollTop - stickyHeaderOffset(container) - 18;
         container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
       } else {
         wizardWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
-    }, 120);
+    };
+    resultRevealTimerRef.current = setTimeout(() => reveal(0), 120);
 
     return () => {
       if (resultRevealTimerRef.current) clearTimeout(resultRevealTimerRef.current);
@@ -819,12 +834,18 @@ export default function SelectionPage() {
       if (container) {
         const cRect = container.getBoundingClientRect();
         const eRect = el.getBoundingClientRect();
-        container.scrollTo({ top: Math.max(0, eRect.top - cRect.top + container.scrollTop - 8), behavior: 'auto' });
+        // 必须减冻结头高度：不减会把第一步（含首项选项卡）钉在冻结头底下，
+        // 「清空后第一项选项文字被遮一半」正是这里漏减造成的
+        const offset = stickyHeaderOffsetOf(container, isDesktop);
+        container.scrollTo({
+          top: Math.max(0, eRect.top - cRect.top + container.scrollTop - offset - 8),
+          behavior: 'auto',
+        });
       } else {
         el.scrollIntoView({ behavior: 'auto', block: 'start' });
       }
     }, 40);
-  }, [setSearchDraft]);
+  }, [isDesktop, setSearchDraft]);
   const pickVal = useCallback((key: string, val: string) => {
     setPendingOptionKey(`${key}:${val}`);
     setAutoSelectedFields((prev) => {
@@ -896,12 +917,17 @@ export default function SelectionPage() {
       if (container) {
         const cRect = container.getBoundingClientRect();
         const eRect = el.getBoundingClientRect();
-        container.scrollTo({ top: Math.max(0, eRect.top - cRect.top + container.scrollTop - 8), behavior: 'auto' });
+        // 同 resetCurrentCategory：减冻结头高度，避免第一步被钉在冻结头底下
+        const offset = stickyHeaderOffsetOf(container, isDesktop);
+        container.scrollTo({
+          top: Math.max(0, eRect.top - cRect.top + container.scrollTop - offset - 8),
+          behavior: 'auto',
+        });
       } else {
         el.scrollIntoView({ behavior: 'auto', block: 'start' });
       }
     }, 120);
-  }, []);
+  }, [isDesktop]);
   const toggleInquiryProduct = useCallback(
     (product: SelectionProduct) => {
       const result = inquiryCart.toggleProduct(product);
@@ -2412,13 +2438,18 @@ export default function SelectionPage() {
 
   const selectionToolbarCore = (
     <div className="flex min-h-0 items-center gap-2 md:min-h-11 md:flex-wrap md:justify-between md:gap-3">
-      {/* wizard 阶段左侧已选 chips 允许收缩（内层 overflow-x-auto 接管溢出）——
-          之前 shrink-0 让 chips 只增不让，把右侧搜索框/生成链接/全部分类挤变形 */}
-      <div className={`min-w-0 items-center gap-2 md:gap-3 ${phase === 'wizard' ? 'hidden md:flex' : 'flex'}`}>
+      {/* wizard 阶段左侧已选 chips 吸收全部挤压空间（内层 overflow-x-auto 接管溢出）。
+          v5.3.8 只给了 min-w-0，但右侧仍是 flex-1（basis 0 先让位）——chips 多到结果阶段
+          （8 个字段全选 + 清空按钮）时右侧还是被压到内容宽度以下换行变形。改为：
+          桌面右侧 flex-none 锁定自然宽度（搜索框/生成链接/全部分类永不变形），
+          左侧 flex-1 吃剩余空间，chips 横向滚动；窄分辨率（1366@125% 缩放≈1093px）也稳。 */}
+      <div
+        className={`min-w-0 items-center gap-2 md:gap-3 ${phase === 'wizard' ? 'hidden md:flex md:min-w-0 md:flex-1' : 'flex'}`}
+      >
         {toolbarSummary}
       </div>
       <div
-        className={`flex min-h-8 flex-nowrap items-center justify-end gap-1.5 md:ml-auto md:min-h-9 md:flex-wrap md:gap-2 ${phase === 'wizard' ? 'min-w-0 flex-1' : 'ml-auto'}`}
+        className={`flex min-h-8 flex-nowrap items-center justify-end gap-1.5 md:ml-auto md:min-h-9 md:flex-wrap md:gap-2 ${phase === 'wizard' ? 'min-w-0 flex-1 md:flex-none' : 'ml-auto'}`}
       >
         {phase === 'wizard' && liveCat ? (
           <SearchField
