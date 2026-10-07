@@ -337,6 +337,7 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
       topModels,
       recentDownloadRows,
       formatGroups,
+      deviceGroups,
       chartRows,
     ] = await Promise.all([
       prisma.model.aggregate({ where: modelWhere, _sum: { downloadCount: true } }),
@@ -379,12 +380,19 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
           format: true,
           fileSize: true,
           source: true,
+          device: true,
           shareId: true,
           createdAt: true,
         },
       }),
       prisma.downloadEvent.groupBy({
         by: ['format'],
+        where: eventWhere,
+        _count: { _all: true },
+        _sum: { fileSize: true },
+      }),
+      prisma.downloadEvent.groupBy({
+        by: ['device'],
         where: eventWhere,
         _count: { _all: true },
         _sum: { fileSize: true },
@@ -469,6 +477,7 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
           format: download.format,
           file_size: download.fileSize,
           source: download.source,
+          device: download.device,
           shared_by:
             download.source === 'share' && download.shareId ? (recentSharedByMap.get(download.shareId) ?? null) : null,
           created_at: download.createdAt,
@@ -481,6 +490,11 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
           bytes: group._sum.fileSize || 0,
         }))
         .sort((a, b) => b.downloads - a.downloads),
+      deviceStats: deviceGroups.map((group) => ({
+        device: group.device || 'unknown',
+        downloads: group._count._all,
+        bytes: group._sum.fileSize || 0,
+      })),
       dailyStats: Array.from(dailyMap.entries()).map(([date, value]) => ({ date, ...value })),
     });
   } catch (err) {
@@ -518,6 +532,7 @@ router.get('/api/admin/downloads/records', authMiddleware, async (req: AuthReque
           format: true,
           fileSize: true,
           source: true,
+          device: true,
           shareId: true,
           createdAt: true,
         },
@@ -567,6 +582,7 @@ router.get('/api/admin/downloads/records', authMiddleware, async (req: AuthReque
           format: download.format,
           file_size: download.fileSize,
           source: download.source,
+          device: download.device,
           shared_by:
             download.source === 'share' && download.shareId ? (sharedByMap.get(download.shareId) ?? null) : null,
           created_at: download.createdAt,

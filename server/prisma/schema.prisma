@@ -324,6 +324,7 @@ model DownloadEvent {
   format    String
   fileSize  Int      @default(0) @map("file_size")
   source    String   @default("model") // model | share | batch
+  device    String   @default("unknown") // mobile | desktop | unknown（记录时 UA 不可得；只存粗分类不存完整 UA）
   shareId   String?  @map("share_id") // 纯字符串引用，不加 FK（分享删除后事件保留）
   createdAt DateTime @default(now()) @map("created_at")
 

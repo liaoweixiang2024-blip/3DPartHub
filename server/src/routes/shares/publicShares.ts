@@ -6,6 +6,7 @@ import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
 import { cacheDel, cacheGetOrSet, resolveCacheTtl, TTL, redis } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
 import { createProtectedResourceToken } from '../../lib/downloadTokenStore.js';
+import { deviceFromRequest } from '../../lib/downloadDevice.js';
 import { logger } from '../../lib/logger.js';
 import { modelDownloadFileName, modelDownloadSourceName } from '../../lib/modelDownloadName.js';
 import { prisma } from '../../lib/prisma.js';
@@ -473,6 +474,7 @@ export function createPublicSharesRouter() {
             fileSize: target.record?.fileSize || 0,
             source: 'share',
             shareId: share.id,
+            device: deviceFromRequest(req),
           },
         }),
         prisma.model.update({

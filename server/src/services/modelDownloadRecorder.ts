@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
+import type { DownloadDevice } from '../lib/downloadDevice.js';
 
 export class DailyDownloadLimitError extends Error {
   constructor(readonly limit: number) {
@@ -17,6 +18,8 @@ export type ModelDownloadRecordOptions = {
   dailyLimit: number;
   noRecord: boolean;
   source?: string;
+  /** 下载设备粗分类（PC/移动端统计）；缺省记 unknown */
+  device?: DownloadDevice;
 };
 
 export type QueuedModelDownloadRecord = {
@@ -25,6 +28,7 @@ export type QueuedModelDownloadRecord = {
   format: string;
   fileSize: number;
   source?: string;
+  device?: DownloadDevice;
 };
 
 export function shouldRecordDownloadSynchronously(options: ModelDownloadRecordOptions): boolean {
@@ -43,7 +47,14 @@ export async function recordModelDownload(prisma: DownloadRecorderPrisma, option
     // 匿名下载也打事件点（统计/趋势需要），只是不写用户历史表
     await prisma.$transaction(async (tx: DownloadRecorderTransaction) => {
       await tx.downloadEvent.create({
-        data: { modelId, userId: null, format, fileSize, source: options.source ?? 'model' },
+        data: {
+          modelId,
+          userId: null,
+          format,
+          fileSize,
+          source: options.source ?? 'model',
+          device: options.device ?? 'unknown',
+        },
       });
       await tx.model.update({
         where: { id: modelId },
@@ -83,7 +94,14 @@ export async function recordModelDownload(prisma: DownloadRecorderPrisma, option
     if (!noRecord) {
       // 事件流水不去重：每次下载一行，供统计/趋势使用
       await tx.downloadEvent.create({
-        data: { modelId, userId, format, fileSize, source: options.source ?? 'model' },
+        data: {
+          modelId,
+          userId,
+          format,
+          fileSize,
+          source: options.source ?? 'model',
+          device: options.device ?? 'unknown',
+        },
       });
     }
 
@@ -133,6 +151,7 @@ export async function recordQueuedModelDownloads(prisma: DownloadRecorderPrisma,
         format: record.format,
         fileSize: record.fileSize,
         source: record.source ?? 'model',
+        device: record.device ?? 'unknown',
       })),
     });
     for (const [modelId, count] of increments) {

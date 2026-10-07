@@ -10,6 +10,7 @@ import { getBusinessConfig } from '../lib/businessConfig.js';
 import { cacheDelByPrefix } from '../lib/cache.js';
 import { config } from '../lib/config.js';
 import { consumeProtectedResourceToken, createProtectedResourceToken } from '../lib/downloadTokenStore.js';
+import { deviceFromRequest } from '../lib/downloadDevice.js';
 import { syncJob, loadJob } from '../lib/jobStore.js';
 import { createLogger } from '../lib/logger.js';
 import { optionalString } from '../lib/requestValidation.js';
@@ -250,6 +251,7 @@ router.post('/api/batch/download', authMiddleware, requireRole('ADMIN'), async (
               format: archived.format,
               fileSize: archived.fileSize,
               source: 'batch',
+              device: deviceFromRequest(req),
             },
           }),
           prisma.model.update({

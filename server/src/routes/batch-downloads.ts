@@ -3,6 +3,7 @@ import { extname } from 'node:path';
 import archiver from 'archiver';
 import { Router, Response, urlencoded } from 'express';
 import { getBusinessConfig } from '../lib/businessConfig.js';
+import { deviceFromRequest } from '../lib/downloadDevice.js';
 import { createLogger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { getSetting } from '../lib/settings.js';
@@ -252,6 +253,7 @@ async function recordArchiveDownloads(req: AuthRequest, res: Response, fileEntri
         ...entry.record,
         dailyLimit,
         noRecord: false,
+        device: deviceFromRequest(req),
       });
     } catch (err) {
       if (err instanceof DailyDownloadLimitError) {

@@ -3,6 +3,7 @@ import { extname } from 'node:path';
 import archiver from 'archiver';
 import { Router, Response, urlencoded } from 'express';
 import { getBusinessConfig } from '../lib/businessConfig.js';
+import { deviceFromRequest } from '../lib/downloadDevice.js';
 import { getErrorMessage } from '../lib/http.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
@@ -355,6 +356,7 @@ router.post(
             ...entry.record,
             dailyLimit,
             noRecord: false,
+            device: deviceFromRequest(req),
           });
         } catch (err: unknown) {
           if (err instanceof DailyDownloadLimitError) {

@@ -246,6 +246,70 @@ function SummaryCards({ stats }: { stats: DownloadAdminStats }) {
   );
 }
 
+/** 设备分布条：移动端/PC 端下载占比（跟随搜索过滤，与格式分布同口径）。unknown 为上线前的历史数据 */
+function DeviceSplitBar({ items }: { items: DownloadAdminStats['deviceStats'] }) {
+  const byDevice = new Map((items ?? []).map((item) => [item.device, item]));
+  const total = (items ?? []).reduce((sum, item) => sum + item.downloads, 0);
+  if (total === 0) return null;
+
+  const mobile = byDevice.get('mobile')?.downloads ?? 0;
+  const desktop = byDevice.get('desktop')?.downloads ?? 0;
+  const unknown = byDevice.get('unknown')?.downloads ?? 0;
+  const segments = [
+    { key: 'mobile', label: '移动端', icon: 'smartphone', count: mobile, barClassName: 'bg-primary-container' },
+    { key: 'desktop', label: 'PC 端', icon: 'computer', count: desktop, barClassName: 'bg-blue-500/80' },
+  ];
+  if (unknown > 0) {
+    segments.push({
+      key: 'unknown',
+      label: '未知',
+      icon: 'help',
+      count: unknown,
+      barClassName: 'bg-outline-variant/50',
+    });
+  }
+
+  return (
+    <section className="rounded-xl border border-outline-variant/12 bg-surface-container-low px-4 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary-container/10 text-primary-container">
+            <Icon name="devices" size={17} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-on-surface">设备分布</p>
+            <p className="mt-0.5 truncate text-xs text-on-surface-variant">
+              按下载事件统计下载方使用的设备类型
+              {unknown > 0 ? '（上线前的历史下载记为未知）' : ''}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {segments.map((segment) => (
+            <span key={segment.key} className="inline-flex items-center gap-1.5 text-xs text-on-surface-variant">
+              <span className={`h-2 w-2 rounded-full ${segment.barClassName}`} />
+              <Icon name={segment.icon} size={13} />
+              <span className="font-medium text-on-surface">{segment.label}</span>
+              {formatNumber(segment.count)} 次 ·{' '}
+              <span className="tabular-nums">{formatPercent((segment.count / total) * 100)}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-surface-container-high">
+        {segments.map((segment) => (
+          <div
+            key={segment.key}
+            className={segment.barClassName}
+            style={{ width: `${(segment.count / total) * 100}%` }}
+            title={`${segment.label} ${formatNumber(segment.count)} 次`}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function DownloadTabPanel({ tab, badge, children }: { tab: DownloadStatsTab; badge: string; children: ReactNode }) {
   const meta = TAB_META[tab];
   return (
@@ -450,6 +514,25 @@ function DownloadSourceBadge({ source }: { source: string }) {
   );
 }
 
+/** 设备徽章：中性色纯图标（手机/电脑）标注下载设备，与行内其他小图标同色；unknown（历史数据）不显示 */
+function DownloadDeviceBadge({ device }: { device?: string }) {
+  if (device === 'mobile') {
+    return (
+      <span className="inline-flex shrink-0 items-center text-on-surface-variant" title="移动端下载">
+        <Icon name="smartphone" size={12} />
+      </span>
+    );
+  }
+  if (device === 'desktop') {
+    return (
+      <span className="inline-flex shrink-0 items-center text-on-surface-variant" title="PC 端下载">
+        <Icon name="computer" size={12} />
+      </span>
+    );
+  }
+  return null;
+}
+
 function RecentDownloadRow({ item }: { item: DownloadAdminRecord }) {
   // 分享下载：下载者固定是匿名访客；分享图标已表意，行内只显示分享创建者用户名
   const actor =
@@ -486,6 +569,7 @@ function RecentDownloadRow({ item }: { item: DownloadAdminRecord }) {
             <Icon name="inventory_2" size={12} />
             {(item.format || item.model_format || 'model').toUpperCase()}
           </span>
+          <DownloadDeviceBadge device={item.device} />
           <span>{formatBytes(item.file_size)}</span>
         </div>
       </div>
@@ -649,6 +733,7 @@ function Content() {
         <div className="h-full overflow-y-auto overflow-x-hidden pb-4 custom-scrollbar">
           <div className="space-y-4">
             <SummaryCards stats={data} />
+            <DeviceSplitBar items={data.deviceStats} />
             <div key={`${activeTab}:${search}`} className="admin-tab-panel">
               {activeTab === 'trend' ? <TrendPanel data={data.dailyStats} /> : null}
               {activeTab === 'formats' ? <FormatPanel items={data.formatStats} /> : null}

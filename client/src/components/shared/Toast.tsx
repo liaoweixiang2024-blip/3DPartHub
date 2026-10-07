@@ -15,7 +15,8 @@ interface Toast {
 }
 
 interface ToastContextValue {
-  toast: (message: string, type?: ToastType) => void;
+  /** durationMs：提示停留时长，默认 3 秒；重要预警（如下载续传不可用）传更长 */
+  toast: (message: string, type?: ToastType, durationMs?: number) => void;
 }
 
 const ToastContext = createContext<ToastContextValue>({ toast: () => {} });
@@ -31,12 +32,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counter = useRef(0);
 
-  const toast = useCallback((message: string, type: ToastType = 'info') => {
+  const toast = useCallback((message: string, type: ToastType = 'info', durationMs = 3000) => {
     const id = ++counter.current;
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3000);
+    }, durationMs);
   }, []);
 
   useEffect(() => {

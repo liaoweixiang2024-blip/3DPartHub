@@ -3,6 +3,7 @@ import type { PrismaClient } from '@prisma/client';
 import { Router, Request, Response } from 'express';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
 import { consumeModelDownloadToken, verifyModelDownloadToken } from '../../lib/downloadTokenStore.js';
+import { deviceFromRequest } from '../../lib/downloadDevice.js';
 import { logger } from '../../lib/logger.js';
 import { createNotification } from '../../lib/notificationDelivery.js';
 import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
@@ -174,11 +175,13 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
     }
 
     if (!isHeadRequest && prisma && target.record) {
+      const device = deviceFromRequest(req);
       const recordOptions = {
         userId: authUserId,
         ...target.record,
         dailyLimit: Number(dailyLimit) || 0,
         noRecord: booleanFlag(req.query.no_record),
+        device,
       };
       try {
         if (shouldSkipDownloadRecord(recordOptions)) {
@@ -198,6 +201,7 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
             modelId: target.record.modelId,
             format: target.record.format,
             fileSize: target.record.fileSize,
+            device,
           });
           if (!queued) {
             await recordModelDownload(prisma, recordOptions);

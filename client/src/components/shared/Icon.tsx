@@ -169,6 +169,9 @@ import {
   DatabaseBackup,
   CloudCog,
   ToggleLeft,
+  Smartphone,
+  Monitor,
+  MonitorSmartphone,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
@@ -301,6 +304,11 @@ const iconMap: Record<string, LucideIcon> = {
   group: Users,
   receipt_long: Receipt,
   campaign: Megaphone,
+  // 下载设备统计：手机 / 电脑 / 设备分布头 / 未知（缺映射会渲染成空 span）
+  smartphone: Smartphone,
+  computer: Monitor,
+  devices: MonitorSmartphone,
+  help: HelpCircle,
 
   // 3D Viewer controls
   square: Square,

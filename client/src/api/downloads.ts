@@ -61,12 +61,19 @@ export interface DownloadAdminStats {
     format: string;
     file_size: number;
     source: string;
+    /** 下载设备粗分类：mobile | desktop | unknown（老数据/UA 缺失为 unknown） */
+    device?: string;
     /** 分享下载的归因：分享创建者用户名（分享/用户已删除时为 null） */
     shared_by: string | null;
     created_at: string;
   }>;
   formatStats: Array<{
     format: string;
+    downloads: number;
+    bytes: number;
+  }>;
+  deviceStats?: Array<{
+    device: string;
     downloads: number;
     bytes: number;
   }>;

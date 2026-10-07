@@ -74,6 +74,7 @@ test('records an anonymous download event without creating a user history record
     format: 'glb',
     fileSize: 100,
     source: 'model',
+    device: 'unknown',
   });
 });
 
@@ -103,6 +104,7 @@ test('records authenticated downloads inside a transaction', async () => {
     format: 'glb',
     fileSize: 100,
     source: 'model',
+    device: 'unknown',
   });
 });
 
@@ -120,6 +122,21 @@ test('passes source through to the download event', async () => {
   });
 
   assert.equal(eventCreateArgs[0][0].source, 'favorites');
+});
+
+test('passes device through to the download event, defaulting to unknown', async () => {
+  const mobile = createPrismaMock();
+  await recordModelDownload(mobile.prisma, {
+    userId: 'u1',
+    modelId: 'm1',
+    format: 'glb',
+    fileSize: 100,
+    dailyLimit: 0,
+    noRecord: false,
+    device: 'mobile',
+  });
+
+  assert.equal(mobile.eventCreateArgs[0][0].device, 'mobile');
 });
 
 test('still records authenticated download when noRecord is true and daily limit is enabled', async () => {
@@ -178,7 +195,20 @@ test('flushes queued records: history deduped, one event per record including an
     format: 'stp',
     fileSize: 200,
     source: 'model',
+    device: 'unknown',
   });
+});
+
+test('keeps per-record device in queued flushes', async () => {
+  const { prisma, eventCreateManyArgs } = createPrismaMock();
+
+  await recordQueuedModelDownloads(prisma, [
+    { userId: 'u1', modelId: 'm1', format: 'glb', fileSize: 100, device: 'mobile' },
+    { userId: null, modelId: 'm2', format: 'stp', fileSize: 200, device: 'desktop' },
+  ]);
+
+  assert.equal(eventCreateManyArgs[0].data[0].device, 'mobile');
+  assert.equal(eventCreateManyArgs[0].data[1].device, 'desktop');
 });
 
 test('classifies async-safe records without daily limit', () => {
