@@ -45,14 +45,41 @@ export function CatalogZoomModal({
     scaleRef.current = scale;
   }, [scale]);
 
-  /** 把偏移限制在「缩放后图片不脱离容器」的范围内（缩放回 1 时归零复位） */
+  /** 适应窗口基准尺寸（图片原始尺寸与容器的 contain 缩放，不超过原生像素）。
+   *  缩放用「布局尺寸」驱动（width/height = fit × scale）而不是 transform:scale——
+   *  transform 方案会把「压到适应窗口的小图」光栅化后位图拉伸，原生 2000px 的图
+   *  在 fit(约565px)×3 倍时糊成 565px 位图；布局尺寸让浏览器按最终显示尺寸
+   *  重新光栅化，原生像素内始终清晰。 */
+  const [fit, setFit] = useState<{ w: number; h: number } | null>(null);
+
+  // 图片加载完成 / 容器尺寸变化时重算基准尺寸
+  const computeFit = useCallback(() => {
+    const el = containerRef.current;
+    const img = imgRef.current;
+    if (!el || !img || !img.naturalWidth || !img.naturalHeight) return;
+    const ratio = Math.min(el.clientWidth / img.naturalWidth, el.clientHeight / img.naturalHeight, 1);
+    setFit({ w: Math.round(img.naturalWidth * ratio), h: Math.round(img.naturalHeight * ratio) });
+  }, []);
+
+  useEffect(() => {
+    if (!isImage) return;
+    const el = containerRef.current;
+    if (!el) return;
+    computeFit();
+    const ro = new ResizeObserver(computeFit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isImage, computeFit]);
+
+  /** 把偏移限制在「缩放后图片不脱离容器」的范围内（缩放回 1 时归零复位）。
+   *  布局尺寸方案下 img.offsetWidth 已是缩放后的显示尺寸，无需再乘 scale。 */
   const clampOffset = useCallback((next: Offset, nextScale: number): Offset => {
     if (nextScale <= MIN_SCALE + 1e-9) return { x: 0, y: 0 };
     const container = containerRef.current;
     const img = imgRef.current;
     if (!container || !img) return next;
-    const maxX = Math.max(0, (img.offsetWidth * nextScale - container.clientWidth) / 2);
-    const maxY = Math.max(0, (img.offsetHeight * nextScale - container.clientHeight) / 2);
+    const maxX = Math.max(0, (img.offsetWidth - container.clientWidth) / 2);
+    const maxY = Math.max(0, (img.offsetHeight - container.clientHeight) / 2);
     return { x: clamp(next.x, -maxX, maxX), y: clamp(next.y, -maxY, maxY) };
   }, []);
 
@@ -278,11 +305,19 @@ export function CatalogZoomModal({
               alt={t('selectionResult.catalog')}
               draggable={false}
               onDoubleClick={onDoubleClick}
-              style={{
-                transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`,
-                willChange: 'transform',
-              }}
-              className="max-h-full max-w-full rounded object-contain"
+              onLoad={computeFit}
+              style={
+                fit
+                  ? {
+                      width: fit.w * scale,
+                      height: fit.h * scale,
+                      // transform 只做平移（平移不改变光栅化尺寸），缩放交给布局尺寸
+                      transform: `translate3d(${offset.x}px, ${offset.y}px, 0)`,
+                      willChange: 'transform',
+                    }
+                  : undefined
+              }
+              className={`rounded object-contain ${fit ? '' : 'max-h-full max-w-full'}`}
             />
           </div>
         ) : (

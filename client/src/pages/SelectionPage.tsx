@@ -548,6 +548,22 @@ export default function SelectionPage() {
     if (search) return;
     if (!curField) return;
     if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    /* 复核兜底：定位计算时选项图片等异步内容可能还没加载，步骤高度随后变化会把
+       标题顶出容器上沿（短视口下「选择XX」只剩半行字被裁切）。初次滚动完成后再
+       量一次，越界则立即重新顶对齐。 */
+    const recheckStepTop = (delayMs: number) => {
+      scrollTimerRef.current = setTimeout(() => {
+        const container = scrollContainerRef.current || mobileMainRef.current;
+        const el = curStepRef.current || wizardWrapRef.current;
+        if (!container || !el) return;
+        const cRect = container.getBoundingClientRect();
+        const eRect = el.getBoundingClientRect();
+        if (eRect.top < cRect.top + 4) {
+          const target = eRect.top - cRect.top + container.scrollTop - stickyHeaderOffset(container) - 8;
+          container.scrollTo({ top: Math.max(0, target), behavior: 'auto' });
+        }
+      }, delayMs);
+    };
     const shouldScrollStepToTop = stepScrollIntentRef.current === 'top';
     if (shouldScrollStepToTop) {
       stepScrollIntentRef.current = null;
@@ -560,6 +576,7 @@ export default function SelectionPage() {
         const eRect = el.getBoundingClientRect();
         const target = eRect.top - cRect.top + container.scrollTop - stickyHeaderOffset(container) - 8;
         container.scrollTo({ top: Math.max(0, target), behavior: 'auto' });
+        recheckStepTop(isDesktop ? 350 : 150);
       }, 0);
       return () => {
         if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
@@ -567,7 +584,27 @@ export default function SelectionPage() {
     }
     if (suppressAutoAdvanceScrollRef.current) {
       suppressAutoAdvanceScrollRef.current = false;
-      return;
+      /* 被抑制的自动滚动（桌面掉选回退正是这条路径：E1 被抑制、E2 因 pending=false
+         跳过 → 没有任何 effect 滚动；结果区卸载把 scrollHeight 收窄、浏览器把
+         scrollTop 强制收窄的残留位置会把步骤标题留在折叠线上方，短视口下
+         「选择XX」字被裁一半）。兜底：步骤在视口外才顶对齐拉回，正常情况零副作用。 */
+      scrollTimerRef.current = setTimeout(
+        () => {
+          const container = scrollContainerRef.current || mobileMainRef.current;
+          const el = curStepRef.current || wizardWrapRef.current;
+          if (!container || !el) return;
+          const cRect = container.getBoundingClientRect();
+          const eRect = el.getBoundingClientRect();
+          if (eRect.top < cRect.top + 4) {
+            const target = eRect.top - cRect.top + container.scrollTop - stickyHeaderOffset(container) - 8;
+            container.scrollTo({ top: Math.max(0, target), behavior: 'auto' });
+          }
+        },
+        isDesktop ? 260 : 120,
+      );
+      return () => {
+        if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      };
     }
     scrollTimerRef.current = setTimeout(
       () => {
@@ -585,6 +622,7 @@ export default function SelectionPage() {
               ? eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2
               : eRect.top - cRect.top + container.scrollTop - stickyHeaderOffset(container) - 8;
           container.scrollTo({ top: Math.max(0, target), behavior: isDesktop ? 'smooth' : 'auto' });
+          recheckStepTop(isDesktop ? 550 : 150);
         } else {
           wizardWrapRef.current?.scrollIntoView({ behavior: 'auto', block: 'start' });
         }
@@ -631,6 +669,23 @@ export default function SelectionPage() {
               ? eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2
               : eRect.top - cRect.top + container.scrollTop - stickyHeaderOffset(container) - 8;
           container.scrollTo({ top: Math.max(0, target), behavior: isDesktop ? 'smooth' : 'auto' });
+          /* 复核兜底（桌面掉选回退走的就是这条路径）：居中公式在步骤卡片被异步选项
+             图片撑高前测量会过冲，把「选择XX」标题滚出容器上沿（短视口下字被裁一半）。
+             smooth 完成后量一次，越界立即重新顶对齐。 */
+          autoAdvanceScrollTimerRef.current = setTimeout(
+            () => {
+              const el2 = curStepRef.current;
+              const c2 = scrollContainerRef.current || mobileMainRef.current;
+              if (!el2 || !c2) return;
+              const cr = c2.getBoundingClientRect();
+              const er = el2.getBoundingClientRect();
+              if (er.top < cr.top + 4) {
+                const t = er.top - cr.top + c2.scrollTop - stickyHeaderOffset(c2) - 8;
+                c2.scrollTo({ top: Math.max(0, t), behavior: 'auto' });
+              }
+            },
+            isDesktop ? 550 : 150,
+          );
         } else {
           wizardWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
@@ -2357,7 +2412,9 @@ export default function SelectionPage() {
 
   const selectionToolbarCore = (
     <div className="flex min-h-0 items-center gap-2 md:min-h-11 md:flex-wrap md:justify-between md:gap-3">
-      <div className={`min-w-0 items-center gap-2 md:gap-3 ${phase === 'wizard' ? 'hidden shrink-0 md:flex' : 'flex'}`}>
+      {/* wizard 阶段左侧已选 chips 允许收缩（内层 overflow-x-auto 接管溢出）——
+          之前 shrink-0 让 chips 只增不让，把右侧搜索框/生成链接/全部分类挤变形 */}
+      <div className={`min-w-0 items-center gap-2 md:gap-3 ${phase === 'wizard' ? 'hidden md:flex' : 'flex'}`}>
         {toolbarSummary}
       </div>
       <div
@@ -2390,7 +2447,7 @@ export default function SelectionPage() {
           <button
             onClick={goHome}
             data-tooltip-ignore
-            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface md:h-9 md:w-auto md:gap-1.5 md:px-3 ${selectionPress}`}
+            className={`inline-flex h-8 w-8 shrink-0 items-center justify-center whitespace-nowrap rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface md:h-9 md:w-auto md:gap-1.5 md:px-3 ${selectionPress}`}
             aria-label={t('selectionPage.allCategories')}
           >
             <Icon name="inventory_2" size={14} />
