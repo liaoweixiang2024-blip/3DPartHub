@@ -311,13 +311,20 @@ export function CatalogZoomModal({
                   ? {
                       width: fit.w * scale,
                       height: fit.h * scale,
+                      // 掀掉 Tailwind preflight 的全局 img{max-width:100%;height:auto}：
+                      // 布局尺寸放大后必然超过容器，被它钳回容器宽 = 移动端捏合缩放失效
+                      maxWidth: 'none',
+                      maxHeight: 'none',
                       // transform 只做平移（平移不改变光栅化尺寸），缩放交给布局尺寸
                       transform: `translate3d(${offset.x}px, ${offset.y}px, 0)`,
                       willChange: 'transform',
                     }
                   : undefined
               }
-              className={`rounded object-contain ${fit ? '' : 'max-h-full max-w-full'}`}
+              /* fit 模式必须 shrink-0：图片是 flex 子项，放大后宽超过容器时会被默认
+                 flex-shrink 压回容器宽——style.width 设了也无效（computed 不变），
+                 移动端窄容器一捏合就「缩放失效」（桌面容器宽从未超出所以没暴露） */
+              className={`rounded object-contain ${fit ? 'shrink-0' : 'max-h-full max-w-full'}`}
             />
           </div>
         ) : (
