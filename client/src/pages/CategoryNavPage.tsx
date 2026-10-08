@@ -301,8 +301,9 @@ function ModelNavContent({
           底色 surface-container-low（= 主题 --app-page-hero-surface）、圆角走主题变量
           --app-page-radius（跟标题卡同值随主题变）、描边 outline-variant/15（细淡边，
           不用深色 surface-container-highest——深边会把同宽的卡读成窄一圈）。
-          pb-24：给 fixed 底部导航栏（56px + safe-area）让位，最后一个分区的节点不被遮挡 */}
-      <div className="space-y-3 pb-24 md:hidden">
+          底部零留白：菜单栏让位由页面根上的 max-md:pb-[calc(3.5rem+safe)] 精确承担
+          （滚到底时最后一张卡紧贴菜单栏上缘），容器内不再叠加任何 padding */}
+      <div className="space-y-3 md:hidden">
         {GROUP_SLOTS.map(({ id, title, small, iconKeys }) => {
           const visible = iconKeys.slice(0, nodesOfGroup(id).length);
           return (
@@ -444,9 +445,17 @@ export default function CategoryNavPage() {
   /** 组内节点列表（顺序 = 后台组内排序；前台按实际数量渲染，未满卡位不补空位） */
   const nodesOfGroup = (groupId: string) => modelSection?.nodes.filter((n) => n.groupId === groupId) ?? [];
 
+  /* mobilePadded 不用（那是全站公共包装层的 px-4 py-4 + pb-safe-nav(5rem+safe) 默认间距），
+     本页移动端自己接管：顶部/两侧维持原 16px 间距（标题卡不贴死顶栏），底部只让位
+     菜单栏实际高度（3.5rem + 安全区，无额外余量——滚到底分区卡紧贴菜单栏）。
+     桌面端 max-md: 前缀全部不生效 */
   return (
-    <PublicPageShell className="bg-surface-dim" mobilePadded>
-      <AdminManagementPage className="category-nav-page" title={pageTitle} description={pageDescription}>
+    <PublicPageShell className="bg-surface-dim">
+      <AdminManagementPage
+        className="category-nav-page max-md:px-4 max-md:pt-4 max-md:pb-[calc(3.5rem+env(safe-area-inset-bottom))]"
+        title={pageTitle}
+        description={pageDescription}
+      >
         {/* 移动端本页去外层卡片壳（页头/面板透明、无内边距）统一在 global.css 的
             .category-nav-page 移动端媒体查询里做——Tailwind 的 border-0/bg-transparent
             会被主题 CSS (0,2,0) 压掉，必须用更高特异度的选择器，TSX 不重复写 */}
@@ -457,7 +466,7 @@ export default function CategoryNavPage() {
               flex 链（panel → 本容器 → 桌面 main flex-1）：桌面画布撑满面板高度，内容垂直居中（my-auto），
               大屏不再把空白全堆在底部；内容超高时本容器退化为滚动 */}
           <div
-            className="mx-auto flex min-h-0 w-full max-w-[1300px] flex-1 flex-col overflow-x-auto bg-transparent p-0 text-on-surface md:bg-surface-container-low md:p-3 md:px-6 md:py-2"
+            className="category-nav-canvas mx-auto flex min-h-0 w-full max-w-[1300px] flex-1 flex-col overflow-x-auto bg-transparent p-0 text-on-surface md:bg-surface-container-low md:p-3 md:px-6 md:py-2"
             style={{
               fontFamily:
                 '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',

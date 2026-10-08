@@ -616,6 +616,21 @@ a,
   }
 }
 
+/* 选型导航页移动端滚动条隐藏：本页移动端的滚动器是画布层（category-nav-canvas，
+   overflow-x-auto 让两轴都成了 auto），iOS/Android 滑动时系统会在右缘短暂浮出
+   覆盖式滚动条（用户反馈的「进度条」）。触摸滚动本来就有直接反馈，滚动条纯噪音，
+   三引擎全隐藏；桌面横向滚动条保留——拓扑画布 1100px+ 宽，横滚位置是有效线索 */
+@media (max-width: 767px) {
+  .category-nav-canvas {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* 旧 Edge */
+  }
+
+  .category-nav-canvas::-webkit-scrollbar {
+    display: none; /* iOS Safari / Android Chrome·Edge */
+  }
+}
+
 /* 选型大分类卡：触摸按住拖动绝对零反馈（全宽度，含 ≥768px 的 iPad/横屏手机——
    它们走桌面卡片类，触摸同样不能有反馈）。
    子元素（缩略图/文字/图标）一律不响应指针——触摸只命中卡片 button 本身：
