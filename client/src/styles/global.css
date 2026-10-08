@@ -601,6 +601,21 @@ a,
   min-height: 44px;
 }
 
+/* 选型导航页移动端去外层容器壳：内容面板不装卡，标题卡（hero，与其他页面一致的
+   页头卡片样式）与四大分类分区卡同层级平铺在页面底色上；桌面（≥768px）面板卡与
+   拓扑画布保持原样。标题在画布滚动器之外，天然固定不随内容滚走。
+   选择器带 [data-interface-theme]（Layout 根节点必有）：特异度 (0,3,0) 压过主题 CSS
+   的 [data-interface-theme] .app-content-panel (0,2,0)——否则 Tailwind 的
+   border-0/bg-transparent 工具类 (0,1,0) 会被主题层同属性覆盖，卡片壳去不掉 */
+@media (max-width: 767px) {
+  [data-interface-theme] .category-nav-page .app-content-panel {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
 /* 选型大分类卡：触摸按住拖动绝对零反馈（全宽度，含 ≥768px 的 iPad/横屏手机——
    它们走桌面卡片类，触摸同样不能有反馈）。
    子元素（缩略图/文字/图标）一律不响应指针——触摸只命中卡片 button 本身：

@@ -295,13 +295,21 @@ function ModelNavContent({
 
   return (
     <>
-      {/* 移动端（<768px）：放弃横向拓扑画布，四个分区卡片纵向堆叠，3 列小网格。
+      {/* 移动端（<768px）：放弃横向拓扑画布，四个分区各自成卡纵向堆叠，3 列小网格。
+          外层不再包大容器（AdminContentPanel/画布底色移动端全部透明，见下），分区卡直接
+          落在页面底色上——避免「大盒套小卡」的双层包裹；分区卡规格与标题卡完全对齐：
+          底色 surface-container-low（= 主题 --app-page-hero-surface）、圆角走主题变量
+          --app-page-radius（跟标题卡同值随主题变）、描边 outline-variant/15（细淡边，
+          不用深色 surface-container-highest——深边会把同宽的卡读成窄一圈）。
           pb-24：给 fixed 底部导航栏（56px + safe-area）让位，最后一个分区的节点不被遮挡 */}
-      <div className="space-y-4 pb-24 md:hidden">
+      <div className="space-y-3 pb-24 md:hidden">
         {GROUP_SLOTS.map(({ id, title, small, iconKeys }) => {
           const visible = iconKeys.slice(0, nodesOfGroup(id).length);
           return (
-            <section key={id} className="rounded-lg border border-surface-container-highest bg-surface-container p-3">
+            <section
+              key={id}
+              className="rounded-(--app-page-radius) border border-outline-variant/15 bg-surface-container-low p-3"
+            >
               <GroupHeading title={groupName(id, title)} />
               <div className="grid grid-cols-3 gap-2">{visible.map((key, i) => card(id, i, small, key))}</div>
             </section>
@@ -439,13 +447,17 @@ export default function CategoryNavPage() {
   return (
     <PublicPageShell className="bg-surface-dim" mobilePadded>
       <AdminManagementPage className="category-nav-page" title={pageTitle} description={pageDescription}>
+        {/* 移动端本页去外层卡片壳（页头/面板透明、无内边距）统一在 global.css 的
+            .category-nav-page 移动端媒体查询里做——Tailwind 的 border-0/bg-transparent
+            会被主题 CSS (0,2,0) 压掉，必须用更高特异度的选择器，TSX 不重复写 */}
         <AdminContentPanel scroll className="flex flex-col overflow-y-auto">
           {/* 原文件 body：p-3 sm:p-8 max-w-[1300px] mx-auto——背景与页头 hero 同色（surface-container-low）。
               overflow-x-auto 承载桌面拓扑画布（min-w-[1100px]）的横向滚动；移动端画布隐藏自动收缩。
+              移动端本容器透明无内边距（分区卡自带 p-3，CSS 壳已去），只有桌面保留画布底色。
               flex 链（panel → 本容器 → 桌面 main flex-1）：桌面画布撑满面板高度，内容垂直居中（my-auto），
               大屏不再把空白全堆在底部；内容超高时本容器退化为滚动 */}
           <div
-            className="mx-auto flex min-h-0 w-full max-w-[1300px] flex-1 flex-col overflow-x-auto bg-surface-container-low p-3 text-on-surface md:px-6 md:py-2"
+            className="mx-auto flex min-h-0 w-full max-w-[1300px] flex-1 flex-col overflow-x-auto bg-transparent p-0 text-on-surface md:bg-surface-container-low md:p-3 md:px-6 md:py-2"
             style={{
               fontFamily:
                 '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',

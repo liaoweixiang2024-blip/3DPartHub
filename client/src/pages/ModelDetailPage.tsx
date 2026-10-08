@@ -280,6 +280,25 @@ export default function ModelDetailPage() {
   const { data: serverModel, isLoading, error, mutate } = useModel(id);
   const { data: catTreeData } = useSWR('/categories', () => categoriesApi.tree());
 
+  /* 转换中状态页自动轮询：文案承诺「转换完成后会自动展示预览」，但此前没有任何
+     轮询机制，页面停在状态页永不自愈（只能手动刷新）。queued/processing 期间每 3s
+     静默 revalidate（与管理端转换队列面板 2s 同量级，完成后最多 3s 内自动切到
+     预览/失败态，体感即时；真·即时推送需要 SSE/WebSocket，项目暂无此基础设施）。
+     后台标签页暂停轮询，切回前台时立刻补一次 */
+  const conversionPending = serverModel?.status === 'queued' || serverModel?.status === 'processing';
+  useEffect(() => {
+    if (!conversionPending) return;
+    const revalidateIfVisible = () => {
+      if (document.visibilityState === 'visible') void mutate();
+    };
+    const timer = window.setInterval(revalidateIfVisible, 3_000);
+    document.addEventListener('visibilitychange', revalidateIfVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', revalidateIfVisible);
+    };
+  }, [conversionPending, mutate]);
+
   const categoryTree = catTreeData?.items;
 
   // 编辑弹窗用的图纸列表（后端新字段；旧缓存窗口回落单条 legacy 字段）
