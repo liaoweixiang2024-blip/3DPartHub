@@ -34,15 +34,20 @@ function WorkbenchCategorySidebar({
 }: {
   activeCategory: string;
   categories: Category[];
-  totalCount: number;
+  /** null = 分类树未返回，显示「—」占位 */
+  totalCount: number | null;
   /** 系统选型导航入口显隐（标题旁图标，跟功能开关走） */
   categoryNavEnabled: boolean;
   onSelect: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
-  const allCount = totalCount || categoriesData.reduce((sum, category) => sum + category.count, 0);
-  const categorySummary = t('home.categorySummary', { categories: categoriesData.length, count: allCount });
+  // 数量未知（分类树未返回）用「—」，避免 0 → 几千的数字跳动
+  const allCount =
+    totalCount ?? (categoriesData.length ? categoriesData.reduce((sum, category) => sum + category.count, 0) : null);
+  const categorySummary = categoriesData.length
+    ? t('home.categorySummary', { categories: categoriesData.length, count: allCount ?? '—' })
+    : t('home.categorySummary', { categories: '—', count: '—' });
 
   useEffect(() => {
     if (activeCategory === 'all') {
@@ -487,7 +492,7 @@ export default function WorkbenchHomeDesktop({
                   <div className="home-title-mainline flex items-center gap-3">
                     <PageTitle className="home-title-heading">{t('home.modelLibrary')}</PageTitle>
                     <span className="home-title-count-badge rounded-sm border border-outline-variant/20 bg-surface-container-high px-2 py-0.5 text-xs text-on-surface-variant">
-                      {t('home.modelCount', { count: displayTotalItems })}
+                      {displayTotalItems != null ? t('home.modelCount', { count: displayTotalItems }) : '—'}
                     </span>
                   </div>
                   <div className="home-title-controls">

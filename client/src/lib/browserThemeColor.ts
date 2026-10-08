@@ -35,4 +35,12 @@ export function syncBrowserChromeColor(): void {
     document.querySelector<HTMLMetaElement>(APPLE_STATUS_BAR_SELECTOR) ||
     ensureMeta('apple-mobile-web-app-status-bar-style');
   statusBar.content = isLight ? 'default' : 'black-translucent';
+  // 与 index.html 启动脚本的首屏底色保持同一来源（--color-surface）：
+  // 切主题时同步 html 底色，移动端过卷发光区/应用未铺满区域不露出旧主题的颜色。
+  // 注意别复用上面的 color（surface-container-low，供浏览器标题栏取色），
+  // 否则底色比应用表面亮一档，过卷时会露馅
+  const bgColor =
+    readCssVariable(styles, '--color-surface') || (isLight ? DEFAULT_LIGHT_CHROME_COLOR : DEFAULT_DARK_CHROME_COLOR);
+  root.style.backgroundColor = bgColor;
+  root.style.colorScheme = isLight ? 'light' : 'dark';
 }

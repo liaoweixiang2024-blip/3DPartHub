@@ -58,6 +58,7 @@ import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
 import { getErrorMessage } from '../lib/errorNotifications';
+import { readCachedCategoryTree, writeCachedCategoryTree } from '../lib/homeCategoriesCache';
 import {
   HOME_RESET_EVENT,
   HOME_SEARCH_EVENT,
@@ -156,7 +157,11 @@ export default function HomePage() {
   const isAdmin = user?.role === 'ADMIN';
   // 浏览门槛：订阅公开设置（同步初值来自本地缓存快照，匿名首访不会先发请求再吃 401；
   // 访客带着旧缓存、管理员刚开门槛时，后台刷新完成后这里自动重算，锁屏能接管页面）
-  const { blocked: browseBlocked, dataReady: browseGateResolved } = useBrowseGate('require_login_browse');
+  const {
+    blocked: browseBlocked,
+    dataReady: browseGateResolved,
+    pendingLock: browsePendingLock,
+  } = useBrowseGate('require_login_browse');
   const [restoreVisualLocked, setRestoreVisualLocked] = useState(() =>
     Boolean(initialHomeState?.restoreKey && getPendingHomeRestoreKey() === initialHomeState.restoreKey),
   );
@@ -170,14 +175,25 @@ export default function HomePage() {
   // 门槛未判定/被拦截时不发请求（发出去也只会 401）
   const browseDataReady = browseGateResolved && !browseBlocked;
 
+  // 刷新首帧先用上次缓存的分类树渲染（stale-while-revalidate），避免「—」→「xxxx 个模型」
+  // 的数量跳动；缓存按访客身份分桶（user.id / 匿名），防止受限分类树跨身份闪现
+  const cacheOwnerId = user?.id ?? 'anon';
+  const cachedCategoryTree = useMemo(() => readCachedCategoryTree(cacheOwnerId), [cacheOwnerId]);
   // Fetch category tree (with counts from server)
-  const { data: categoryData, mutate: mutateCategories } = useSWR(browseDataReady ? '/categories' : null, () =>
-    categoriesApi.tree(),
+  const { data: categoryData, mutate: mutateCategories } = useSWR(
+    browseDataReady ? '/categories' : null,
+    () => categoriesApi.tree(),
+    { fallbackData: cachedCategoryTree, revalidateOnMount: true },
   );
+  useEffect(() => {
+    if (categoryData && categoryData.items.length > 0) writeCachedCategoryTree(cacheOwnerId, categoryData);
+  }, [categoryData, cacheOwnerId]);
   const categories = useMemo(() => buildCategories(categoryData?.items || []), [categoryData]);
   const totalModelCount = useMemo(
-    () => categoryData?.total ?? categories.reduce((sum, category) => sum + category.count, 0),
-    [categories, categoryData?.total],
+    // null = 分类树未返回：贯穿到渲染层显示「—」占位，避免首屏先显示 0、
+    // 数据到达再跳到几千的数字跳动（选型页统计区同款约定）
+    () => (categoryData ? (categoryData.total ?? categories.reduce((sum, c) => sum + c.count, 0)) : null),
+    [categories, categoryData],
   );
 
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -529,7 +545,9 @@ export default function HomePage() {
     return serverData.items.map(serverItemToProduct);
   }, [serverData]);
   const productIdsKey = useMemo(() => products.map((product) => product.id).join('|'), [products]);
-  const showHomeListSkeleton = isLoading || (!usesManualHomePagination && listRefreshPending);
+  // 门槛判定未完成（等会话恢复/公共设置）时模型请求被暂停：isLoading=false 且列表为空，
+  // 不算加载态的话空态「没有找到匹配的模型」会闪一帧，列表到达后才被顶掉
+  const showHomeListSkeleton = !browseDataReady || isLoading || (!usesManualHomePagination && listRefreshPending);
 
   useEffect(() => {
     if (products.length === 0 || isLoading) return;
@@ -561,7 +579,7 @@ export default function HomePage() {
 
   const totalItems = serverData?.total || 0;
   const activeCategoryCount = useMemo(() => {
-    if (activeCategory === 'all') return totalModelCount || totalItems;
+    if (activeCategory === 'all') return totalModelCount ?? (serverData ? totalItems : null);
     const parent = categories.find((category) => category.id === activeCategory);
     if (parent) return parent.count;
     for (const category of categories) {
@@ -569,13 +587,16 @@ export default function HomePage() {
       if (child) return child.count;
     }
     return null;
-  }, [activeCategory, categories, totalItems, totalModelCount]);
+  }, [activeCategory, categories, serverData, totalItems, totalModelCount]);
+  // null = 数量未知（分类树与列表查询都未返回），渲染层显示「—」
   const displayTotalItems =
     (showHomeListSkeleton || listRefreshPending) && activeCategoryCount != null
       ? activeCategoryCount
       : activeCategory === 'all' && !searchQuery.trim()
-        ? totalModelCount || totalItems
-        : totalItems;
+        ? (totalModelCount ?? (serverData ? totalItems : null))
+        : serverData
+          ? totalItems
+          : null;
   const totalPages = Math.max(1, serverData?.totalPages || 1);
 
   const toggleCategory = (id: string) => {
@@ -1041,8 +1062,10 @@ export default function HomePage() {
     return { parent: null, child: null, label: activeCategory };
   }, [activeCategory, categories, t]);
 
-  if (browseBlocked) {
-    // 浏览门槛锁屏（模糊背景 + 与其他受保护页面一致的登录确认弹窗）
+  if (browseBlocked || browsePendingLock) {
+    // 浏览门槛锁屏（模糊背景 + 与其他受保护页面一致的登录确认弹窗）。
+    // pendingLock：门槛已开且本地无记住的会话，判定期间直接渲染锁屏，
+    // 避免先画首页骨架、判定完成再整页替换（骨架一闪）
     return <BrowseLoginLock />;
   }
 
@@ -1180,8 +1203,8 @@ export default function HomePage() {
                   <Icon name="account_tree" size={16} />
                 </Link>
               ) : null}
-              <span className="text-[10px] text-on-surface-variant">
-                {t('home.modelCount', { count: displayTotalItems })}
+              <span className="text-[10px] tabular-nums text-on-surface-variant">
+                {displayTotalItems != null ? t('home.modelCount', { count: displayTotalItems }) : '—'}
               </span>
             </div>
             <button

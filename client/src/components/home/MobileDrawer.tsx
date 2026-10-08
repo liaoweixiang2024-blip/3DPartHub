@@ -20,7 +20,8 @@ export function MobileDrawer({
   expandedCategories: Set<string>;
   activeCategory: string;
   categories: Category[];
-  totalCount: number;
+  /** null = 分类树未返回，显示「—」占位 */
+  totalCount: number | null;
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
@@ -79,8 +80,8 @@ export function MobileDrawer({
                   <Icon name="category_all" size={18} />
                   {t('home.allModels')}
                 </span>
-                <span className="text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">
-                  {totalCount || categoriesData.reduce((s, c) => s + c.count, 0)}
+                <span className="text-[10px] tabular-nums bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">
+                  {totalCount ?? (categoriesData.length ? categoriesData.reduce((s, c) => s + c.count, 0) : '—')}
                 </span>
               </button>
               {categoriesData.map((cat) => {
@@ -120,7 +121,7 @@ export function MobileDrawer({
                             <Icon name="expand_more" size={16} />
                           </motion.span>
                         )}
-                        <span className="text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">
+                        <span className="text-[10px] tabular-nums bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">
                           {cat.count}
                         </span>
                       </span>
@@ -148,7 +149,9 @@ export function MobileDrawer({
                                 className={`w-1 h-1 rounded-full shrink-0 ${activeCategory === child.id ? 'bg-primary-container' : 'bg-slate-600'}`}
                               />
                               {child.name}
-                              <span className="text-[10px] text-on-surface-variant/60 ml-auto">{child.count}</span>
+                              <span className="text-[10px] tabular-nums text-on-surface-variant/60 ml-auto">
+                                {child.count}
+                              </span>
                             </button>
                           ))}
                         </motion.div>

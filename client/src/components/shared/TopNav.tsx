@@ -137,7 +137,8 @@ function NotificationPanelFallback({
   showTooltip?: boolean;
 }) {
   const { t } = useTranslation();
-  if (!useAuthStore.getState().isAuthenticated) {
+  const authState = useAuthStore.getState();
+  if (!authState.isAuthenticated) {
     if (compact) {
       return (
         <button
@@ -157,6 +158,15 @@ function NotificationPanelFallback({
         >
           <Icon name="notifications" size={20} />
         </button>
+      );
+    }
+    // 会话恢复中（user 已回填、服务器校验未完）：同尺寸占位铃铛占位，防真铃铛弹入时
+    // 右侧工具整体跳动（与 NotificationPanel 匿名分支同一套语义，别只改一处）
+    if (authState.user) {
+      return (
+        <span className="inline-flex p-2 text-on-surface-variant" aria-hidden="true">
+          <Icon name="notifications" size={20} />
+        </span>
       );
     }
     return null;
@@ -1132,8 +1142,12 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
 
   // 开启「登录浏览」且访客未登录时，首页/详情是模糊锁屏，搜索框没有可搜的内容，移动端直接隐藏
   const browseGate = useBrowseGate('require_login_browse');
+  // pendingLock 也按「要锁」处理：判定期间搜索行若先渲染，blocked 解析后收起会让
+  // 页头高度骤变（≈56px），下方锁屏内容整体被顶上去——页头和登录提示一起闪一下
   const showMobileModelSearch =
-    !browseGate.blocked && (location.pathname === '/' || isModelDetailPath(location.pathname));
+    !browseGate.blocked &&
+    !browseGate.pendingLock &&
+    (location.pathname === '/' || isModelDetailPath(location.pathname));
 
   if (compact) {
     return (

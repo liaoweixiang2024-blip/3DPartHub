@@ -1016,6 +1016,7 @@
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-workbench-sidebar-list {
@@ -1170,6 +1171,7 @@
   line-height: 1.35;
   opacity: 0.82;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-workbench-sidebar-item-active .home-workbench-filter-count,

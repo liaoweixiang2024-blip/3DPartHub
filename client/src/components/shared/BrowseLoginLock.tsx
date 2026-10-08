@@ -65,11 +65,18 @@ export default function BrowseLoginLock({ scope = 'models' }: { scope?: 'models'
 export function useBrowseGate(settingKey: 'require_login_browse' | 'require_login_selection' = 'require_login_browse') {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
+  const hasRememberedUser = useAuthStore((s) => Boolean(s.user));
   const { settings } = usePublicSettings();
 
   const gateValue = settings?.[settingKey];
   const resolved = typeof gateValue === 'boolean' && hasHydrated;
   const blocked = resolved && gateValue === true && !isAuthenticated;
+  // 判定未完成（等会话恢复）但方向已明确：门槛已开 + 本地无记住的 user（user 仅在
+  // 「记住我」时持久化）→ 极大概率是匿名访客，结局就是锁屏。让页面判定期间直接
+  // 渲染锁屏，否则会先画首页骨架、判定完成再整页换锁屏（骨架一闪）。
+  // 有记住的 user 时不抢跑：那是已登录用户，骨架屏才是正确方向；代价是「未记住的
+  // cookie 会话用户」在开启门槛的站点会先见锁屏、恢复完成后换回内容（罕见，单次）。
+  const pendingLock = !resolved && gateValue === true && !hasRememberedUser;
 
-  return { blocked, dataReady: resolved && !blocked };
+  return { blocked, dataReady: resolved && !blocked, pendingLock };
 }

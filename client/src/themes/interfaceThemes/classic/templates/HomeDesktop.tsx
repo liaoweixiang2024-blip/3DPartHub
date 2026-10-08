@@ -102,8 +102,8 @@ export default function ClassicHomeDesktop({
             </div>
             <div className="home-title-mainline flex items-center gap-3">
               <PageTitle>{t('home.modelLibrary')}</PageTitle>
-              <span className="bg-surface-container-high px-2 py-0.5 text-xs text-on-surface-variant rounded-sm border border-outline-variant/20">
-                {t('home.modelCount', { count: displayTotalItems })}
+              <span className="tabular-nums bg-surface-container-high px-2 py-0.5 text-xs text-on-surface-variant rounded-sm border border-outline-variant/20">
+                {displayTotalItems != null ? t('home.modelCount', { count: displayTotalItems }) : '—'}
               </span>
             </div>
           </div>

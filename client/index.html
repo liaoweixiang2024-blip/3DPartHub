@@ -50,6 +50,11 @@
           if (themeColor) themeColor.setAttribute('content', isLight ? '#faf9f7' : '#121316');
           var statusBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
           if (statusBar) statusBar.setAttribute('content', isLight ? 'default' : 'black-translucent');
+          // 首屏底色先行：#root 为空、CSS 未加载时浏览器先画默认白底，React 挂载后
+          // 才出现深色页头/锁屏——表现为整页白闪（冷缓存/连刷后模块复验时明显）。
+          // 在 CSS 加载前内联设好 html 底色与 color-scheme，首帧即为应用表面色。
+          document.documentElement.style.backgroundColor = isLight ? '#faf9f7' : '#121316';
+          document.documentElement.style.colorScheme = isLight ? 'light' : 'dark';
         } catch (e) {}
       })();
     </script>

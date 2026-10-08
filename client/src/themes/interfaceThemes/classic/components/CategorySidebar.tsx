@@ -16,7 +16,8 @@ export default function CategorySidebar({
   expandedCategories: Set<string>;
   activeCategory: string;
   categories: Category[];
-  totalCount: number;
+  /** null = 分类树未返回，显示「—」占位 */
+  totalCount: number | null;
   /** 系统选型导航入口显隐（标题旁图标，跟功能开关走） */
   categoryNavEnabled?: boolean;
   onToggle: (id: string) => void;
@@ -56,8 +57,9 @@ export default function CategorySidebar({
             <Icon name="category_all" size={18} />
             {t('home.allModels')}
           </span>
-          <span className="home-category-count text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">
-            {totalCount || categoriesData.reduce((sum, category) => sum + category.count, 0)}
+          <span className="home-category-count tabular-nums text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">
+            {totalCount ??
+              (categoriesData.length ? categoriesData.reduce((sum, category) => sum + category.count, 0) : '—')}
           </span>
         </button>
         {categoriesData.map((category) => {
@@ -97,7 +99,7 @@ export default function CategorySidebar({
                       <Icon name="expand_more" size={14} />
                     </motion.span>
                   )}
-                  <span className="home-category-count text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">
+                  <span className="home-category-count tabular-nums text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">
                     {category.count}
                   </span>
                 </span>
@@ -127,7 +129,7 @@ export default function CategorySidebar({
                           }`}
                         />
                         {child.name}
-                        <span className="home-category-child-count text-[10px] text-on-surface-variant/60 ml-auto">
+                        <span className="home-category-child-count tabular-nums text-[10px] text-on-surface-variant/60 ml-auto">
                           {child.count}
                         </span>
                       </button>

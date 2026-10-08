@@ -81,7 +81,8 @@ export interface DesktopHomeThemeProps {
   contactAddress: string;
   contactEmail: string;
   contactPhone: string;
-  displayTotalItems: number;
+  /** null = 数据未就绪，渲染层应显示「—」占位（避免 0 → 几千的数字跳动） */
+  displayTotalItems: number | null;
   expandedCategories: Set<string>;
   footerCopyright: string;
   footerLinks: { label: string; url: string }[];
@@ -108,7 +109,8 @@ export interface DesktopHomeThemeProps {
   showHomeListSkeleton: boolean;
   sortBy: string;
   totalItems: number;
-  totalModelCount: number;
+  /** null = 分类树未返回（与 displayTotalItems 同一套「—」占位约定） */
+  totalModelCount: number | null;
   totalPages: number;
   viewMode: HomeViewMode;
   onHeroExplore: () => void;

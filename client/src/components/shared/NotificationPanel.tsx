@@ -376,6 +376,17 @@ export default function NotificationPanel({
         </button>
       );
     }
+    // 「记住我」的会话恢复中：user 已从本地同步回填但 isAuthenticated 要等服务器校验
+    // cookie（一个网络往返）才翻 true。这个窗口里渲染同尺寸占位铃铛占住位置，
+    // 否则真铃铛校验完成后才弹入，主题按钮/用户菜单被推着右移（布局跳动）。
+    // 纯占位不可交互；纯匿名访客（无 user）不显示，与原行为一致。
+    if (user) {
+      return (
+        <span className="inline-flex p-2 text-on-surface-variant" aria-hidden="true">
+          <Icon name="notifications" size={20} />
+        </span>
+      );
+    }
     return null;
   }
 

@@ -1210,7 +1210,10 @@ export default function SelectionPage() {
   const pageHeader = null;
 
   /* ── group selection ── */
-  const categoryStatsUnavailable = (categoriesLoading || categoriesError) && cats.length === 0;
+  // 门槛判定未完成（SWR key 为 null）时 isLoading=false 且 cats 为空，需按加载中处理，
+  // 否则统计区先闪「0 个分类」、目录区闪空白，数据到达后才被顶掉
+  const categoriesPending = !browseGate.dataReady || categoriesLoading;
+  const categoryStatsUnavailable = (categoriesPending || categoriesError) && cats.length === 0;
   const categoryGroupCountText = categoryStatsUnavailable ? '—' : groups.length + standaloneCats.length;
   const categoryCountText = categoryStatsUnavailable ? '—' : cats.length;
   const totalProductCountText = categoryStatsUnavailable ? '—' : totalProductCount;
@@ -1385,7 +1388,7 @@ export default function SelectionPage() {
     </div>
   );
   const categoryStatusContent =
-    categoriesLoading && cats.length === 0 ? (
+    categoriesPending && cats.length === 0 ? (
       <div className="flex min-h-[260px]">
         <PageRefreshIndicator label={t('selectionPage.categories.refreshing')} />
       </div>
@@ -2679,8 +2682,10 @@ export default function SelectionPage() {
     />
   );
 
-  /* 浏览门槛拦截（require_login_selection）：显示与首页一致的模糊锁屏（选型文案） */
-  if (browseGate.blocked) {
+  /* 浏览门槛拦截（require_login_selection）：显示与首页一致的模糊锁屏（选型文案）。
+    pendingLock：门槛已开且本地无记住的会话，判定期间直接渲染锁屏，
+    避免先画页面内容、判定完成再整页替换（闪动） */
+  if (browseGate.blocked || browseGate.pendingLock) {
     return <BrowseLoginLock scope="selection" />;
   }
 

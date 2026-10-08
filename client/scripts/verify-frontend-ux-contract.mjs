@@ -259,7 +259,7 @@ if (homePageSource.includes('HOME_PULL_REFRESH_MIN_VISIBLE_MS')) {
 requireIncludes('HomePage.tsx category refresh', homePageWithUtils, [
   'const [listRefreshPending, setListRefreshPending] = useState(false);',
   'const pendingHomeListRefreshResetRef = useRef(false);',
-  'const showHomeListSkeleton = isLoading || (!usesManualHomePagination && listRefreshPending);',
+  'const showHomeListSkeleton = !browseDataReady || isLoading || (!usesManualHomePagination && listRefreshPending);',
   "const resetHomeListViewportForRefresh = useCallback((target: HomeRefreshScrollTarget = 'top', immediate = false) => {",
   "const HOME_REFRESH_SCROLL_TARGET: HomeRefreshScrollTarget = 'results';",
   'pendingHomeListRefreshTargetRef.current = target;',
