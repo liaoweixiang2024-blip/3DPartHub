@@ -18,6 +18,7 @@ import { deleteCloudFile, keyFromStaticUrl, persistFile } from '../lib/storagePr
 import { modelDrawingMaxBytes, modelDrawingMaxSizeMb } from '../lib/uploadLimits.js';
 import { authMiddleware, getVerifiedRequestUser, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
+import { MODEL_STATUS } from '../services/modelStatus.js';
 import { getInvisibleCategoryIds } from '../services/categoryAccess.js';
 
 const log = createLogger({ component: 'model-drawings' });
@@ -245,10 +246,16 @@ router.get('/api/models/:id/drawing/:drawingId/download', async (req: Request, r
   try {
     const m = await prisma.model.findUnique({
       where: { id },
-      select: { id: true, name: true, originalName: true, categoryId: true },
+      select: { id: true, name: true, originalName: true, categoryId: true, status: true },
     });
     if (!m) {
       res.status(404).json({ detail: '模型不存在' });
+      return;
+    }
+    // 发布状态对齐模型下载端点：非 COMPLETED（软删除/下架/转换中）的图纸不对外，
+    // ADMIN 例外（管理员需要看到未完成模型的资料）
+    if (m.status !== MODEL_STATUS.COMPLETED && role !== 'ADMIN') {
+      await sendResourceError(req, res, 404, '模型不存在', { htmlTitle: '模型不存在' });
       return;
     }
     const drawing = await prisma.modelDrawing.findFirst({
@@ -295,10 +302,15 @@ router.get('/api/models/:id/drawing/download', async (req: Request, res: Respons
   try {
     const m = await prisma.model.findUnique({
       where: { id },
-      select: { id: true, name: true, originalName: true, categoryId: true },
+      select: { id: true, name: true, originalName: true, categoryId: true, status: true },
     });
     if (!m) {
       res.status(404).json({ detail: '模型不存在' });
+      return;
+    }
+    // 发布状态对齐模型下载端点：非 COMPLETED（软删除/下架/转换中）的图纸不对外，ADMIN 例外
+    if (m.status !== MODEL_STATUS.COMPLETED && role !== 'ADMIN') {
+      await sendResourceError(req, res, 404, '模型不存在', { htmlTitle: '模型不存在' });
       return;
     }
     const drawing = await prisma.modelDrawing.findFirst({

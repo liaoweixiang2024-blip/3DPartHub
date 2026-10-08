@@ -1,11 +1,12 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link, Navigate } from 'react-router-dom';
 import { authApi } from '../api/auth';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
 import BrandMark from '../components/shared/BrandMark';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { APP_FIELD_ERROR_CLASS, AppFormLabel, AppTextInput } from '../components/shared/FormControls';
 import Icon from '../components/shared/Icon';
 import { PageTitle } from '../components/shared/PagePrimitives';
@@ -70,6 +71,9 @@ export default function LoginPage() {
   const redirectQuery = new URLSearchParams(location.search).get('redirect');
   const from = [stateFrom, redirectQuery].find((value) => value && isSameSitePath(value)) || '/';
   const login = useAuthStore((s) => s.login);
+  const authUser = useAuthStore((s) => s.user);
+  const persistedRememberMe = useAuthStore((s) => s.rememberMe);
+  const hasAuthHydrated = useAuthStore((s) => s.hasHydrated);
   const [allowRegister, setAllowRegister] = useState(true);
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const { settings: publicSettings } = usePublicSettings();
@@ -283,6 +287,20 @@ export default function LoginPage() {
       {errors.captchaText && <span className={APP_FIELD_ERROR_CLASS}>{errors.captchaText}</span>}
     </div>
   );
+
+  // 已登录访问 /login（书签/旧链接/登录回跳竞态）：不再展示登录表单，直接跳回来源页或首页。
+  // 「记住我」的 user 在 store 同步 rehydrate 后首帧即有值，但要等 hasHydrated（cookie 校验完成）
+  // 才跳——否则会话已过期但 localStorage 还留着 user 的人会被错误弹去首页，多绕一圈才回到登录表单。
+  // 只拦登录模式：注册模式（?mode=register / ?invite=）可能是已登录用户给同事注册新账号，不打扰。
+  if (authUser && mode === 'login' && hasAuthHydrated) {
+    return <Navigate to={from} replace />;
+  }
+  // 「记住我」的会话大概率还活着：hydration（cookie 校验）完成前先不亮登录表单，避免跳转前闪一帧；
+  // 校验失败（会话过期）时 hydration 结束 user 被清空，表单正常显示。匿名用户（rememberMe=false）
+  // 不等网络，表单立即可见，行为与之前完全一致。
+  if (!hasAuthHydrated && (authUser || persistedRememberMe)) {
+    return <PageRefreshIndicator label={t('auth.checkingSession')} />;
+  }
 
   return (
     <PublicPageShell showMobileBottomNav={false}>

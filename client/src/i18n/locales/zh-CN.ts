@@ -2015,6 +2015,7 @@ export const zhCN: { translation: TranslationMap } = {
       phonePlaceholder: '请输入手机号或座机（选填）',
       privacy: '隐私声明',
       processing: '处理中...',
+      checkingSession: '正在确认登录状态...',
       register: '注册',
       registerHeading: '注册新账户',
       registerSubtitle: '注册以开始使用平台',

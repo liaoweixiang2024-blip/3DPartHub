@@ -5327,6 +5327,7 @@ export const jaJPAccessTranslation: TranslationMap = {
     passwordPlaceholder: '8文字以上',
     phonePlaceholder: '問い合わせやチケット連絡用（任意）',
     processing: '処理中...',
+    checkingSession: 'ログイン状態を確認しています...',
     usernamePlaceholder: '例: Alex Chen',
     errors: {
       captchaRequired: '画像認証を入力してください',
@@ -5547,6 +5548,7 @@ export const koKRAccessTranslation: TranslationMap = {
     phone: '전화',
     phonePlaceholder: '문의 및 티켓 연락용(선택)',
     processing: '처리 중...',
+    checkingSession: '로그인 상태를 확인하는 중...',
     registerHeading: '새 계정 만들기',
     registerSubtitle: '등록하고 플랫폼 사용을 시작하세요',
     registerTitle: '계정 만들기',
@@ -5908,6 +5910,7 @@ export const deDEAccessTranslation: TranslationMap = {
     phone: 'Telefon',
     phonePlaceholder: 'Für Anfragen und Ticketkontakt (optional)',
     processing: 'Verarbeitung...',
+    checkingSession: 'Anmeldestatus wird geprüft...',
     registerHeading: 'Neues Konto erstellen',
     registerSubtitle: 'Registrieren, um die Plattform zu nutzen',
     registerTitle: 'Konto erstellen',

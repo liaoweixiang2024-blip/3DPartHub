@@ -609,6 +609,21 @@ export function createSettingsBackupRouter() {
       });
       return;
     }
+    // 令牌内身份是签发时快照，且 24h 可复用：创建者被降级/禁用后旧令牌必须立即失效
+    // （备份含整库用户与密码哈希，不能只凭 URL 里的令牌放行到自然过期）
+    const creator = tokenPayload.userId
+      ? await prisma.user.findUnique({
+          where: { id: tokenPayload.userId },
+          select: { role: true, disabled: true },
+        })
+      : null;
+    if (!creator || creator.disabled || creator.role !== 'ADMIN') {
+      await sendResourceError(req, res, 401, '备份下载链接已失效，请回到系统设置重新发起下载', {
+        htmlTitle: '下载链接已失效',
+        hint: '该链接对已变更权限的账号不再有效，请使用管理员账号重新发起下载',
+      });
+      return;
+    }
     const filePath = getBackupArchivePath(backupId);
     if (!filePath) {
       await sendResourceError(req, res, 404, '备份文件不存在或已被清理', { htmlTitle: '备份不存在' });

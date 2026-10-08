@@ -7,8 +7,12 @@ const ACCESS_EXPIRES = config.jwtExpiresIn as jwt.SignOptions['expiresIn'];
 const REFRESH_EXPIRES = '30d';
 // 旧 refresh token 在轮换后仍可用的宽限窗口：多标签页/PWA 窗口并发加载时
 // 共享同一份 cookie，后到的请求拿旧 token 重放不是攻击。30s 覆盖页面并发
-// 加载窗口，同时仍远小于 token TTL，真复用攻击最多也只多活 30 秒。
+// 加载窗口。
 export const REFRESH_REUSE_GRACE_SECONDS = 30;
+// 「该 family 已被轮换过」的终态标记寿命。必须 ≥ refresh token 有效期（30d），
+// 否则标记先于 token 过期消失，旧 token 重放会被误判为首次轮换而重新签发——
+// 偷到的历史 refresh cookie 等 31 秒重放即可与受害者会话永久并行（安全洞）。
+export const REFRESH_USED_TTL_SECONDS = 31 * 24 * 3600;
 
 export interface TokenPayload {
   userId: string;
@@ -20,6 +24,8 @@ export interface TokenPayload {
 export type VerifiedTokenPayload = TokenPayload & {
   tokenType: 'access' | 'refresh';
   iat: number;
+  /** 标准 JWT 过期时间戳（秒），签发时由 jsonwebtoken 注入 */
+  exp?: number;
   jti?: string;
   familyId?: string;
 };
@@ -30,6 +36,11 @@ function tokenBlacklistKey(userId: string, iat: number) {
 
 function refreshTokenFamilyKey(userId: string, familyId: string) {
   return `refresh_family:${userId}:${familyId}`;
+}
+
+/** family 终态标记：已被轮换/登出，活到 refresh token 自然过期 */
+function refreshTokenFamilyUsedKey(userId: string, familyId: string) {
+  return `refresh_family_used:${userId}:${familyId}`;
 }
 
 export async function isTokenRevoked(userId: string, iat: number): Promise<boolean> {
@@ -61,9 +72,9 @@ export async function revokeToken(userId: string, iat: number, ttlSeconds = 30 *
 }
 
 export async function isRefreshTokenRevoked(userId: string, familyId: string): Promise<boolean> {
-  const key = refreshTokenFamilyKey(userId, familyId);
+  const key = refreshTokenFamilyUsedKey(userId, familyId);
   const val = await cacheGet<string>(key);
-  return val === 'revoked';
+  return val === '1';
 }
 
 export interface RefreshRotationResult {
@@ -74,19 +85,26 @@ export interface RefreshRotationResult {
 
 export async function checkAndRevokeRefreshFamily(userId: string, familyId: string): Promise<RefreshRotationResult> {
   // 同 revokeAllTokensBefore：eval 直写必须带 key 前缀，与读方 cacheGet 一致
-  const key = prefixedRedisKey(refreshTokenFamilyKey(userId, familyId));
+  // 双 key 设计：KEYS[1]=grace（30s 并发宽限标记）、KEYS[2]=used（终态标记，活过 token 寿命）。
+  // grace 在窗口内自然过期，之后只剩 used —— 重放不再被误判为首次轮换。
+  const graceKey = prefixedRedisKey(refreshTokenFamilyKey(userId, familyId));
+  const usedKey = prefixedRedisKey(refreshTokenFamilyUsedKey(userId, familyId));
   try {
     const result = await redis.eval(
-      `local val = redis.call("GET", KEYS[1])
-       if val == "revoked" then return 0 end
-       if val == "grace" then return 2 end
+      `local grace = redis.call("GET", KEYS[1])
+       if grace == "grace" then return 2 end
+       local used = redis.call("GET", KEYS[2])
+       if used == "1" then return 0 end
        redis.call("SET", KEYS[1], "grace", "EX", ARGV[1])
+       redis.call("SET", KEYS[2], "1", "EX", ARGV[2])
        return 1`,
-      1,
-      key,
+      2,
+      graceKey,
+      usedKey,
       String(REFRESH_REUSE_GRACE_SECONDS),
+      String(REFRESH_USED_TTL_SECONDS),
     );
-    // Lua 返回值：0 = family 已吊销（宽限外的重放）；1 = 首次轮换；2 = 宽限窗口内并发重放
+    // Lua 返回值：0 = family 已轮换/吊销（宽限外的重放，按泄露处理）；1 = 首次轮换；2 = 宽限窗口内并发重放
     if (result === 0) return { ok: false, usedBefore: false };
     if (result === 2) return { ok: true, usedBefore: true };
     return { ok: true, usedBefore: false };
@@ -99,8 +117,17 @@ export async function checkAndRevokeRefreshFamily(userId: string, familyId: stri
 }
 
 export async function revokeRefreshFamily(userId: string, familyId: string): Promise<void> {
-  const key = refreshTokenFamilyKey(userId, familyId);
-  await cacheSet(key, 'revoked', 31 * 24 * 3600);
+  // 登出：写终态标记并清掉宽限标记（有 used 无 grace → 重放一律判 0）
+  const graceKey = prefixedRedisKey(refreshTokenFamilyKey(userId, familyId));
+  const usedKey = prefixedRedisKey(refreshTokenFamilyUsedKey(userId, familyId));
+  await redis.eval(
+    `redis.call("SET", KEYS[1], "1", "EX", ARGV[1])
+     redis.call("DEL", KEYS[2])`,
+    2,
+    usedKey,
+    graceKey,
+    String(REFRESH_USED_TTL_SECONDS),
+  );
 }
 
 export function signAccessToken(payload: TokenPayload): string {

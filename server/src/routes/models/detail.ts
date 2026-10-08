@@ -5,7 +5,7 @@ import { Router, Request, Response } from 'express';
 import { cacheGet, cacheSet, resolveCacheTtl, TTL } from '../../lib/cache.js';
 import { getAllSettings } from '../../lib/settings.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
-import { getInvisibleCategoryIdsForRequest } from '../../services/categoryAccess.js';
+import { accessBucketKey, getInvisibleCategoryIdsForRequest } from '../../services/categoryAccess.js';
 import { withAssetVersion } from '../../services/gltfAsset.js';
 import { parseStepFileDate } from '../../services/modelFileDates.js';
 import { findOriginalModelPath, resolveStoredPath } from '../../services/modelFiles.js';
@@ -44,8 +44,12 @@ export function createModelDetailRouter({
     const canViewUnpublished = authPayload?.role === 'ADMIN';
     // 分类访问控制：受限分类下的模型，非白名单用户（含匿名）一律 403
     const invisible = await getInvisibleCategoryIdsForRequest(req);
-    // v2: 响应新增 drawings 数组（旧缓存无该字段，避免 TTL 窗口内丢图纸）
-    const cacheKey = `cache:models:detail:v2:${id}`;
+    // v2: 响应新增 drawings 数组（旧缓存无该字段，避免 TTL 窗口内丢图纸）。
+    // 缓存键带权限桶（与 list.ts 同款）：分组 variants 的可见性过滤因人而异，
+    // 不分桶时可见范围大的用户（含 ADMIN，invisible 恒空）会把未过滤的受限变体
+    // 写进共享缓存，泄漏给不可见该分类的用户
+    const bucket = accessBucketKey(invisible);
+    const cacheKey = `cache:models:detail:v2:${id}${bucket ? `:${bucket}` : ''}`;
     const detailTtl = resolveCacheTtl((await getAllSettings()).cache_model_detail_ttl_seconds, TTL.MODEL_DETAIL);
 
     if (prisma) {

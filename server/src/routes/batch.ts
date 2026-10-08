@@ -9,7 +9,7 @@ import { sendAcceleratedFile } from '../lib/acceleratedDownload.js';
 import { getBusinessConfig } from '../lib/businessConfig.js';
 import { cacheDelByPrefix } from '../lib/cache.js';
 import { config } from '../lib/config.js';
-import { consumeProtectedResourceToken, createProtectedResourceToken } from '../lib/downloadTokenStore.js';
+import { createProtectedResourceToken, verifyProtectedResourceToken } from '../lib/downloadTokenStore.js';
 import { deviceFromRequest } from '../lib/downloadDevice.js';
 import { syncJob, loadJob } from '../lib/jobStore.js';
 import { createLogger } from '../lib/logger.js';
@@ -82,6 +82,14 @@ function updateBatchArchiveUploadJob(job: BatchArchiveUploadJob, patch: Partial<
   Object.assign(job, patch, { updatedAt: new Date().toISOString() });
   batchArchiveUploadJobs.set(job.id, job);
   syncJob(job);
+  // 内存 Map 只增不减会随历史任务无限增长：只留最近 200 条，
+  // 更早的仍可由 getBatchArchiveUploadJob 从磁盘 jobStore 读回，不丢数据
+  if (batchArchiveUploadJobs.size > 200) {
+    const oldest = [...batchArchiveUploadJobs.values()]
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .slice(0, batchArchiveUploadJobs.size - 200);
+    for (const stale of oldest) batchArchiveUploadJobs.delete(stale.id);
+  }
 }
 
 function getBatchArchiveUploadJob(id: string): BatchArchiveUploadJob | undefined {
@@ -264,12 +272,16 @@ router.post('/api/batch/download', authMiddleware, requireRole('ADMIN'), async (
       }
     }
 
+    // singleUse: false + 10 分钟 TTL（与文件保留期一致）：下载工具（迅雷/IDM）先 HEAD 探测
+    // 再分段 Range 拉取，一次性令牌在 HEAD 就被烧掉；断点续传/中断重试也需要复用。
+    // 下载端点仍要求 ADMIN（令牌身份回库复核），泄漏给非管理员不可用。
     const token = createProtectedResourceToken({
       type: 'batch-download',
       resourceId: zipName,
       userId: req.user!.userId,
       role: req.user!.role,
-      singleUse: true,
+      ttlMs: 10 * 60 * 1000,
+      singleUse: false,
     });
 
     res.json({
@@ -295,20 +307,36 @@ router.get('/api/batch/downloads/:file', async (req, res: Response) => {
   }
 
   const queryToken = optionalString(req.query.download_token, { maxLength: 160 });
-  const tokenPayload = queryToken ? consumeProtectedResourceToken(queryToken, 'batch-download', fileName) : null;
+  // verify（非 consume）：HEAD 探测/分段 Range/中断重试都要复用同一令牌（TTL 10 分钟，
+  // 与文件保留期一致）；端点本身仍要求 ADMIN，令牌身份回库复核
+  const tokenPayload = queryToken ? verifyProtectedResourceToken(queryToken, 'batch-download', fileName) : null;
   if (queryToken && !tokenPayload) {
     await sendResourceError(req, res, 401, '下载链接已失效，请回到下载历史页重新发起批量下载', {
       htmlTitle: '下载链接已失效',
-      hint: '批量下载链接为一次性链接，只能使用一次',
+      hint: '批量下载链接有效期为 10 分钟，过期后请重新发起批量下载',
     });
     return;
   }
 
-  // JWT 分支必须查库解析：降级/禁用后的旧 token 仍带着 ADMIN 字样，不能凭快照放行
+  // JWT 分支必须查库解析：降级/禁用后的旧 token 仍带着 ADMIN 字样，不能凭快照放行。
+  // 令牌分支同理：role/账号状态是签发时快照，以查库为准（与备份/工单附件同一范式）
   const user = tokenPayload ?? (await getVerifiedRequestUser(req))?.payload ?? null;
   if (!user || user.role !== 'ADMIN') {
     await sendResourceError(req, res, 401, '需要管理员权限', { htmlTitle: '无权访问' });
     return;
+  }
+  if (tokenPayload) {
+    const { prisma } = await import('../lib/prisma.js');
+    const creator = prisma
+      ? await prisma.user.findUnique({
+          where: { id: tokenPayload.userId },
+          select: { role: true, disabled: true },
+        })
+      : null;
+    if (!creator || creator.disabled || creator.role !== 'ADMIN') {
+      await sendResourceError(req, res, 401, '需要管理员权限', { htmlTitle: '无权访问' });
+      return;
+    }
   }
 
   const filePath = join(process.cwd(), config.staticDir, 'batch', fileName);
@@ -326,6 +354,8 @@ router.get('/api/batch/downloads/:file', async (req, res: Response) => {
     disposition: 'attachment',
   });
 
+  // 只靠 10 分钟定时器清理：不挂 res.on('close') —— HEAD/流式下发（X-Accel）时
+  // API 响应先于文件传完关闭，立即删文件会把下载截断成 404/半截 zip
   let cleanupDone = false;
   const cleanup = () => {
     if (cleanupDone) return;
@@ -336,7 +366,6 @@ router.get('/api/batch/downloads/:file', async (req, res: Response) => {
       log.warn({ err, filePath }, 'Failed to clean up batch download file');
     }
   };
-  res.on('close', cleanup);
   setTimeout(cleanup, 600_000);
 });
 

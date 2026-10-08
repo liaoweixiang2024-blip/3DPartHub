@@ -14,7 +14,6 @@ import { persistFile } from '../../lib/storageProvider.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { convertStepToGltf } from '../../services/converter.js';
-import { findPreviewAssetPath } from '../../services/gltfAsset.js';
 import { parseStepFileDate } from '../../services/modelFileDates.js';
 import {
   findOriginalModelPath,
@@ -376,12 +375,11 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
           return;
         }
 
-        if (!origPath) {
-          const previewPath = findPreviewAssetPath(join(config.staticDir, 'models'), m.id, m.gltfUrl);
-          if (!previewPath || !existsSync(previewPath)) {
-            res.status(400).json({ detail: '模型无原始文件且无预览文件，无法重新转换' });
-            return;
-          }
+        // 转换器需要原始 STEP/IGES 源文件；仅有预览 GLB 无法重转（曾经放行到
+        // runReconvertInChild(origPath!===null)，子进程必然失败白等 15 分钟超时）
+        if (!origPath || !existsSync(origPath)) {
+          res.status(400).json({ detail: '模型无原始 STEP/IGES 文件，无法重新转换' });
+          return;
         }
 
         const statusUpdate = await prisma.model.updateMany({
@@ -726,6 +724,15 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
             ? true
             : lower.startsWith('original.') && IMPORT_PREVIEW_ALLOWED_ORIGINAL_EXTS.has(ext);
         if (!isAllowed) continue;
+        // 解压前先按 zip 头声明的未压缩大小做累计与限额：getData() 会把整个条目
+        // 同步解到内存，检查放在取数据之后就晚了（单个条目就能先把多 GB 灌进内存）。
+        // 头可能撒谎，取完数据后再做一次实际大小兜底
+        const declaredSize = entry.header.size || 0;
+        if (extractedBytes + declaredSize > IMPORT_PREVIEW_EXTRACT_MAX_BYTES) {
+          cleanupUpload();
+          res.status(400).json({ detail: '压缩包解压总量超限（4GB）' });
+          return;
+        }
         const data = entry.getData();
         extractedBytes += data.length;
         if (extractedBytes > IMPORT_PREVIEW_EXTRACT_MAX_BYTES) {
@@ -915,7 +922,16 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         while (true) {
           const models = await prisma.model.findMany({
             where: { status: MODEL_STATUS.COMPLETED },
-            select: { id: true, name: true, originalName: true, format: true, uploadPath: true },
+            // status/gltfUrl 供失败恢复（restoreModelAfterFailedReconvert 需要）
+            select: {
+              id: true,
+              name: true,
+              originalName: true,
+              format: true,
+              uploadPath: true,
+              status: true,
+              gltfUrl: true,
+            },
             take: BATCH_SIZE,
             ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
             orderBy: { id: 'asc' },
@@ -970,13 +986,11 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
                 },
               });
               success++;
-            } catch {
-              await prisma.model
-                .update({
-                  where: { id: m.id },
-                  data: { status: MODEL_STATUS.FAILED },
-                })
-                .catch(() => {});
+            } catch (err: unknown) {
+              // 失败恢复到动手前状态（COMPLETED）：与单模型重转同语义——重转对象
+              // 本就是预览可用的模型，打成 FAILED 会让详情页打不开（GLB 还在）
+              await restoreModelAfterFailedReconvert(prisma, m);
+              logger.error({ err, modelId: m.id }, '[conversion] Batch reconvert item failed');
               failed++;
             }
           }

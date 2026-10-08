@@ -190,8 +190,15 @@ export const useAuthStore = create<AuthState>()(
       }),
       onRehydrateStorage: () => (state) => {
         _accessToken = null;
-        void state?.restoreSessionFromCookie().finally(() => {
-          state?.setHasHydrated(true);
+        // 推迟到微任务再恢复会话：store 创建发生在模块求值期，而 client.ts ↔ 本文件
+        // 循环依赖——入口若先 import client.ts，本模块体执行时 client 尚未初始化，
+        // doRefresh 同步引用它会直接 TDZ 抛错（"Cannot access 'client' before initialization"），
+        // 被 catch 当成网络错误走「乐观保活」，已死的会话被当成仍登录。
+        // 微任务在整个模块图求值完成后才执行，此时 client 必然已就绪。
+        queueMicrotask(() => {
+          void state?.restoreSessionFromCookie().finally(() => {
+            state?.setHasHydrated(true);
+          });
         });
       },
       // Migrate from old "auth-storage" format

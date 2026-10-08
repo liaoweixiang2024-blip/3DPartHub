@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { cacheDel } from '../../lib/cache.js';
 import { verifyProtectedResourceToken } from '../../lib/downloadTokenStore.js';
 import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
@@ -25,6 +26,21 @@ export function hasShareAccess(shareId: string, hashedPassword: string | null, a
   const token = asSingleString(accessToken);
   if (!token) return false;
   return Boolean(verifyProtectedResourceToken(token, 'share-access', shareId));
+}
+
+/** 分享公开 info 缓存键（publicShares 的 /info 端点读写同一键，注意 v2 前缀） */
+export function shareInfoCacheKey(token: string): string {
+  return `cache:share:info:v2:${token}`;
+}
+
+/** 删除/更新分享后驱逐公开 info 缓存：撤销、限额收紧、改密码要即时生效，不被 TTL 拖延 */
+export async function invalidateShareInfoCache(token: string | null | undefined): Promise<void> {
+  if (!token) return;
+  try {
+    await cacheDel(shareInfoCacheKey(token));
+  } catch {
+    /* best-effort：驱逐失败只影响旧数据多活一个 TTL，不阻断删除/更新本身 */
+  }
 }
 
 let shareAllowDrawingColumnPromise: Promise<boolean> | null = null;

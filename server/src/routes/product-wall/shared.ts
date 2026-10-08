@@ -593,6 +593,18 @@ function imageRatioFromBuffer(buffer: Buffer) {
   }
 }
 
+/** 压缩包条目魔数校验：扩展名可以伪造，内容必须真是声明的图片格式 */
+function hasImageMagic(buffer: Buffer, ext: string): boolean {
+  if (buffer.length < 12) return false;
+  if (ext === 'png') return buffer.subarray(0, 4).toString('latin1') === '\x89PNG';
+  if (ext === 'jpg' || ext === 'jpeg') return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  if (ext === 'gif') return buffer.subarray(0, 3).toString('latin1') === 'GIF';
+  if (ext === 'webp')
+    return buffer.subarray(0, 4).toString('latin1') === 'RIFF' && buffer.subarray(8, 12).toString('latin1') === 'WEBP';
+  if (ext === 'svg') return buffer.subarray(0, 512).toString('utf8').includes('<svg');
+  return false;
+}
+
 function imageRatioFromPath(path: string) {
   return imageRatioFromBuffer(readFileSync(path));
 }
@@ -639,11 +651,18 @@ async function collectProductWallUploadImages(files: Express.Multer.File[]) {
   const { uploadPolicy } = await getBusinessConfig();
   const maxArchiveExtract = productArchiveExtractMaxFiles(uploadPolicy);
   const images: PendingProductWallImage[] = [];
+  // 解压累计上限 = 与直传同一预算（maxFiles × 单张上限）：没有它，一个压缩包
+  // 解出的全部条目都驻留内存直到循环结束（50×50MB=2.5GB），白名单用户可 OOM 进程
+  const maxTotalExtractBytes = policy.maxFiles * policy.maxBytes;
+  let totalExtractedBytes = 0;
   const canAddImage = (size: number) => {
     if (images.length >= policy.maxFiles) {
       return false;
     }
     if (size > policy.maxBytes) {
+      return false;
+    }
+    if (totalExtractedBytes + size > maxTotalExtractBytes) {
       return false;
     }
     return true;
@@ -663,14 +682,21 @@ async function collectProductWallUploadImages(files: Express.Multer.File[]) {
         const MAX_SINGLE_IMAGE_BYTES = 50 * 1024 * 1024;
         for (const entry of zip.getEntries()) {
           if (images.length >= maxArchiveExtract) break;
+          if (totalExtractedBytes >= maxTotalExtractBytes) break;
           if (entry.isDirectory || entry.entryName.startsWith('__MACOSX/')) continue;
           const ext = imageExtFromFilename(entry.entryName);
           if (!ext) continue;
           const declaredSize = entry.header.size;
-          if (declaredSize > MAX_SINGLE_IMAGE_BYTES) continue;
+          // 解压前先按 zip 头声明大小做累计（getData 会整条解进内存，事后检查就晚了）
+          if (declaredSize > MAX_SINGLE_IMAGE_BYTES || totalExtractedBytes + declaredSize > maxTotalExtractBytes) {
+            continue;
+          }
           const buffer = entry.getData();
           if (!buffer.length) continue;
           if (buffer.length > MAX_SINGLE_IMAGE_BYTES) continue;
+          totalExtractedBytes += buffer.length;
+          if (totalExtractedBytes > maxTotalExtractBytes) break;
+          if (!hasImageMagic(buffer, ext)) continue; // 扩展名可伪造，内容必须真是图片
           if (!canAddImage(buffer.length)) continue;
           images.push({
             title: basename(entry.entryName),
@@ -699,16 +725,21 @@ async function collectProductWallUploadImages(files: Express.Multer.File[]) {
         });
         for (const item of extracted.files) {
           if (images.length >= maxArchiveExtract) break;
+          if (totalExtractedBytes >= maxTotalExtractBytes) break;
           const ext = imageExtFromFilename(item.fileHeader.name);
           const content = item.extraction;
           if (!ext || !content?.length) continue;
+          totalExtractedBytes += content.byteLength;
+          if (totalExtractedBytes > maxTotalExtractBytes) break;
+          const contentBuffer = Buffer.from(content);
+          if (!hasImageMagic(contentBuffer, ext)) continue;
           if (!canAddImage(content.byteLength)) continue;
           images.push({
             title: basename(item.fileHeader.name),
             ext,
             size: content.byteLength,
-            ratio: imageRatioFromBuffer(Buffer.from(content)),
-            buffer: Buffer.from(content),
+            ratio: imageRatioFromBuffer(contentBuffer),
+            buffer: contentBuffer,
           });
         }
       } catch {

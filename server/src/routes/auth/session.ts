@@ -483,7 +483,7 @@ export function createAuthSessionRouter() {
       const payload = verifyRefreshToken(refreshToken);
 
       const revokeBefore = await cacheGet<number>(`token_revoke_before:${payload.userId}`);
-      if (revokeBefore && payload.iat && payload.iat < revokeBefore) {
+      if (revokeBefore && payload.iat && payload.iat <= revokeBefore) {
         res.status(401).json({ detail: '会话已失效，请重新登录' });
         return;
       }
@@ -543,7 +543,10 @@ export function createAuthSessionRouter() {
       if (token) {
         const payload = verifyAccessToken(token);
         if (payload.iat) {
-          await revokeToken(payload.userId, payload.iat, 24 * 3600);
+          // 撤销标记必须覆盖 token 剩余寿命（默认 7d）：固定 24h 会让被登出的
+          // access token 在标记过期后「复活」，继续有效到自然过期
+          const remaining = payload.exp ? payload.exp - Math.floor(Date.now() / 1000) : 0;
+          await revokeToken(payload.userId, payload.iat, Math.max(remaining, 0) + 3600);
         }
       }
     } catch {

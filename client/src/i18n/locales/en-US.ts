@@ -2027,6 +2027,7 @@ export const enUS: { translation: TranslationMap } = {
       phonePlaceholder: 'Phone or landline (optional)',
       privacy: 'Privacy Notice',
       processing: 'Processing...',
+      checkingSession: 'Checking sign-in status...',
       register: 'Register',
       registerHeading: 'Create a new account',
       registerSubtitle: 'Register to start using the platform',

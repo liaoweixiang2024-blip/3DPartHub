@@ -126,6 +126,28 @@ export const useThemeStore = create<ThemeState>()(
   ),
 );
 
+// 「跟随系统」要实时听 OS 深/浅色切换：resolveTheme 只在设置瞬间读一次
+// prefers-color-scheme，不挂监听的话用户在 OS 层切换后页面要刷新才跟得上。
+// 全局只注册一次；非 system 模式或定时自动切换开启时回调里直接让位。
+if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+  const systemColorMedia = window.matchMedia('(prefers-color-scheme: light)');
+  const handleSystemColorChange = () => {
+    const state = useThemeStore.getState();
+    if (state.themeMode !== 'system' || state.autoSwitchEnabled) return;
+    const next = resolveTheme('system');
+    if (next !== state.theme) {
+      applyThemeClass(next);
+      useThemeStore.setState({ theme: next });
+    }
+  };
+  if (typeof systemColorMedia.addEventListener === 'function') {
+    systemColorMedia.addEventListener('change', handleSystemColorChange);
+  } else if (typeof (systemColorMedia as unknown as { addListener?: unknown }).addListener === 'function') {
+    // 旧 Safari（<14）没有 addEventListener
+    (systemColorMedia as unknown as { addListener: (cb: () => void) => void }).addListener(handleSystemColorChange);
+  }
+}
+
 /**
  * Apply server-configured default theme and auto-switch settings.
  * Called from publicSettings.ts after fetching settings.
@@ -146,8 +168,11 @@ export function applyServerThemeDefaults(
     if (defaultTheme === 'system') {
       state.setThemeMode('system');
     } else {
-      state.setTheme(defaultTheme as Theme);
-      set({ themeMode: defaultTheme as ThemeMode });
+      // 单次 set 同时落 theme 与 themeMode：只改 theme 留下 stale 的
+      // themeMode='system'，后续 OS 切换监听会把主题改回去（回跳）
+      const resolved = defaultTheme as Theme;
+      applyThemeClass(resolved);
+      set({ theme: resolved, themeMode: resolved });
     }
   }
 }

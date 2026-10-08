@@ -4,7 +4,13 @@ import { getBusinessConfig } from '../../lib/businessConfig.js';
 import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
-import { adminOnly, asSingleString, buildSelectionShareNameMap, hasSelectionSharesTable } from './common.js';
+import {
+  adminOnly,
+  asSingleString,
+  buildSelectionShareNameMap,
+  hasSelectionSharesTable,
+  invalidateShareInfoCache,
+} from './common.js';
 
 type AdminShareItem = {
   id: string;
@@ -263,6 +269,8 @@ export function createAdminSharesRouter() {
         return;
       }
       await prisma.shareLink.delete({ where: { id: target.id } });
+      // 撤销即时生效：驱逐公开 info 缓存（泄漏处置不能等 TTL）
+      await invalidateShareInfoCache(share.token);
       res.json({ ok: true });
     } catch (err) {
       logger.error({ err }, '[Shares] Admin delete error');
@@ -285,6 +293,10 @@ export function createAdminSharesRouter() {
       const parsed = ids.map(parseAdminShareId);
       const modelIds = parsed.filter((item) => item.type === 'model').map((item) => item.id);
       const selectionIds = parsed.filter((item) => item.type === 'selection').map((item) => item.id);
+      // 删除前先取 token（删完就查不到了），删除后驱逐对应公开 info 缓存，撤销即时生效
+      const tokensBeforeDelete = modelIds.length
+        ? await prisma.shareLink.findMany({ where: { id: { in: modelIds } }, select: { token: true } })
+        : [];
       const [modelResult, selectionResult] = await Promise.all([
         modelIds.length
           ? prisma.shareLink.deleteMany({ where: { id: { in: modelIds } } })
@@ -293,6 +305,7 @@ export function createAdminSharesRouter() {
           ? prisma.selectionShare.deleteMany({ where: { id: { in: selectionIds } } })
           : Promise.resolve({ count: 0 }),
       ]);
+      await Promise.all(tokensBeforeDelete.map((row) => invalidateShareInfoCache(row.token)));
       res.json({ ok: true, deleted: modelResult.count + selectionResult.count });
     } catch (err) {
       logger.error({ err }, '[Shares] Admin batch delete error');

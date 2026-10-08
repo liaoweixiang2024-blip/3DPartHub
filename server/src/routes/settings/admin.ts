@@ -13,7 +13,8 @@ import { checkUpdateAvailable, getUpdateHistory } from '../../lib/update.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { adminOnly } from './common.js';
 
-const SENSITIVE_SETTING_KEYS = ['smtp_pass', 'redis_password', 'storage_access_key_secret'] as const;
+// redis_url 形如 redis://:password@host:port —— 含凭据，与密码同等对待
+const SENSITIVE_SETTING_KEYS = ['smtp_pass', 'redis_password', 'redis_url', 'storage_access_key_secret'] as const;
 
 function maskSensitiveSettings(settings: Record<string, unknown>): Record<string, unknown> {
   const masked = { ...settings };

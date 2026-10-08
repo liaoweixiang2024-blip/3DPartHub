@@ -35,6 +35,17 @@ const TRANSFER_EXPORT_MAX_CATEGORIES = 100;
 const TRANSFER_STALE_MS = 60 * 60 * 1000; // 暂存包保留 1 小时
 // zip-slip 防护：entry 名严格白名单 assets/<目录>/<文件>，文件段限定安全字符
 const TRANSFER_ENTRY_PATTERN = /^assets\/(option-images|selection-assets)\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+// 扩展名白名单：只收图片（option-images）与图片+PDF（selection-assets，画册/catalogPdf）。
+// 没有它，恶意导入包可往 /static 写 .html（静态服务无 CSP 直出 = 存储型 XSS）或覆盖其他类型文件
+const TRANSFER_IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif', 'svg']);
+const TRANSFER_SELECTION_ASSET_EXTS = new Set([...TRANSFER_IMAGE_EXTS, 'pdf']);
+
+function isAllowedTransferAsset(rel: string): boolean {
+  const ext = rel.split('.').pop()?.toLowerCase() || '';
+  if (rel.startsWith('option-images/')) return TRANSFER_IMAGE_EXTS.has(ext);
+  if (rel.startsWith('selection-assets/')) return TRANSFER_SELECTION_ASSET_EXTS.has(ext);
+  return false;
+}
 
 const importTransferDir = join(process.cwd(), config.uploadDir, 'import-selection-transfer');
 
@@ -397,6 +408,10 @@ export function createSelectionTransferRouter() {
       const entryName = entry.entryName;
       if (!TRANSFER_ENTRY_PATTERN.test(entryName) || entry.isDirectory) continue;
       const rel = entryName.slice('assets/'.length);
+      if (!isAllowedTransferAsset(rel)) {
+        logger.warn({ entryName }, '[Selections] Transfer asset rejected: extension not allowed');
+        continue;
+      }
       const target = resolve(process.cwd(), join(config.staticDir, rel));
       if (!target.startsWith(staticRoot + sep)) continue; // zip-slip 双保险
       try {

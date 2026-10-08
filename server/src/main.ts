@@ -286,6 +286,26 @@ async function staticModelAssetsRequireAuth(): Promise<boolean> {
   return value;
 }
 
+/** 静态资源段登录校验（models 段随 require_login_browse 开关；temp-previews 无条件） */
+async function requireStaticViewer(req: express.Request, res: express.Response): Promise<boolean> {
+  try {
+    const verified = await getVerifiedRequestUser(req);
+    if (!verified) {
+      res.status(401).json({ detail: '需要登录后才能查看模型预览', code: 'LOGIN_REQUIRED_BROWSE' });
+      return false;
+    }
+    if (verified.mustChangePassword) {
+      res.status(403).json({ detail: '首次登录请先修改密码', code: 'PASSWORD_CHANGE_REQUIRED' });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logger.error({ err }, 'Failed to authorize model asset');
+    res.status(500).json({ detail: '认证服务暂不可用' });
+    return false;
+  }
+}
+
 app.use('/static', async (req, res, next) => {
   const path = req.path;
   const firstSegment = path.split('/').filter(Boolean)[0] || '';
@@ -295,21 +315,13 @@ app.use('/static', async (req, res, next) => {
   }
 
   if (firstSegment === 'models' && (await staticModelAssetsRequireAuth())) {
-    try {
-      const verified = await getVerifiedRequestUser(req);
-      if (!verified) {
-        res.status(401).json({ detail: '需要登录后才能查看模型预览', code: 'LOGIN_REQUIRED_BROWSE' });
-        return;
-      }
-      if (verified.mustChangePassword) {
-        res.status(403).json({ detail: '首次登录请先修改密码', code: 'PASSWORD_CHANGE_REQUIRED' });
-        return;
-      }
-    } catch (err) {
-      logger.error({ err }, 'Failed to authorize model asset');
-      res.status(500).json({ detail: '认证服务暂不可用' });
-      return;
-    }
+    if (!(await requireStaticViewer(req, res))) return;
+  }
+
+  // 临时预览是登录用户上传的 STEP 转换产物（可能含商业机密图纸）：上传/删除都要求
+  // 登录，静态读取同口径——匿名不得凭 URL 直接拖走 6 小时内的私有文件
+  if (firstSegment === 'temp-previews') {
+    if (!(await requireStaticViewer(req, res))) return;
   }
   next();
 });

@@ -6,7 +6,7 @@ import {
   prepareBrowserDownload,
   shouldUseIsolatedBrowserDownload,
 } from '../lib/browserDownload';
-import { getAccessToken } from '../stores/useAuthStore';
+import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
 import { unwrapApiData } from './response';
 
 type BatchFieldValue = string | number | boolean | string[] | undefined;
@@ -110,6 +110,35 @@ async function saveBatchBlobResponse(
   return { fileCount };
 }
 
+/**
+ * 带会话自愈的 JSON POST：本文件用裸 fetch（要读 blob/流），不走 axios 实例，
+ * 也就享受不到 client.ts 的 401→refresh→重试拦截器。 accessToken 过期后首下
+ * 必 401，用户手动重试才能成功——这里手动补齐同样的自愈逻辑（最多重试一次）。
+ */
+async function postJsonWithAuthRefresh(
+  url: string,
+  fields: Record<string, BatchFieldValue>,
+  buildHeaders: (extra?: Record<string, string>) => Record<string, string>,
+  extra?: Record<string, string>,
+): Promise<Response> {
+  const doFetch = () =>
+    fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: buildHeaders(extra),
+      body: JSON.stringify(fields),
+    });
+
+  const resp = await doFetch();
+  if (resp.status !== 401) return resp;
+
+  const refreshed = await useAuthStore.getState().restoreSessionFromCookie();
+  if (!refreshed) return resp;
+  const newToken = getAccessToken();
+  if (!newToken) return resp;
+  return doFetch();
+}
+
 export async function downloadBatchZip({
   url,
   fields,
@@ -131,22 +160,12 @@ export async function downloadBatchZip({
   let resp: Response;
 
   try {
-    resp = await fetch(activeUrl, {
-      method: 'POST',
-      credentials: 'include',
-      headers: buildHeaders({ 'X-Download-Preflight': '1' }),
-      body: JSON.stringify(activeFields),
-    });
+    resp = await postJsonWithAuthRefresh(activeUrl, activeFields, buildHeaders, { 'X-Download-Preflight': '1' });
 
     if (resp.status === 404 && legacyUrl) {
       activeUrl = legacyUrl;
       activeFields = legacyFields ?? fields;
-      resp = await fetch(activeUrl, {
-        method: 'POST',
-        credentials: 'include',
-        headers: buildHeaders({ 'X-Download-Preflight': '1' }),
-        body: JSON.stringify(activeFields),
-      });
+      resp = await postJsonWithAuthRefresh(activeUrl, activeFields, buildHeaders, { 'X-Download-Preflight': '1' });
     }
 
     if (!resp.ok) {

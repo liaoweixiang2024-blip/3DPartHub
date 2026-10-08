@@ -14,6 +14,7 @@ import { getAllSettings, getSetting } from '../../lib/settings.js';
 import { withAssetVersion } from '../../services/gltfAsset.js';
 import { resolveDbModelDownloadTarget } from '../../services/modelDownloadTarget.js';
 import { asSingleString, hasShareAccess, SHARE_ACCESS_TOKEN_TTL_MS } from './common.js';
+import { MODEL_STATUS } from '../../services/modelStatus.js';
 
 type ShareInfoCache = {
   allowDownload: boolean;
@@ -34,6 +35,7 @@ type ShareInfoCache = {
     originalFormat: string | null;
     originalName: string;
     originalSize: number;
+    status: string;
     thumbnailUrl: string | null;
     updatedAt: Date;
     uploadPath: string | null;
@@ -100,6 +102,7 @@ export function createPublicSharesRouter() {
               uploadPath: true,
               thumbnailUrl: true,
               description: true,
+              status: true,
               drawings: {
                 orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
                 select: { id: true, name: true, size: true },
@@ -127,6 +130,14 @@ export function createPublicSharesRouter() {
     if (!share.model) {
       await cacheDel(`cache:share:info:v2:${token}`);
       res.status(404).json({ detail: '分享的模型已被删除' });
+      return;
+    }
+
+    // 模型被删除/下架/转换中：与详情页口径一致（非 COMPLETED 对外不可见），
+    // 分享旁路不得继续暴露其元数据；缓存里带着旧状态也要即刻驱逐
+    if (share.model.status !== MODEL_STATUS.COMPLETED) {
+      await cacheDel(`cache:share:info:v2:${token}`);
+      res.status(404).json({ detail: '分享的模型已下架' });
       return;
     }
 
@@ -260,10 +271,11 @@ export function createPublicSharesRouter() {
         name: true,
         originalName: true,
         updatedAt: true,
+        status: true,
       },
     });
-    if (!model) {
-      res.status(404).json({ detail: '分享的模型已被删除' });
+    if (!model || model.status !== MODEL_STATUS.COMPLETED) {
+      res.status(404).json({ detail: '分享的模型已被删除或下架' });
       return;
     }
 
@@ -339,8 +351,14 @@ export function createPublicSharesRouter() {
 
     const model = await prisma.model.findUnique({
       where: { id: share.modelId },
-      select: { id: true, gltfUrl: true },
+      select: { id: true, gltfUrl: true, status: true },
     });
+
+    // 非 COMPLETED（软删除/下架/转换中）不得经分享链接取预览文件
+    if (!model || model.status !== MODEL_STATUS.COMPLETED) {
+      res.status(404).json({ detail: '模型文件不存在' });
+      return;
+    }
 
     // gltfUrl 形如 /static/models/<id>.glb（可能带 ?v= 版本参数）；限制在 static 根目录内的 .glb
     const rawUrl = model?.gltfUrl?.split('?')[0] || '';
@@ -431,6 +449,11 @@ export function createPublicSharesRouter() {
       res.status(404).json({ detail: '分享的模型已被删除' });
       return;
     }
+    // 与站内下载口径一致：非 COMPLETED（软删除/下架/转换中）不得经分享链接下载原文件
+    if (model.status !== MODEL_STATUS.COMPLETED) {
+      res.status(404).json({ detail: '分享的模型已下架' });
+      return;
+    }
 
     const target = resolveDbModelDownloadTarget(model, 'original') || resolveDbModelDownloadTarget(model);
     if (!target || !existsSync(target.filePath)) {
@@ -461,7 +484,8 @@ export function createPublicSharesRouter() {
     }
 
     // Invalidate the cached share info so the remaining-download count stays accurate.
-    await cacheDel(`cache:share:info:${token}`);
+    // 注意 key 带 v2 前缀（写入是 cache:share:info:v2:...，历史上曾漏写 v2 导致余量长期显示旧值）
+    await cacheDel(`cache:share:info:v2:${token}`);
 
     // 分享下载同样计入全局统计：写下载事件流水 + 递增模型下载次数。
     // 统计失败不阻断下载本身（上方限额计数已独立完成）。

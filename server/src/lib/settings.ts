@@ -41,7 +41,9 @@ const DEFAULT_USER_NAV_FOR_SETTINGS = DEFAULT_NAV_FOR_SETTINGS.filter(
   (item) => !item.roles?.includes('ADMIN') && !item.path.startsWith('/admin/'),
 );
 const DEFAULT_ADMIN_NAV_FOR_SETTINGS = DEFAULT_NAV_FOR_SETTINGS;
-const SENSITIVE_SETTING_KEYS = new Set(['smtp_pass', 'redis_password', 'storage_access_key_secret']);
+// redis_url 形如 redis://:password@host:port，含凭据：读侧打码、写侧遇打码值保真
+// （与 routes/settings/admin.ts 的 SENSITIVE_SETTING_KEYS 保持同步）
+const SENSITIVE_SETTING_KEYS = new Set(['smtp_pass', 'redis_password', 'redis_url', 'storage_access_key_secret']);
 
 function getCopyrightYear(): string {
   return String(new Date().getFullYear());

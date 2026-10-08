@@ -77,7 +77,9 @@ export async function getVerifiedRequestUser(
   if (payload.iat && (await isTokenRevoked(payload.userId, payload.iat))) return null;
 
   const revokeBefore = await cacheGet<number>(`token_revoke_before:${payload.userId}`);
-  if (revokeBefore && payload.iat && payload.iat < revokeBefore) return null;
+  // <=：同一秒内签发的 token 也一并吊销（降级/禁用那一秒刚刷新拿到的旧角色 token
+  // 不能再活一个完整周期；revokeAllTokensBefore 传的是当前秒）
+  if (revokeBefore && payload.iat && payload.iat <= revokeBefore) return null;
 
   const cacheKey = `auth:user:${payload.userId}`;
   const cached = await cacheGet<{ id: string; role: string; disabled?: boolean; mustChangePassword: boolean }>(

@@ -4,10 +4,41 @@ import https from 'node:https';
 import { isIP } from 'node:net';
 
 /**
- * 判断地址是否为本机/内网/保留段（SSRF 防护）。覆盖 IPv4 全部私有/保留段 + IPv6
- * （含 ::ffff: 映射、链路本地、唯一本地、多播等）。命中即视为禁止访问的远程目标。
+ * 把 IPv6 地址完整展开成 8 个 hextet（处理 :: 压缩、IPv4 内嵌尾段、zone id）。
+ * 解析失败返回 null——调用方按危险处理（保守侧）。
  */
-function isBlockedRemoteAddress(address: string): boolean {
+function expandIpv6(address: string): number[] | null {
+  let addr = address.toLowerCase().split('%')[0];
+  const v4tail = addr.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
+  if (v4tail) {
+    const octets = v4tail[2].split('.').map(Number);
+    if (octets.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+    const [a, b, c, d] = octets;
+    addr = `${v4tail[1]}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const halves = addr.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const missing = 8 - head.length - tail.length;
+  if (halves.length === 2 && missing < 0) return null;
+  if (halves.length === 1 && head.length !== 8) return null;
+  const parts = [...head, ...(halves.length === 2 ? Array<string>(missing).fill('0') : []), ...tail];
+  if (parts.length !== 8) return null;
+  const hextets: number[] = [];
+  for (const part of parts) {
+    if (!/^[0-9a-f]{1,4}$/.test(part)) return null;
+    hextets.push(parseInt(part, 16));
+  }
+  return hextets;
+}
+
+/**
+ * 判断地址是否为本机/内网/保留段（SSRF 防护）。覆盖 IPv4 全部私有/保留段 + IPv6
+ * （完整展开后按前缀匹配：::、::1、IPv4 兼容/映射段（含十六进制形态 ::ffff:7f00:1）、
+ * ULA、链路本地、多播、NAT64 64:ff9b::/96、6to4 2002::/16）。命中即视为禁止访问。
+ */
+export function isBlockedRemoteAddress(address: string): boolean {
   const version = isIP(address);
   if (version === 4) {
     const [a, b] = address.split('.').map((part) => Number(part));
@@ -23,16 +54,22 @@ function isBlockedRemoteAddress(address: string): boolean {
     );
   }
   if (version === 6) {
-    const lower = address.toLowerCase().split('%')[0] || '';
-    if (lower.startsWith('::ffff:')) return isBlockedRemoteAddress(lower.slice('::ffff:'.length));
-    const firstHextet = Number.parseInt(lower.split(':')[0] || '0', 16);
-    return (
-      lower === '::' ||
-      lower === '::1' ||
-      (firstHextet >= 0xfc00 && firstHextet <= 0xfdff) ||
-      (firstHextet >= 0xfe80 && firstHextet <= 0xfebf) ||
-      (firstHextet >= 0xff00 && firstHextet <= 0xffff)
-    );
+    const h = expandIpv6(address);
+    if (!h) return true; // 解析不了的一律拒绝（保守侧）
+    const first = h[0];
+    // ::（未指定）与 ::1（环回）以及整个 ::/96 IPv4 兼容段（::127.0.0.1 / ::7f00:1）：
+    // 公网单播（2000::/3）不可能有 6 个前导零段，整段拒绝是安全的
+    if (h.slice(0, 6).every((x) => x === 0)) return true;
+    // ::ffff:0:0/96 IPv4 映射段（含十六进制写法）
+    if (h.slice(0, 5).every((x) => x === 0) && h[5] === 0xffff) return true;
+    // fc00::/7 唯一本地、fe80::/10 链路本地、ff00::/8 多播
+    if ((first & 0xfe00) === 0xfc00) return true;
+    if ((first & 0xffc0) === 0xfe80) return true;
+    if ((first & 0xff00) === 0xff00) return true;
+    // 6to4（内嵌 IPv4 可能指向内网）与 NAT64 64:ff9b::/96（映射 IPv4 回环/内网）
+    if (first === 0x2002) return true;
+    if (first === 0x0064 && h[1] === 0xff9b) return true;
+    return false;
   }
   return false;
 }

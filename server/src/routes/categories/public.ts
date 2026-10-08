@@ -31,7 +31,9 @@ export function createPublicCategoriesRouter() {
       // 非 ADMIN 只拿 restricted 布尔标记，不泄露白名单内容
       const viewerIsAdmin = (await getViewerContext(req)).role === 'ADMIN';
       const { value: result, hit } = await cacheGetOrSet(
-        `${CATEGORY_CACHE_PREFIX}tree:v4${bucket ? `:${bucket}` : ''}`,
+        // admin 键独立分桶：load 回调对 ADMIN 额外下发 allowedRoles/allowedUserIds，
+        // 不能与「被全量白名单的非管理员用户」（同样空桶）共享同一份缓存
+        `${CATEGORY_CACHE_PREFIX}tree:v4${viewerIsAdmin ? ':admin' : ''}${bucket ? `:${bucket}` : ''}`,
         TTL.CATEGORIES,
         async () => {
           const categories = await prisma.category.findMany({
@@ -145,6 +147,16 @@ export function createPublicCategoriesRouter() {
         async () => {
           const categories = await prisma.category.findMany({
             orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+            // 只下发公开字段：findMany 不加 select 会把 restricted 分类的
+            // allowedRoles/allowedUserIds（内部用户 ID 白名单）原样吐给任意登录用户
+            select: {
+              id: true,
+              name: true,
+              icon: true,
+              parentId: true,
+              sortOrder: true,
+              restricted: true,
+            },
           });
           return { data: categories.filter((cat) => !invisible.has(cat.id)) };
         },

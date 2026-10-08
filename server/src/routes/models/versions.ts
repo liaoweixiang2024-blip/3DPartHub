@@ -27,6 +27,9 @@ function toPrismaJson(value: unknown): Prisma.InputJsonValue | typeof Prisma.Jso
   return value === null ? Prisma.JsonNull : (value as Prisma.InputJsonValue);
 }
 
+// 与 conversion.ts 一致：PROCESSING 卡死超过 20 分钟放行（进程崩溃等留下的死状态）
+const STALE_PROCESSING_MS = 20 * 60_000;
+
 export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: ModelVersionsContext) {
   const router = Router();
 
@@ -87,9 +90,15 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
         return;
       }
 
+      let prevStatus: string | null = null;
       try {
-        const model = await prisma.model.findUnique({ where: { id: modelId } });
+        const model = await prisma.model.findUnique({ where: { id: modelId }, select: { status: true } });
         if (!model) {
+          try {
+            rmSync(file.path, { force: true });
+          } catch {
+            /* best-effort temp file cleanup */
+          }
           res.status(404).json({ detail: '模型不存在' });
           return;
         }
@@ -104,8 +113,35 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
           return;
         }
 
+        // 原子抢占：分钟级的转换期间置 PROCESSING，阻断并发的删除/替换文件/重转/
+        // 其他版本上传（findUnique 的状态检查与转换开始之间存在竞态窗口）
+        const statusUpdate = await prisma.model.updateMany({
+          where: {
+            id: modelId,
+            OR: [
+              { status: { notIn: [MODEL_STATUS.QUEUED, MODEL_STATUS.PROCESSING] } },
+              { updatedAt: { lt: new Date(Date.now() - STALE_PROCESSING_MS) } },
+            ],
+          },
+          data: { status: MODEL_STATUS.PROCESSING },
+        });
+        if (statusUpdate.count === 0) {
+          try {
+            rmSync(file.path, { force: true });
+          } catch {
+            /* best-effort temp file cleanup */
+          }
+          res.status(409).json({ detail: '模型正在转换中，请稍后重试' });
+          return;
+        }
+        prevStatus = model.status;
+
         const ext = await validateModelUpload(file, res);
-        if (!ext) return;
+        if (!ext) {
+          // 抢占已生效，失败路径恢复原状态（validateModelUpload 已自删临时文件）
+          await prisma.model.update({ where: { id: modelId }, data: { status: prevStatus } }).catch(() => {});
+          return;
+        }
 
         const updated = await prisma.model.update({
           where: { id: modelId },
@@ -176,6 +212,10 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
           change_log: changeLog,
         });
       } catch (err: unknown) {
+        // 抢占后失败：恢复原状态，避免把模型永久留在 PROCESSING（卡死要等 20 分钟放行）
+        if (prevStatus) {
+          await prisma.model.update({ where: { id: modelId }, data: { status: prevStatus } }).catch(() => {});
+        }
         logger.error({ err }, '[versions] Upload failed');
         res.status(500).json({ detail: '上传版本失败' });
       }
@@ -196,6 +236,7 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
         return;
       }
 
+      let prevStatus: string | null = null;
       try {
         const version = await prisma.modelVersion.findUnique({ where: { id: versionId } });
         if (!version || version.modelId !== modelId) {
@@ -209,8 +250,32 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
           return;
         }
 
-        const glbPath = join(config.staticDir, 'models', version.fileKey);
+        // 原子抢占：缩略图生成/指针切换期间置 PROCESSING，与版本上传/重转/删除互斥
+        const statusUpdate = await prisma.model.updateMany({
+          where: {
+            id: modelId,
+            OR: [
+              { status: { notIn: [MODEL_STATUS.QUEUED, MODEL_STATUS.PROCESSING] } },
+              { updatedAt: { lt: new Date(Date.now() - STALE_PROCESSING_MS) } },
+            ],
+          },
+          data: { status: MODEL_STATUS.PROCESSING },
+        });
+        if (statusUpdate.count === 0) {
+          res.status(409).json({ detail: '模型正在转换中，无法回滚' });
+          return;
+        }
+        if (currentModel) prevStatus = currentModel.status;
+
+        // fileKey 存的是完整带版本的 URL（/static/models/xxx.glb?v=...），
+        // 拼本地路径必须剥离 /static/ 前缀和查询串，
+        // 否则 join 出 static/models/static/models/xxx.glb?v=...，回滚永远 410
+        const relativeKey = version.fileKey.replace(/^\/static\//, '').split('?')[0];
+        const glbPath = join(config.staticDir, relativeKey);
         if (!existsSync(glbPath)) {
+          await prisma.model
+            .update({ where: { id: modelId }, data: { status: prevStatus ?? MODEL_STATUS.COMPLETED } })
+            .catch(() => {});
           res.status(410).json({ detail: '版本文件不存在，无法回滚' });
           return;
         }
@@ -238,6 +303,10 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
 
         res.json({ message: '已回滚', version_number: version.versionNumber });
       } catch {
+        // 抢占后失败：恢复原状态，避免把模型永久留在 PROCESSING
+        if (prevStatus) {
+          await prisma.model.update({ where: { id: modelId }, data: { status: prevStatus } }).catch(() => {});
+        }
         res.status(500).json({ detail: '回滚失败' });
       }
     },

@@ -6,12 +6,14 @@ import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { getAllSettings } from '../../lib/settings.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
+import { getInvisibleCategoryIdsForRequest } from '../../services/categoryAccess.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 import {
   asSingleString,
   buildSelectionShareNameMap,
   hasSelectionSharesTable,
   hasShareAllowDrawingColumn,
+  invalidateShareInfoCache,
 } from './common.js';
 
 type UserShareItem = {
@@ -87,6 +89,15 @@ export function createUserSharesRouter() {
         return;
       }
       if (model.status !== MODEL_STATUS.COMPLETED) {
+        res.status(404).json({ detail: '模型不存在' });
+        return;
+      }
+      // 分类访问控制：受限分类的模型对无权限用户不可见，也不允许为其创建分享
+      // ——分享 token 是公开旁路（公开侧不校验分类），创建侧不拦的话任何登录
+      // 用户拿到 modelId 就能绕过分类白名单。ADMIN 的不可见集为空，不受影响。
+      // 注意：这里校验的是「可见性」，与下方「不限自有模型」的所有权放开不冲突。
+      const invisibleCategories = await getInvisibleCategoryIdsForRequest(req);
+      if (model.categoryId && invisibleCategories.has(model.categoryId)) {
         res.status(404).json({ detail: '模型不存在' });
         return;
       }
@@ -172,6 +183,8 @@ export function createUserSharesRouter() {
           },
           select: upsertSelect,
         });
+        // 设置（密码/权限位/限额/过期）已变：驱逐公开 info 缓存，收紧即时生效
+        await invalidateShareInfoCache(updated.token);
 
         res.json({
           id: updated.id,
@@ -375,7 +388,7 @@ export function createUserSharesRouter() {
 
     const share = await prisma.shareLink.findUnique({
       where: { id: target.id },
-      select: { id: true, createdById: true },
+      select: { id: true, createdById: true, token: true },
     });
     if (!share || share.createdById !== userId) {
       res.status(404).json({ detail: '分享链接不存在' });
@@ -383,6 +396,8 @@ export function createUserSharesRouter() {
     }
 
     await prisma.shareLink.delete({ where: { id: target.id } });
+    // 撤销要即时生效：驱逐公开 info 缓存，否则已删分享在一个 TTL 内还能看元数据
+    await invalidateShareInfoCache(share.token);
     res.json({ ok: true });
   });
 

@@ -219,6 +219,10 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
           res.status(429).json({ detail: err.message });
           return;
         }
+        // 记录失败（DB 抖动等）按可用性优先放行下载——有意设计，不是漏洞：
+        // 1) 每日限额是策略旋钮而非安全边界（鉴权/分类权限在更前面，不受此处影响）；
+        // 2) DB 不可用时整条链路本就降级走文件系统元数据（target.record 为空、完全不打点），
+        //    此处改 fail-closed 只会让 DB 打嗝期间全站无法下载，换不来真实的配额保障。
         logger.error({ err }, '[models] Failed to record download');
       }
     }

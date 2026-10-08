@@ -26,15 +26,16 @@ test('refresh tokens preserve remember-login intent', () => {
 });
 
 // ---------------------------------------------------------------------------
-// checkAndRevokeRefreshFamily：并发宽限 + Redis 故障放行（「偶发掉登录」回归）
+// checkAndRevokeRefreshFamily：并发宽限 + 宽限过期重放拦截 + Redis 故障放行
 //
-// 用内存 Map 顶掉 redis.eval（cache.ts 导出的同一实例），验证四种场景：
+// 用内存 Map 顶掉 redis.eval（cache.ts 导出的同一实例），验证五种场景：
 //   1. 首次轮换 → ok=true, usedBefore=false
 //   2. 宽限窗口内并发重放（第二个标签页）→ ok=true, usedBefore=true（不再吊销）
-//   3. 宽限窗口外的重放（key 已是 "revoked"）→ ok=false（保持顶下线）
-//   4. Redis 抖动（eval 抛错）→ ok=true（fail-open，不把用户顶下线）
+//   3. 宽限窗口外重放（grace 已过期、used 仍在）→ ok=false（曾是被绕过的安全洞）
+//   4. 登出后的重放（used 终态标记）→ ok=false（保持顶下线）
+//   5. Redis 抖动（eval 抛错）→ ok=true（fail-open，不把用户顶下线）
 // ---------------------------------------------------------------------------
-test('checkAndRevokeRefreshFamily: first rotation, grace replay, revoked replay, redis outage', async () => {
+test('checkAndRevokeRefreshFamily: first rotation, grace replay, stale replay, revoked replay, redis outage', async () => {
   const store = new Map<string, string>();
   const KEY_PREFIX = (process.env.REDIS_KEY_PREFIX || process.env.NODE_ENV || 'dev') + ':';
   const { checkAndRevokeRefreshFamily, REFRESH_REUSE_GRACE_SECONDS } = await import('./jwt.js');
@@ -42,11 +43,18 @@ test('checkAndRevokeRefreshFamily: first rotation, grace replay, revoked replay,
 
   const originalEval = redis.eval;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (redis as any).eval = async (_script: string, _numKeys: number, key: string, _ttl: string): Promise<number> => {
-    const val = store.get(key);
-    if (val === 'revoked') return 0;
-    if (val === 'grace') return 2;
-    store.set(key, 'grace');
+  (redis as any).eval = async (
+    _script: string,
+    _numKeys: number,
+    graceKey: string,
+    usedKey: string,
+    _graceTtl: string,
+    _usedTtl: string,
+  ): Promise<number> => {
+    if (store.get(graceKey) === 'grace') return 2;
+    if (store.get(usedKey) === '1') return 0;
+    store.set(graceKey, 'grace');
+    store.set(usedKey, '1');
     return 1;
   };
 
@@ -64,12 +72,20 @@ test('checkAndRevokeRefreshFamily: first rotation, grace replay, revoked replay,
     assert.equal(second.ok, true);
     assert.equal(second.usedBefore, true);
 
-    // 3. 宽限窗口外：family 已被标记 revoked
-    store.set(`${KEY_PREFIX}refresh_family:user-1:${family}`, 'revoked');
-    const third = await checkAndRevokeRefreshFamily('user-1', family);
-    assert.equal(third.ok, false);
+    // 3. 宽限窗口外的重放：grace 已自然过期，只剩 used 终态标记。
+    //    修复前 key 会整个消失，重放被误判为首次轮换 → 重新签发 token（安全洞）
+    store.delete(`${KEY_PREFIX}refresh_family:user-1:${family}`);
+    const stale = await checkAndRevokeRefreshFamily('user-1', family);
+    assert.equal(stale.ok, false);
+    assert.equal(stale.usedBefore, false);
 
-    // 4. Redis 抖动 → fail-open
+    // 4. 登出后的重放：只有 used 标记（revokeRefreshFamily 会清 grace）
+    const logoutFamily = `fam_test_logout`;
+    store.set(`${KEY_PREFIX}refresh_family_used:user-1:${logoutFamily}`, '1');
+    const afterLogout = await checkAndRevokeRefreshFamily('user-1', logoutFamily);
+    assert.equal(afterLogout.ok, false);
+
+    // 5. Redis 抖动 → fail-open
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (redis as any).eval = async () => {
       throw new Error('Command timed out');

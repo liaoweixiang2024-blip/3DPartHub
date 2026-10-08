@@ -615,17 +615,20 @@ router.post('/api/downloads/model-token', optionalAuthMiddleware, async (req: Au
       return;
     }
 
-    // 分类访问控制：受限分类的模型不发放下载令牌（/download 端点还有同款兜底拦截）
+    // 分类访问控制 + 发布状态：受限分类/非 COMPLETED 的模型不发放下载令牌
+    // （/download 端点还有同款兜底拦截，这里前置拦截避免空发令牌+模型 ID 探测）
     const invisible = await getInvisibleCategoryIds(req.user?.role ?? null, req.user?.userId ?? null);
-    if (invisible.size > 0) {
-      const model = await prisma.model.findUnique({
-        where: { id: modelId },
-        select: { categoryId: true },
-      });
-      if (model?.categoryId && invisible.has(model.categoryId)) {
-        res.status(403).json({ detail: '无权下载该模型' });
-        return;
-      }
+    const model = await prisma.model.findUnique({
+      where: { id: modelId },
+      select: { categoryId: true, status: true },
+    });
+    if (model && model.status !== MODEL_STATUS.COMPLETED && req.user?.role !== 'ADMIN') {
+      res.status(404).json({ detail: '模型不存在' });
+      return;
+    }
+    if (model?.categoryId && invisible.has(model.categoryId)) {
+      res.status(403).json({ detail: '无权下载该模型' });
+      return;
     }
 
     const created = await createModelDownloadToken({
@@ -659,9 +662,14 @@ router.post('/api/downloads/drawing-token', optionalAuthMiddleware, async (req: 
 
     const model = await prisma.model.findUnique({
       where: { id: modelId },
-      select: { id: true, categoryId: true },
+      select: { id: true, categoryId: true, status: true },
     });
     if (!model) {
+      res.status(404).json({ detail: '模型不存在' });
+      return;
+    }
+    // 发布状态对齐模型令牌端点：非 COMPLETED 不发放图纸令牌（ADMIN 例外）
+    if (model.status !== MODEL_STATUS.COMPLETED && req.user?.role !== 'ADMIN') {
       res.status(404).json({ detail: '模型不存在' });
       return;
     }

@@ -92,10 +92,20 @@ const MAX_UPLOAD_CHUNKS = 20_000;
 const COMPLETED_BACKUP_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 mkdirSync(CHUNKS_DIR, { recursive: true });
 
-function createByteCounter(onBytes: (bytes: number) => void) {
+class UploadChunkSizeExceededError extends Error {}
+
+function createByteCounter(onBytes: (bytes: number) => void, maxBytes?: number) {
+  let total = 0;
   return new Transform({
     transform(chunk, _encoding, callback) {
-      onBytes(Buffer.byteLength(chunk));
+      const bytes = Buffer.byteLength(chunk);
+      total += bytes;
+      onBytes(bytes);
+      // 流内熔断：超限即断流，避免超限数据先原样落盘、写完才发现再删（慢速推送可无限撑盘）
+      if (maxBytes !== undefined && total > maxBytes) {
+        callback(new UploadChunkSizeExceededError('chunk exceeds max bytes'));
+        return;
+      }
       callback(null, chunk);
     },
   });
@@ -301,7 +311,18 @@ router.put('/api/upload/chunk', authMiddleware, requireRole('ADMIN'), async (req
 
   const chunkPath = join(CHUNKS_DIR, uploadId, `${ci}`);
 
-  // Stream chunk data directly to disk — avoid buffering entire body in memory
+  // Validate chunk size doesn't exceed expected (with 20% tolerance for last chunk)
+  const expectedMax = Math.ceil(session.chunkSize * 1.2);
+  const maxOverallBytes = session.fileSize * 1.1;
+
+  // Stream chunk data directly to disk — avoid buffering entire body in memory.
+  // 熔断上限与下方写后校验同口径取严值：最后一片 ≤ min(1.2×chunkSize, fileSize)，
+  // 其余片 ≤ min(1.2×chunkSize, 1.1×总大小)，超限在流内立即断开
+  const streamCap =
+    ci === session.totalChunks - 1
+      ? Math.ceil(Math.min(expectedMax, Math.max(session.fileSize, 1)))
+      : Math.ceil(Math.min(expectedMax, maxOverallBytes));
+
   const ws = createWriteStream(chunkPath);
   let receivedBytes = 0;
   try {
@@ -309,20 +330,21 @@ router.put('/api/upload/chunk', authMiddleware, requireRole('ADMIN'), async (req
       req,
       createByteCounter((bytes) => {
         receivedBytes += bytes;
-      }),
+      }, streamCap),
       ws,
     );
   } catch (err) {
     ws.destroy();
     rmSync(chunkPath, { force: true });
+    if (err instanceof UploadChunkSizeExceededError) {
+      res.status(400).json({ detail: `分片大小(${receivedBytes})超出预期` });
+      return;
+    }
     logger.warn({ err, uploadId, chunkIndex: ci }, 'Failed to write upload chunk');
     res.status(500).json({ detail: '分片写入失败，请重新上传该分片' });
     return;
   }
 
-  // Validate chunk size doesn't exceed expected (with 20% tolerance for last chunk)
-  const expectedMax = Math.ceil(session.chunkSize * 1.2);
-  const maxOverallBytes = session.fileSize * 1.1;
   if (receivedBytes > expectedMax || (ci === session.totalChunks - 1 && receivedBytes > session.fileSize)) {
     rmSync(chunkPath, { force: true });
     res.status(400).json({ detail: `分片大小(${receivedBytes})超出预期` });
