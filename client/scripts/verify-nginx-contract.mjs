@@ -50,6 +50,18 @@ if (rootRegex) {
   }
 }
 
+// ── 外层代理零配置：文件服务响应必须带 X-Accel-Buffering: no ──────────
+// 独立反代（宝塔等）默认 proxy_buffering 会把大文件/流式下载缓冲到本地盘
+// （曾掐流）；nginx 标准语义是收到上游的 X-Accel-Buffering: no 自动对该
+// 响应关缓冲。这五个 location 覆盖全部文件服务路径，丢了头就要外层手配。
+for (const dir of ['/api/', '/static/', '/static/models/', '/_protected_static/', '/_protected_uploads/']) {
+  const block = locationBlock(dir);
+  check(
+    block != null && block.includes('X-Accel-Buffering "no"'),
+    `location ${dir} 必须下发 X-Accel-Buffering "no"（外层代理自动关缓冲，免特殊配置）`,
+  );
+}
+
 // ── 既有缓存策略不回退 ──────────────────────────────────────────────
 check(/location = \/version\.json \{[\s\S]*?no-store/.test(conf), 'version.json 必须 no-store（静默自动更新依赖它实时）');
 check(/location = \/sw\.js \{[\s\S]*?no-store/.test(conf), 'sw.js 必须 no-store');
