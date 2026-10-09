@@ -102,6 +102,59 @@ export default function SwTrackballControls({
     };
   }, [controls]);
 
+  // 修复旋转增量「按事件对消费」的丢位移——SW 模式旋转比普通模式慢的直接原因：
+  // 库的 onMouseMove/touchmove 在每个指针事件里都先把 _movePrev 推进到 _moveCurr，
+  // 而 update() 每帧只消费 curr−prev。两帧之间到达的 N 个指针事件里只有最后一对
+  // 的位移被旋转应用，其余全部丢弃；指针事件率高于渲染帧率时（高轮询鼠标/触控板/
+  // 大模型掉帧）旋转速度按比例变慢（Node 仿真实测：2 事件/帧 = 半速，4 事件/帧 =
+  // 1/4 速）。默认模式的 OrbitControls 里 sphericalDelta 跨事件累加，没有此问题。
+  // 修复 = 旋转态只推进 curr，prev 交给 rotateCamera 消费完当帧增量后自行推进；
+  // 平移/缩放走「Start 每帧收敛 15% 残差」的累积语义，实测不丢增量，保持库原路径。
+  useEffect(() => {
+    const patched = controls as unknown as {
+      __origOnMouseMove?: (event: { pageX: number; pageY: number }) => void;
+      __origTouchMove?: (event: TouchEvent) => void;
+      _keyState: number;
+      _state: number;
+      STATE: { NONE: number; ROTATE: number };
+      _moveCurr: THREE.Vector2;
+      getMouseOnCircle: (pageX: number, pageY: number) => THREE.Vector2;
+      onMouseMove: (event: { pageX: number; pageY: number }) => void;
+      touchmove: (event: TouchEvent) => void;
+    };
+    const isRotateActive = () =>
+      (patched._keyState !== patched.STATE.NONE ? patched._keyState : patched._state) === patched.STATE.ROTATE;
+
+    // 鼠标路径：pointermove 监听在 onPointerMove 里动态查 this.onMouseMove，覆盖属性即生效
+    const origMouseMove = (patched.__origOnMouseMove ??= patched.onMouseMove);
+    patched.onMouseMove = (event) => {
+      if (!controls.enabled) return;
+      if (isRotateActive() && !controls.noRotate) {
+        patched._moveCurr.copy(patched.getMouseOnCircle(event.pageX, event.pageY));
+        return;
+      }
+      origMouseMove(event);
+    };
+
+    // 触屏路径：touchmove 监听在 connect() 时按函数引用注册，覆盖属性后必须重绑。
+    // dispose() 移除的是当前属性值（即包装器），卸载清理路径不受影响
+    const origTouchMove = (patched.__origTouchMove ??= patched.touchmove);
+    patched.touchmove = (event) => {
+      if (!controls.enabled) return;
+      if (event.touches.length === 1 && isRotateActive() && !controls.noRotate) {
+        patched._moveCurr.copy(patched.getMouseOnCircle(event.touches[0].pageX, event.touches[0].pageY));
+        return;
+      }
+      origTouchMove(event);
+    };
+    gl.domElement.removeEventListener('touchmove', origTouchMove);
+    gl.domElement.addEventListener('touchmove', patched.touchmove);
+    return () => {
+      gl.domElement.removeEventListener('touchmove', patched.touchmove);
+      gl.domElement.addEventListener('touchmove', origTouchMove);
+    };
+  }, [controls, gl]);
+
   // 旋转灵敏度对齐默认模式（OrbitControls）：
   //   Orbit: 每像素弧度 = rotateSpeed(0.8) × 2π / canvasHeight
   //   轨迹球: 每像素弧度 = rotateSpeed / (canvasWidth / 2)
