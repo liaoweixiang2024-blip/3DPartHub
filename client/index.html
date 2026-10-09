@@ -17,44 +17,77 @@
       // Apply site config from localStorage before React hydrates to prevent flash
       (function () {
         try {
-          var raw = localStorage.getItem('site_config_cache');
-          if (!raw) return;
-          var stored = JSON.parse(raw);
-          var cfg = stored && stored.data;
-          if (!cfg) return;
-          var title = cfg.site_browser_title || cfg.site_title;
+          var siteRaw = localStorage.getItem('site_config_cache');
+          var site = siteRaw && JSON.parse(siteRaw).data;
+
+          /* ---- 首帧主题判定（永远执行，不依赖 site config 是否有缓存）----
+           * 与 useThemeStore.applyServerThemeDefaults 的优先级对齐：
+           * 本地 autoSwitch > 用户手动选择 > 服务器 auto（按时段算）> 服务器默认 > 存储值兜底。
+           * 服务器侧的 default_theme/auto_* 取自 site_config_cache（publicSettings 缓存），
+           * 无缓存（首次访问）时退回存储值/浅色。
+           * 必须首帧就算对：CSS 按 .theme-light 分叉（无该类=深色变量），html 静态出厂是
+           * 深色——若首帧按深色渲染，iOS Safari 首帧取一次页面/顶栏颜色就锁定（运行时再改
+           * meta/背景它不跟），表现为「页面浅色、状态栏和地址栏却一直是黑色，刷新也没用」。
+           */
+          var themeRaw = localStorage.getItem('theme-storage');
+          var themeState = themeRaw && JSON.parse(themeRaw).state;
+          var hour = new Date().getHours();
+          var inLightHours = function (darkHour, lightHour) {
+            return hour >= lightHour && hour < darkHour;
+          };
+          var isLight;
+          if (themeState && themeState.autoSwitchEnabled) {
+            var dHour = themeState.autoSwitchDarkHour != null ? themeState.autoSwitchDarkHour : site && site.auto_theme_dark_hour;
+            var lHour = themeState.autoSwitchLightHour != null ? themeState.autoSwitchLightHour : site && site.auto_theme_light_hour;
+            isLight = inLightHours(dHour != null ? dHour : 20, lHour != null ? lHour : 8);
+          } else if (themeState && themeState.userExplicitlySet) {
+            isLight = themeState.theme !== 'dark';
+          } else if (site && site.auto_theme_enabled) {
+            isLight = inLightHours(
+              site.auto_theme_dark_hour != null ? site.auto_theme_dark_hour : 20,
+              site.auto_theme_light_hour != null ? site.auto_theme_light_hour : 8,
+            );
+          } else if (site && site.default_theme === 'system') {
+            isLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+          } else if (site && site.default_theme) {
+            isLight = site.default_theme !== 'dark';
+          } else {
+            isLight = !themeState || themeState.theme !== 'dark';
+          }
+          var themeColor = document.querySelector('meta[name="theme-color"]');
+          if (themeColor) themeColor.setAttribute('content', isLight ? '#faf9f7' : '#121316');
+          var statusBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+          if (statusBar) statusBar.setAttribute('content', isLight ? 'default' : 'black-translucent');
+          // 首帧主题类同步（React 挂载后 useThemeStore 会再做一次同样的 add/remove，幂等无闪烁）
+          if (isLight) document.documentElement.classList.add('theme-light');
+          // 首屏底色先行：#root 为空、CSS 未加载时浏览器先画默认白底，React 挂载后
+          // 才出现深色页头/锁屏——表现为整页白闪（冷缓存/连刷后模块复验时明显）。
+          // 在 CSS 加载前内联设好 html 底色与 color-scheme，首帧即为应用表面色。
+          document.documentElement.style.backgroundColor = isLight ? '#faf9f7' : '#121316';
+          document.documentElement.style.colorScheme = isLight ? 'light' : 'dark';
+
+          if (!site) return;
+          var title = site.site_browser_title || site.site_title;
           if (title) {
             document.title = title;
             var ogTitle = document.querySelector('meta[property="og:title"]');
             if (ogTitle) ogTitle.setAttribute('content', title);
           }
-          var desc = cfg.site_description;
+          var desc = site.site_description;
           if (desc) {
             var metaDesc = document.querySelector('meta[name="description"]');
             if (metaDesc) metaDesc.setAttribute('content', desc);
             var ogDesc = document.querySelector('meta[property="og:description"]');
             if (ogDesc) ogDesc.setAttribute('content', desc);
           }
-          if (cfg.site_favicon) {
+          if (site.site_favicon) {
             var link = document.querySelector('link[rel="icon"]');
             // SSI 已注入后台配置的 favicon（生产）：路径一致就不要改写 href——
             // 加载后变更 favicon 链接会触发 Chrome「首次打开不显示、刷新才出现」
-            if (link && (link.getAttribute('href') || '').split('?')[0] !== cfg.site_favicon) {
-              link.href = cfg.site_favicon;
+            if (link && (link.getAttribute('href') || '').split('?')[0] !== site.site_favicon) {
+              link.href = site.site_favicon;
             }
           }
-          var themeRaw = localStorage.getItem('theme-storage');
-          var themeState = themeRaw && JSON.parse(themeRaw).state;
-          var isLight = !themeState || themeState.theme !== 'dark';
-          var themeColor = document.querySelector('meta[name="theme-color"]');
-          if (themeColor) themeColor.setAttribute('content', isLight ? '#faf9f7' : '#121316');
-          var statusBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
-          if (statusBar) statusBar.setAttribute('content', isLight ? 'default' : 'black-translucent');
-          // 首屏底色先行：#root 为空、CSS 未加载时浏览器先画默认白底，React 挂载后
-          // 才出现深色页头/锁屏——表现为整页白闪（冷缓存/连刷后模块复验时明显）。
-          // 在 CSS 加载前内联设好 html 底色与 color-scheme，首帧即为应用表面色。
-          document.documentElement.style.backgroundColor = isLight ? '#faf9f7' : '#121316';
-          document.documentElement.style.colorScheme = isLight ? 'light' : 'dark';
         } catch (e) {}
       })();
     </script>

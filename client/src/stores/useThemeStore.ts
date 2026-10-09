@@ -108,10 +108,19 @@ export const useThemeStore = create<ThemeState>()(
       name: 'theme-storage',
       onRehydrateStorage: () => (state) => {
         if (!state) return;
-        if (state.theme === 'light') {
-          document.documentElement.classList.add('theme-light');
-        } else {
-          document.documentElement.classList.remove('theme-light');
+        // index.html 内联脚本已按「存储 + 服务器默认（site_config_cache 缓存）」算出
+        // 首帧主题并设好 class。非用户手动、非自动切换的存储主题值随后会被
+        // publicSettings 返回的 applyServerThemeDefaults 翻转——这里若按存储值抢先
+        // apply，会插出「内联浅色 → 存储深色 → 服务器翻浅色」的深色闪变窗口
+        // （首屏绘制正落在这个窗口里，iOS Safari 首帧取色会把顶栏锁成黑色）。
+        // 仅用户明确设定过 / 开着自动切换时才按存储 apply（两者不会被服务器默认
+        // 翻转，先 apply 与内联判定一致，无闪变）。
+        if (state.userExplicitlySet || state.autoSwitchEnabled) {
+          if (state.theme === 'light') {
+            document.documentElement.classList.add('theme-light');
+          } else {
+            document.documentElement.classList.remove('theme-light');
+          }
         }
         syncBrowserChromeColor();
         // Restore auto-switch timer if enabled

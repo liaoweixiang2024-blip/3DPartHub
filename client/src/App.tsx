@@ -1,6 +1,7 @@
 import { MotionConfig } from 'framer-motion';
 import { BrowserRouter } from 'react-router-dom';
 import { SWRConfig } from 'swr';
+import AutoUpdate from './components/shared/AutoUpdate';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import ForceChangePassword from './components/shared/ForceChangePassword';
 import GlobalTooltip from './components/shared/GlobalTooltip';
@@ -46,6 +47,7 @@ export default function App() {
               <GlobalPageRefreshIndicator />
               <Router />
               <ForceChangePassword />
+              <AutoUpdate />
               <GlobalTooltip />
             </ErrorBoundary>
           </ToastProvider>

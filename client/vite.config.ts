@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
@@ -106,8 +106,34 @@ function stripIndexHtmlCommentsPlugin(): Plugin {
   };
 }
 
+/**
+ * Build-only: emit dist/version.json next to index.html.
+ *
+ * UpdateBanner polls /version.json (served no-cache by nginx) and compares it
+ * against the build-time __APP_VERSION__ define — a mismatch means the server
+ * is running a newer bundle than the page the user is looking at, which is the
+ * only reliable signal for iOS home-screen webapps: iOS suspends standalone
+ * webapps in the background and RESUMES the old DOM on launch (no navigation,
+ * no network request), so a deployed update otherwise stays invisible until
+ * the user force-quits the app. dev has no version injected (empty string
+ * matches the empty version.json that would emit) and the checker self-disables.
+ */
+function versionJsonPlugin(): Plugin {
+  return {
+    name: 'emit-version-json',
+    apply: 'build',
+    closeBundle() {
+      writeFileSync(join(__dirname, 'dist/version.json'), `${JSON.stringify({ version: process.env.VITE_APP_VERSION || '' })}\n`);
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), devHeadFragmentPlugin(), stripIndexHtmlCommentsPlugin()],
+  plugins: [react(), tailwindcss(), devHeadFragmentPlugin(), stripIndexHtmlCommentsPlugin(), versionJsonPlugin()],
+  // 构建版本号（CI 传 VITE_APP_VERSION=vX.Y.Z）注入为全局常量，UpdateBanner 用它对比 /version.json
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.VITE_APP_VERSION || ''),
+  },
   assetsInclude: ['**/*.wasm'],
   build: {
     sourcemap: false,
