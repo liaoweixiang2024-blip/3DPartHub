@@ -81,7 +81,14 @@ async function doRefresh(get: () => AuthState, set: (partial: Partial<AuthState>
     try {
       const { data: refreshResp } = await client.post('/auth/refresh');
       const { accessToken } = unwrapApiPayload<{ accessToken?: string }>(refreshResp);
-      _accessToken = accessToken ?? null;
+      // 无 cookie 的探测（无痕/未登录访客）服务端回 204 无体：没有 accessToken 就
+      // 是「无会话」，短路返回，不再去拉 profile（那会再制造一个 401 控制台噪声）
+      if (!accessToken) {
+        _accessToken = null;
+        set({ user: null, tokens: null, isAuthenticated: false, rememberMe: false });
+        return false;
+      }
+      _accessToken = accessToken;
 
       let user: User | null = null;
       try {

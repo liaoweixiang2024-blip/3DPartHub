@@ -475,7 +475,10 @@ export function createAuthSessionRouter() {
   router.post('/api/auth/refresh', async (req: Request, res: Response) => {
     const refreshToken = readCookie(req, REFRESH_COOKIE);
     if (!refreshToken) {
-      res.status(400).json({ detail: '缺少 refresh token' });
+      // 客户端每次页面加载都会探测式调用本端点（restoreSessionFromCookie），无痕/
+      // 未登录访客本就没有 cookie——这是常态而非错误请求，回 400 会在每个匿名
+      // 页面加载的控制台打出失败请求。回 204（无会话），客户端按无会话短路。
+      res.status(204).end();
       return;
     }
 
