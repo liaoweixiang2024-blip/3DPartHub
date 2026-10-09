@@ -1022,15 +1022,17 @@ function verifyWebNginxSensitivePathPolicy() {
   );
   assertIncludes('client/nginx.conf', 'location /uploads/', 'web nginx config must declare uploads location');
   assertIncludes('client/nginx.conf', 'return 404;', 'web nginx config must deny direct sensitive file access');
+  // ^~ 必须保留：X-Accel 内部重定向会重新走 location 匹配，普通前缀 location
+  // 会被正则 location 压过（v5.4.6 根级缓存正则曾因此劫持加速下载成裸 404）
   assertIncludes(
     'client/nginx.conf',
-    'location /_protected_uploads/',
-    'web nginx config must keep uploads behind protected X-Accel redirects',
+    'location ^~ /_protected_uploads/',
+    'web nginx config must keep uploads behind protected (^~) X-Accel redirects',
   );
   assertIncludes(
     'client/nginx.conf',
-    'location /_protected_static/',
-    'web nginx config must keep protected static files behind X-Accel redirects',
+    'location ^~ /_protected_static/',
+    'web nginx config must keep protected static files behind (^~) X-Accel redirects',
   );
 }
 
