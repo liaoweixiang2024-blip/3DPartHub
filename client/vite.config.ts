@@ -146,15 +146,10 @@ export default defineConfig({
             return 'framer-motion';
           }
 
-          if (normalizedId.includes('/src/components/shared/UploadModal.tsx')) {
-            return 'upload-modal';
-          }
-          if (normalizedId.includes('/src/components/shared/NotificationPanel.tsx')) {
-            return 'notification-panel';
-          }
-          if (normalizedId.includes('/src/components/shared/MobileNavDrawer.tsx')) {
-            return 'mobile-nav-drawer';
-          }
+          // UploadModal / NotificationPanel / MobileNavDrawer 刻意不钉 chunk：
+          // 组件由消费方动态 import（preloadNotificationPanel 等），钉包会让
+          // manual chunk 吸收一份共享模块 blob 并整体落入入口闭包（首屏 +100KB
+          // 级）；自然分包下它们各自跟随动态 import 点，天然懒加载。
 
           // 87KB of legal text — only used by LegalPage + SettingsPage. Pin to its
           // own chunk so it never lands on the home first paint (saves ~28KB gzip
@@ -176,8 +171,12 @@ export default defineConfig({
               normalizedId.includes('/xlsx/') ||
               normalizedId.includes('/@sentry/') ||
               normalizedId.includes('/read-excel-file/') ||
-              normalizedId.includes('/write-excel-file/')
+              normalizedId.includes('/write-excel-file/') ||
+              normalizedId.includes('/jszip/')
             ) {
+              // return undefined：跟随自然依赖图（只被懒加载方引用的库落在懒 chunk），
+              // 不进默认 vendor 桶——那个桶是单块且被入口闭包整体拖成 eager，
+              // jszip 曾因此搭车进首屏（~40KB gzip，实际只有懒加载的上传弹窗用它）。
               return;
             }
 
@@ -191,17 +190,13 @@ export default defineConfig({
             return 'vendor-app';
           }
 
-          if (normalizedId.includes('/src/api/') || normalizedId.includes('/src/stores/')) {
-            return 'app-api';
-          }
-
-          if (
-            normalizedId.includes('/src/components/shared/') ||
-            normalizedId.includes('/src/hooks/') ||
-            normalizedId.includes('/src/lib/')
-          ) {
-            return 'app-shared';
-          }
+          // src/api、src/stores、src/components/shared、src/hooks、src/lib 刻意
+          // 不再按目录钉成整包 chunk：目录级钉包会让「入口引用了其中任意一个
+          // 模块」就变成整个目录的首屏依赖（首页被迫下载全部管理端 API 与组件，
+          // 首屏 JS 多 ~150KB gzip），且改任意一个文件就使大 chunk 哈希失效、
+          // 全员重下。交给 Rollup 按消费方自动分包：只有入口真正用到的模块
+          // 进首屏，页面专属模块跟随各自的懒路由 chunk，多页共用模块自动生成
+          // 共享小 chunk（Rollup 模块级去重，不会重复打包）。
         },
       },
     },

@@ -1,8 +1,9 @@
 import i18n from 'i18next';
+import type { Resource } from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
 import type { SystemSettings } from '../api/settings';
-import { resources } from './resources';
+import { initialResources, loadLocaleResource } from './resources';
 
 export const SUPPORTED_LOCALES = ['zh-CN', 'zh-TW', 'en-US', 'ja-JP', 'ko-KR', 'de-DE'] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
@@ -118,10 +119,32 @@ function applyHtmlLanguage(locale: SupportedLocale) {
   document.documentElement.lang = LOCALE_HTML_LANG[locale];
 }
 
+/** 已注入 i18n 的语言（zh-CN 永远在场：fallback + initialResources） */
+const loadedLocales = new Set<SupportedLocale>([DEFAULT_LOCALE]);
+
+/** 确保目标语言的资源包已注入；非默认语言按需动态加载（见 resources.ts） */
+async function ensureLocaleLoaded(locale: SupportedLocale): Promise<void> {
+  if (loadedLocales.has(locale)) return;
+  const extra = await loadLocaleResource(locale);
+  if (extra) {
+    for (const [lng, namespaces] of Object.entries(extra)) {
+      for (const [ns, data] of Object.entries(namespaces)) {
+        i18n.addResourceBundle(lng, ns, data as object, true, true);
+      }
+    }
+  }
+  loadedLocales.add(locale);
+}
+
 export async function initI18n(settings?: Partial<SystemSettings> | null) {
   const locale = resolveAppLocale(settings);
 
   if (!i18n.isInitialized) {
+    // 首帧同步可用 zh + 目标语言（非 zh 多一次按需请求，与 publicSettings 拉取同处
+    // bootstrap 的 await 链上，渲染时序不变）
+    const extra = await loadLocaleResource(locale);
+    const resources: Resource = { ...initialResources(), ...(extra || {}) };
+    loadedLocales.add(locale);
     await i18n
       .use(LanguageDetector)
       .use(initReactI18next)
@@ -143,6 +166,7 @@ export async function initI18n(settings?: Partial<SystemSettings> | null) {
         },
       });
   } else if (normalizeLocale(i18n.language) !== locale) {
+    await ensureLocaleLoaded(locale);
     await i18n.changeLanguage(locale);
   }
 
@@ -157,6 +181,7 @@ export async function changeAppLanguage(locale: SupportedLocale) {
     await initI18n({ ui_default_locale: normalized, ui_enabled_locales: SUPPORTED_LOCALES_SETTING_VALUE });
     return normalized;
   }
+  await ensureLocaleLoaded(normalized);
   await i18n.changeLanguage(normalized);
   applyHtmlLanguage(normalized);
   return normalized;

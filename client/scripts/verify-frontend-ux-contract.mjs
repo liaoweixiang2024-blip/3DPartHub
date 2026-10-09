@@ -61,6 +61,7 @@ const [
   serverBusinessConfigSource,
   serverBusinessDefaultsSource,
   serverModelListSource,
+  i18nResourcesSource,
 ] = await Promise.all([
   readFile(path.join(clientRoot, 'index.html'), 'utf8'),
   readSource('main.tsx'),
@@ -103,6 +104,7 @@ const [
   readFile(path.join(repoRoot, 'server/src/lib/businessConfig.ts'), 'utf8'),
   readFile(path.join(repoRoot, 'server/src/lib/businessDefaults.ts'), 'utf8'),
   readFile(path.join(repoRoot, 'server/src/routes/models/list.ts'), 'utf8'),
+  readSource('i18n/resources.ts'),
 ]);
 
 const desktopHomeTemplatesSource = `${classicHomeTemplateSource}\n${workbenchHomeTemplateSource}`;
@@ -124,12 +126,33 @@ requireIncludes('main.tsx', mainSource, [
 ]);
 
 requireIncludes('vite.config.ts', viteConfigSource, [
-  "return 'upload-modal';",
-  "return 'notification-panel';",
-  "return 'mobile-nav-drawer';",
   "normalizedId.includes('/@sentry/')",
   "normalizedId.includes('/read-excel-file/')",
   "normalizedId.includes('/write-excel-file/')",
+  "normalizedId.includes('/jszip/')",
+]);
+// 目录/文件级钉包（app-api/app-shared/upload-modal 等）会让 manual chunk 吸收
+// 共享模块 blob 并整体落入入口闭包：首屏 +100KB 级，且改一文件全员重下大块。
+// 现机制 = 自然分包 + 消费方动态 import（TopNav 的 preload* / initI18n 按需
+// 加载字典），钉包回归即失败。
+for (const banned of [
+  "return 'app-api'",
+  "return 'app-shared'",
+  "return 'upload-modal'",
+  "return 'notification-panel'",
+  "return 'mobile-nav-drawer'",
+]) {
+  if (viteConfigSource.includes(banned)) {
+    errors.push(`vite.config.ts must not pin chunk (${banned}) — natural chunking + dynamic import keep it lazy`);
+  }
+}
+
+// 翻译字典必须按语言懒加载：zh 同步兜底，其余语言动态 import（六语全量静态
+// 内联曾是首屏 ~90KB gzip 的负担）。en-US 是日/韩/德的合并基底，同样懒加载。
+requireIncludes('i18n/resources.ts', i18nResourcesSource, [
+  "import('./locales/en-US')",
+  "import('./locales/overrides/ja-JP')",
+  "import('./locales/overrides/zh-TW')",
 ]);
 
 if (mainSource.includes("./lib/sentry'") || mainSource.includes('./lib/sentry"')) {
