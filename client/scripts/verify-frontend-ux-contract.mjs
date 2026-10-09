@@ -112,12 +112,11 @@ const homeListSources = `${homePageSource}\n${desktopHomeTemplatesSource}`;
 const homePageWithUtils = `${homePageSource}\n${homeUtilsSource}\n${productCardSource}`;
 const homePullRefreshSource = `${homePageSource}\n${pullToRefreshSource}`;
 
-requireIncludes('index.html font preload', indexHtmlSource, [
-  'space-grotesk-latin-400-normal.woff2',
-  'space-grotesk-latin-700-normal.woff2',
-]);
-if (indexHtmlSource.includes('rel="preload" href="/fonts/space-grotesk-latin-600-normal.woff2"')) {
-  errors.push('index.html must not high-priority preload the non-critical Space Grotesk 600 font.');
+// 字体不做 link preload（首屏未必用到拉丁标题字体：登录门槛锁定页纯中文；
+// 预加载未使用既浪费流量又触发 Chrome「preloaded but not used」告警刷屏）。
+// @font-face 在主 CSS 中按需拉取，font-display: swap 不挡渲染。
+if (/rel="preload"[^>]*\/fonts\//.test(indexHtmlSource)) {
+  errors.push('index.html must not link-preload font files (on-demand @font-face fetch, swap display).');
 }
 
 requireIncludes('main.tsx', mainSource, [

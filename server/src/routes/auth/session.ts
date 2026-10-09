@@ -512,10 +512,23 @@ export function createAuthSessionRouter() {
           return;
         }
         if (rotation.usedBefore) {
-          // 宽限窗口内的并发重放（第二个标签页/PWA 窗口慢了一步）：不再轮换
-          // refresh cookie（第一次轮换的结果仍然有效），只发新 accessToken。
-          // 两个窗口从此共享同一 family，互不吊销——这是「偶发掉登录」的主根因。
+          // 宽限窗口内的并发重放（第二个标签页/PWA 窗口慢了一步）。同样换发新
+          // refresh cookie，而非只发 accessToken：若首次轮换的响应被强刷/断网掐断，
+          // Set-Cookie 没进 cookie 罐，罐子会永远卡在已用令牌上——宽限一过，
+          // 下一次刷新即被按「疑似泄露重放」吊销全部会话（多次强刷后被登出的
+          // 主根因）。这里每次宽限命中都换新 family 把罐子救活；共享同一 cookie
+          // 罐的多个标签页自然收敛到最后一次写入，独立的 PWA 罐各走各的新令牌，
+          // 互不构成重放。
+          const newFamilyId = `fam_${Date.now().toString(36)}`;
+          const shouldRemember = payload.rememberMe === true;
           const accessToken = signAccessToken({ userId: user.id, role: user.role });
+          const newRefreshToken = signRefreshToken({
+            userId: user.id,
+            role: user.role,
+            familyId: newFamilyId,
+            rememberMe: shouldRemember,
+          });
+          setAuthCookies(req, res, accessToken, newRefreshToken, { rememberMe: shouldRemember });
           res.json({ accessToken });
           return;
         }

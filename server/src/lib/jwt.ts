@@ -5,10 +5,11 @@ import { config } from './config.js';
 const JWT_SECRET = config.jwtSecret;
 const ACCESS_EXPIRES = config.jwtExpiresIn as jwt.SignOptions['expiresIn'];
 const REFRESH_EXPIRES = '30d';
-// 旧 refresh token 在轮换后仍可用的宽限窗口：多标签页/PWA 窗口并发加载时
-// 共享同一份 cookie，后到的请求拿旧 token 重放不是攻击。30s 覆盖页面并发
-// 加载窗口。
-export const REFRESH_REUSE_GRACE_SECONDS = 30;
+// 宽限窗口 = 「轮换响应被强刷/断网掐断、Set-Cookie 丢失后，cookie 罐还能自愈」
+// 的时间。每次宽限命中都会换发新 cookie（见 session.ts），只要窗口内发生任意
+// 一次刷新，卡死在已用令牌上的罐子即复活；窗口外重放仍按疑似泄露吊销全 family。
+// 30s 挡不住「强刷一次 → 隔一分钟再回来」的真实节奏，放宽到 120s。
+export const REFRESH_REUSE_GRACE_SECONDS = 120;
 // 「该 family 已被轮换过」的终态标记寿命。必须 ≥ refresh token 有效期（30d），
 // 否则标记先于 token 过期消失，旧 token 重放会被误判为首次轮换而重新签发——
 // 偷到的历史 refresh cookie 等 31 秒重放即可与受害者会话永久并行（安全洞）。

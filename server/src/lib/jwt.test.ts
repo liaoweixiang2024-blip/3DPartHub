@@ -65,7 +65,7 @@ test('checkAndRevokeRefreshFamily: first rotation, grace replay, stale replay, r
     const first = await checkAndRevokeRefreshFamily('user-1', family);
     assert.equal(first.ok, true);
     assert.equal(first.usedBefore, false);
-    assert.equal(REFRESH_REUSE_GRACE_SECONDS, 30);
+    assert.equal(REFRESH_REUSE_GRACE_SECONDS, 120);
 
     // 2. 宽限窗口内的并发重放（第二个标签页/PWA 窗口）
     const second = await checkAndRevokeRefreshFamily('user-1', family);
