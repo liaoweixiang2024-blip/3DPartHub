@@ -5,14 +5,12 @@ import { config } from './config.js';
 const JWT_SECRET = config.jwtSecret;
 const ACCESS_EXPIRES = config.jwtExpiresIn as jwt.SignOptions['expiresIn'];
 const REFRESH_EXPIRES = '30d';
-// 宽限窗口 = 「轮换响应被强刷/断网掐断、Set-Cookie 丢失后，cookie 罐还能自愈」
-// 的时间。每次宽限命中都会换发新 cookie（见 session.ts），只要窗口内发生任意
-// 一次刷新，卡死在已用令牌上的罐子即复活；窗口外重放仍按疑似泄露吊销全 family。
-// 30s 挡不住「强刷一次 → 隔一分钟再回来」的真实节奏，放宽到 120s。
+// 宽限/已用标记只做「轮换记账」，不再决定吊销：已轮换旧令牌的重放在真实用户侧
+// 是常态（强刷掐断 Set-Cookie、PWA 独立 cookie 罐隔天打开、设备休眠超过宽限窗，
+// 全都表现为卡死在旧令牌上的罐子），session.ts 一律按「过期旧罐」自愈换发。
 export const REFRESH_REUSE_GRACE_SECONDS = 120;
-// 「该 family 已被轮换过」的终态标记寿命。必须 ≥ refresh token 有效期（30d），
-// 否则标记先于 token 过期消失，旧 token 重放会被误判为首次轮换而重新签发——
-// 偷到的历史 refresh cookie 等 31 秒重放即可与受害者会话永久并行（安全洞）。
+// 记账与登出标记的寿命。必须 ≥ refresh token 有效期（30d），否则标记先于 token
+// 过期消失，登出过的旧 token 重放会被当成合法罐子自愈复活（登出语义洞）。
 export const REFRESH_USED_TTL_SECONDS = 31 * 24 * 3600;
 
 export interface TokenPayload {
@@ -39,9 +37,27 @@ function refreshTokenFamilyKey(userId: string, familyId: string) {
   return `refresh_family:${userId}:${familyId}`;
 }
 
-/** family 终态标记：已被轮换/登出，活到 refresh token 自然过期 */
+/** family 终态标记：已被轮换（记账），活到 refresh token 自然过期 */
 function refreshTokenFamilyUsedKey(userId: string, familyId: string) {
   return `refresh_family_used:${userId}:${familyId}`;
+}
+
+/** family 登出标记：该 family 由登出作废，重放一律 401（登出语义必须成立） */
+function refreshTokenFamilyRevokedKey(userId: string, familyId: string) {
+  return `refresh_family_revoked:${userId}:${familyId}`;
+}
+
+export async function isRefreshFamilyRevoked(userId: string, familyId: string): Promise<boolean> {
+  // revoked 标记由 revokeRefreshFamily 用 redis.eval 写裸 "1"（非 JSON），走
+  // cacheGet 会被 JSON.parse 成数字导致字符串比较静默失配——这里直读带前缀
+  // key 做存在性判断，与写入端配对
+  try {
+    const val = await redis.get(prefixedRedisKey(refreshTokenFamilyRevokedKey(userId, familyId)));
+    return val !== null;
+  } catch {
+    // Redis 瞬时抖动不应挡正常刷新（fail-open，同 checkAndRevokeRefreshFamily）
+    return false;
+  }
 }
 
 export async function isTokenRevoked(userId: string, iat: number): Promise<boolean> {
@@ -85,9 +101,10 @@ export interface RefreshRotationResult {
 }
 
 export async function checkAndRevokeRefreshFamily(userId: string, familyId: string): Promise<RefreshRotationResult> {
-  // 同 revokeAllTokensBefore：eval 直写必须带 key 前缀，与读方 cacheGet 一致
-  // 双 key 设计：KEYS[1]=grace（30s 并发宽限标记）、KEYS[2]=used（终态标记，活过 token 寿命）。
-  // grace 在窗口内自然过期，之后只剩 used —— 重放不再被误判为首次轮换。
+  // eval 直写必须带 key 前缀，与读方 cacheGet 一致。
+  // 双 key 设计：KEYS[1]=grace（并发宽限标记）、KEYS[2]=used（轮换记账，活过 token 寿命）。
+  // 返回值只用于观测记账：session.ts 对已轮换 family 的重放一律自愈换发，
+  // 不再据此吊销（吊销只认 revoked 标记，见 isRefreshFamilyRevoked）。
   const graceKey = prefixedRedisKey(refreshTokenFamilyKey(userId, familyId));
   const usedKey = prefixedRedisKey(refreshTokenFamilyUsedKey(userId, familyId));
   try {
@@ -118,13 +135,18 @@ export async function checkAndRevokeRefreshFamily(userId: string, familyId: stri
 }
 
 export async function revokeRefreshFamily(userId: string, familyId: string): Promise<void> {
-  // 登出：写终态标记并清掉宽限标记（有 used 无 grace → 重放一律判 0）
+  // 登出：写 revoked 终态标记（refresh 端点见到即 401，登出过的令牌不得复活），
+  // 并清掉 grace/used 记账标记。只吊销本 family——单设备登出不清算其他设备的
+  // 独立 cookie 罐（PWA/多浏览器），它们各自的令牌链不受影响。
   const graceKey = prefixedRedisKey(refreshTokenFamilyKey(userId, familyId));
   const usedKey = prefixedRedisKey(refreshTokenFamilyUsedKey(userId, familyId));
+  const revokedKey = prefixedRedisKey(refreshTokenFamilyRevokedKey(userId, familyId));
   await redis.eval(
     `redis.call("SET", KEYS[1], "1", "EX", ARGV[1])
-     redis.call("DEL", KEYS[2])`,
-    2,
+     redis.call("DEL", KEYS[2])
+     redis.call("DEL", KEYS[3])`,
+    3,
+    revokedKey,
     usedKey,
     graceKey,
     String(REFRESH_USED_TTL_SECONDS),

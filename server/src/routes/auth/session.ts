@@ -12,7 +12,7 @@ import {
   revokeToken,
   revokeRefreshFamily,
   checkAndRevokeRefreshFamily,
-  revokeAllTokensBefore,
+  isRefreshFamilyRevoked,
 } from '../../lib/jwt.js';
 import { logger } from '../../lib/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
@@ -506,36 +506,24 @@ export function createAuthSessionRouter() {
       }
 
       if (payload.familyId) {
-        const rotation = await checkAndRevokeRefreshFamily(payload.userId, payload.familyId);
-        if (!rotation.ok) {
-          // 宽限窗口（30s）外的旧 token 重放 —— 可能已泄露，按原逻辑全 family 吊销顶下线。
-          // 多标签页/PWA 窗口的并发加载都在宽限窗口内，到不了这个分支。
-          await revokeAllTokensBefore(payload.userId, Math.floor(Date.now() / 1000));
+        // 登出作废的 family 不得复活——登出语义必须成立
+        if (await isRefreshFamilyRevoked(payload.userId, payload.familyId)) {
           res.status(401).json({ detail: 'refresh token 已失效，请重新登录' });
           return;
         }
-        if (rotation.usedBefore) {
-          // 宽限窗口内的并发重放（第二个标签页/PWA 窗口慢了一步）。同样换发新
-          // refresh cookie，而非只发 accessToken：若首次轮换的响应被强刷/断网掐断，
-          // Set-Cookie 没进 cookie 罐，罐子会永远卡在已用令牌上——宽限一过，
-          // 下一次刷新即被按「疑似泄露重放」吊销全部会话（多次强刷后被登出的
-          // 主根因）。这里每次宽限命中都换新 family 把罐子救活；共享同一 cookie
-          // 罐的多个标签页自然收敛到最后一次写入，独立的 PWA 罐各走各的新令牌，
-          // 互不构成重放。
-          const newFamilyId = `fam_${Date.now().toString(36)}`;
-          const shouldRemember = payload.rememberMe === true;
-          const accessToken = signAccessToken({ userId: user.id, role: user.role });
-          const newRefreshToken = signRefreshToken({
-            userId: user.id,
-            role: user.role,
-            familyId: newFamilyId,
-            rememberMe: shouldRemember,
-          });
-          setAuthCookies(req, res, accessToken, newRefreshToken, { rememberMe: shouldRemember });
-          res.json({ accessToken });
-          return;
-        }
+        // 轮换记账（grace/used 标记），返回值不再参与放行判定
+        await checkAndRevokeRefreshFamily(payload.userId, payload.familyId);
       }
+
+      // 无论首次使用、宽限内还是宽限外的重放，一律换发新 family cookie：
+      // 「已轮换旧令牌的重放」在真实用户侧是常态而非攻击——强刷掐断上一次
+      // 轮换的 Set-Cookie（罐子卡死在已用令牌）、PWA 独立 cookie 罐隔天打开、
+      // 设备休眠超过宽限窗，全都长这样；而偷到当前令牌的攻击者在宽限窗内
+      // 重放本来就拿到新会话，把宽限外重放判为泄露并全量吊销（revokeAll-
+      // TokensBefore 级联）只惩罚合法用户（多设备全部登出），拦不住会看表的
+      // 攻击者。真正的泄露处置通道保留：改密 / 密码重置 / 管理员改角色 / 禁用
+      // 仍全量顶下线，登出走 revoked 标记。共享同一 cookie 罐的多个标签页自然
+      // 收敛到最后一次写入，独立罐（PWA/多浏览器）各走各的新令牌互不干扰。
 
       const newFamilyId = `fam_${Date.now().toString(36)}`;
       const shouldRemember = payload.rememberMe === true;

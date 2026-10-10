@@ -26,13 +26,15 @@ test('refresh tokens preserve remember-login intent', () => {
 });
 
 // ---------------------------------------------------------------------------
-// checkAndRevokeRefreshFamily：并发宽限 + 宽限过期重放拦截 + Redis 故障放行
+// checkAndRevokeRefreshFamily：轮换记账 + Redis 故障放行
 //
 // 用内存 Map 顶掉 redis.eval（cache.ts 导出的同一实例），验证五种场景：
 //   1. 首次轮换 → ok=true, usedBefore=false
-//   2. 宽限窗口内并发重放（第二个标签页）→ ok=true, usedBefore=true（不再吊销）
-//   3. 宽限窗口外重放（grace 已过期、used 仍在）→ ok=false（曾是被绕过的安全洞）
-//   4. 登出后的重放（used 终态标记）→ ok=false（保持顶下线）
+//   2. 宽限窗口内并发重放（第二个标签页）→ ok=true, usedBefore=true
+//   3. 宽限窗口外重放（grace 已过期、used 仍在）→ ok=false
+//      （注意：返回值只做记账——refresh 端点对已轮换 family 的重放一律自愈换发，
+//       吊销只认 revoked 标记，见下方 revokeRefreshFamily 测试）
+//   4. 已轮换 family 的重放（used 终态标记）→ ok=false
 //   5. Redis 抖动（eval 抛错）→ ok=true（fail-open，不把用户顶下线）
 // ---------------------------------------------------------------------------
 test('checkAndRevokeRefreshFamily: first rotation, grace replay, stale replay, revoked replay, redis outage', async () => {
@@ -79,7 +81,7 @@ test('checkAndRevokeRefreshFamily: first rotation, grace replay, stale replay, r
     assert.equal(stale.ok, false);
     assert.equal(stale.usedBefore, false);
 
-    // 4. 登出后的重放：只有 used 标记（revokeRefreshFamily 会清 grace）
+    // 4. 已轮换 family 的重放：只有 used 标记 → 记账意义上的 ok=false
     const logoutFamily = `fam_test_logout`;
     store.set(`${KEY_PREFIX}refresh_family_used:user-1:${logoutFamily}`, '1');
     const afterLogout = await checkAndRevokeRefreshFamily('user-1', logoutFamily);
@@ -96,5 +98,54 @@ test('checkAndRevokeRefreshFamily: first rotation, grace replay, stale replay, r
   } finally {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (redis as any).eval = originalEval;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// revokeRefreshFamily / isRefreshFamilyRevoked：登出语义
+// 登出写 revoked 终态标记（refresh 端点见到即 401，登出过的令牌不得复活）；
+// 只吊销本 family——单设备登出不清算其他设备/浏览器的独立 cookie 罐。
+// ---------------------------------------------------------------------------
+test('revokeRefreshFamily writes revoked marker; isRefreshFamilyRevoked detects it per-family', async () => {
+  const store = new Map<string, string>();
+  const { revokeRefreshFamily, isRefreshFamilyRevoked } = await import('./jwt.js');
+  const { redis } = await import('./cache.js');
+
+  const originalEval = redis.eval;
+  const originalGet = redis.get;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (redis as any).eval = async (
+    _script: string,
+    _numKeys: number,
+    revokedKey: string,
+    usedKey: string,
+    graceKey: string,
+    _ttl: string,
+  ): Promise<number> => {
+    store.set(revokedKey, '1');
+    store.delete(usedKey);
+    store.delete(graceKey);
+    return 1;
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (redis as any).get = async (key: string): Promise<string | null> => store.get(key) ?? null;
+
+  try {
+    assert.equal(await isRefreshFamilyRevoked('user-2', 'fam_a'), false);
+    await revokeRefreshFamily('user-2', 'fam_a');
+    assert.equal(await isRefreshFamilyRevoked('user-2', 'fam_a'), true);
+    // 其他 family（其他设备/PWA 罐）不受单设备登出影响
+    assert.equal(await isRefreshFamilyRevoked('user-2', 'fam_b'), false);
+    // Redis 抖动 → fail-open，不挡正常刷新
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (redis as any).get = async () => {
+      throw new Error('Command timed out');
+    };
+    assert.equal(await isRefreshFamilyRevoked('user-2', 'fam_b'), false);
+  } finally {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (redis as any).eval = originalEval;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (redis as any).get = originalGet;
   }
 });
