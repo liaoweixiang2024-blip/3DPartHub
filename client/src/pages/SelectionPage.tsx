@@ -72,6 +72,72 @@ const stickyHeaderOffsetOf = (container: HTMLElement, isDesktop: boolean) => {
   return offset > 0 ? offset : 0;
 };
 
+/* ══════════════ 选型向导快照（localStorage） ══════════════
+   选型结果页点「模型」跳模型详情（移动端是同视图导航，选型页组件整个卸载），
+   返回/重进选型页时所有 useState 向导状态已丢——此前直接退回选型首页从头选。
+   快照把进行中的选型（分组/分类/已选参数/跳过项/搜索词/展开的套件）落一份到
+   localStorage（2h 有效——覆盖点开模型看看/切出去沟通一圈再回来的会话连续性，
+   不做隔天持久化，过期即全新开始），重进时恢复。显式入口（?c= 深链 / 选型分享
+   链接）优先于快照；用户明确回选型首页（分组/分类都清空）即删快照。 */
+const WIZARD_SNAPSHOT_KEY = 'selection:wizard-snapshot';
+const WIZARD_SNAPSHOT_TTL_MS = 2 * 60 * 60 * 1000;
+
+interface WizardSnapshot {
+  v: 1;
+  savedAt: number;
+  groupId: string | null;
+  slug: string | null;
+  specs: Record<string, string>;
+  manualDrafts: Record<string, string>;
+  skipped: string[];
+  autoSelectedFields: string[];
+  expandedKits: string[];
+  searchDraft: string;
+}
+
+function readWizardSnapshot(): WizardSnapshot | null {
+  try {
+    const raw = localStorage.getItem(WIZARD_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<WizardSnapshot> | null;
+    if (!parsed || parsed.v !== 1 || typeof parsed.savedAt !== 'number') return null;
+    if (Date.now() - parsed.savedAt > WIZARD_SNAPSHOT_TTL_MS) return null;
+    const stringArray = (value: unknown) =>
+      Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+    return {
+      v: 1,
+      savedAt: parsed.savedAt,
+      groupId: typeof parsed.groupId === 'string' ? parsed.groupId : null,
+      slug: typeof parsed.slug === 'string' ? parsed.slug : null,
+      specs: parsed.specs && typeof parsed.specs === 'object' ? parsed.specs : {},
+      manualDrafts: parsed.manualDrafts && typeof parsed.manualDrafts === 'object' ? parsed.manualDrafts : {},
+      skipped: stringArray(parsed.skipped),
+      autoSelectedFields: stringArray(parsed.autoSelectedFields),
+      expandedKits: stringArray(parsed.expandedKits),
+      searchDraft: typeof parsed.searchDraft === 'string' ? parsed.searchDraft : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistWizardSnapshot(data: Omit<WizardSnapshot, 'v' | 'savedAt'>) {
+  try {
+    const snapshot: WizardSnapshot = { ...data, v: 1, savedAt: Date.now() };
+    localStorage.setItem(WIZARD_SNAPSHOT_KEY, JSON.stringify(snapshot));
+  } catch {
+    /* 隐私模式等写入失败：静默降级为不恢复 */
+  }
+}
+
+function clearWizardSnapshot() {
+  try {
+    localStorage.removeItem(WIZARD_SNAPSHOT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function SelectionPage() {
   const { t } = useTranslation();
   const { settings: settingsData } = usePublicSettings();
@@ -86,6 +152,15 @@ export default function SelectionPage() {
   const prefersReducedMotion = useReducedMotion();
   const navigate = useNavigate();
   const location = useLocation();
+  /* 快照恢复判定（一次性）：显式入口（?c= 深链 / 选型分享链接 state）优先于快照 */
+  const wizardRestoreRef = useRef<WizardSnapshot | null | undefined>(undefined);
+  if (wizardRestoreRef.current === undefined) {
+    const explicitEntry =
+      new URLSearchParams(location.search).get('c') !== null ||
+      Boolean((location.state as { shareSlug?: string } | null)?.shareSlug);
+    wizardRestoreRef.current = explicitEntry ? null : readWizardSnapshot();
+  }
+  const wizardRestore = wizardRestoreRef.current;
   const previewCategoryImages = useMemo(
     () => new URLSearchParams(location.search).get('previewImages') === '1',
     [location.search],
@@ -100,7 +175,7 @@ export default function SelectionPage() {
   const canInquiry = featureFlags.inquiry;
   const hideMobileBottomNav = !isDesktop && (cartPreviewOpen || inquiryOpen);
   const selectedIds = inquiryCart.productIds;
-  const [expandedKits, setExpandedKits] = useState<Set<string>>(new Set());
+  const [expandedKits, setExpandedKits] = useState<Set<string>>(() => new Set(wizardRestore?.expandedKits ?? []));
 
   useEffect(() => {
     if (inquiryCart.items.length === 0) setCartPreviewOpen(false);
@@ -119,20 +194,76 @@ export default function SelectionPage() {
     return () => document.removeEventListener('pointerdown', handlePointerDown, true);
   }, [cartPreviewOpen]);
 
-  /* wizard state */
-  const [groupId, setGroupId] = useState<string | null>(null);
-  const [slug, setSlug] = useState<string | null>(null);
-  const [specs, setSpecs] = useState<Record<string, string>>({});
-  const [manualDrafts, setManualDrafts] = useState<Record<string, string>>({});
-  const [skipped, setSkipped] = useState<Set<string>>(new Set());
-  const [autoSelectedFields, setAutoSelectedFields] = useState<Set<string>>(new Set());
+  /* wizard state —— 初值优先取快照（从模型详情页返回/重进选型页时找回进行中的选型） */
+  const [groupId, setGroupId] = useState<string | null>(wizardRestore?.groupId ?? null);
+  const [slug, setSlug] = useState<string | null>(wizardRestore?.slug ?? null);
+  const [specs, setSpecs] = useState<Record<string, string>>(wizardRestore?.specs ?? {});
+  const [manualDrafts, setManualDrafts] = useState<Record<string, string>>(wizardRestore?.manualDrafts ?? {});
+  const [skipped, setSkipped] = useState<Set<string>>(() => new Set(wizardRestore?.skipped ?? []));
+  const [autoSelectedFields, setAutoSelectedFields] = useState<Set<string>>(
+    () => new Set(wizardRestore?.autoSelectedFields ?? []),
+  );
   const {
     value: searchDraft,
     draftValue: searchDraftInputValue,
     setValue: setSearchDraft,
     inputProps: searchDraftInputProps,
-  } = useImeSafeSearchInput();
+  } = useImeSafeSearchInput({ initialValue: wizardRestore?.searchDraft ?? '' });
   const search = useDebouncedValue(searchDraft.trim(), 250);
+
+  /* 快照写入：向导状态实际变化才安排一次写（useMemo 的 key 覆盖全部字段，无关重渲染
+     不重算、内容不变不重写）；300ms 内的连续变化——如搜索框逐字输入——合并成一次写。
+     组件跳走（点「模型」去详情页）时若还有未落盘的变化，卸载前立即补写。
+     分组/分类都空 = 用户明确回了选型首页 → 删快照，下次进入全新开始 */
+  const wizardSnapshotKey = useMemo(
+    () =>
+      stableJson([
+        groupId,
+        slug,
+        specs,
+        manualDrafts,
+        Array.from(skipped).sort(),
+        Array.from(autoSelectedFields).sort(),
+        Array.from(expandedKits).sort(),
+        searchDraft,
+      ]),
+    [groupId, slug, specs, manualDrafts, skipped, autoSelectedFields, expandedKits, searchDraft],
+  );
+  const wizardSnapshotDataRef = useRef<Omit<WizardSnapshot, 'v' | 'savedAt'> | null>(null);
+  const wizardSnapshotDirtyRef = useRef(false);
+  useEffect(() => {
+    if (!groupId && !slug) {
+      wizardSnapshotDirtyRef.current = false;
+      clearWizardSnapshot();
+      return;
+    }
+    wizardSnapshotDataRef.current = {
+      groupId,
+      slug,
+      specs,
+      manualDrafts,
+      skipped: Array.from(skipped),
+      autoSelectedFields: Array.from(autoSelectedFields),
+      expandedKits: Array.from(expandedKits),
+      searchDraft,
+    };
+    wizardSnapshotDirtyRef.current = true;
+    const timer = window.setTimeout(() => {
+      if (wizardSnapshotDataRef.current) persistWizardSnapshot(wizardSnapshotDataRef.current);
+      wizardSnapshotDirtyRef.current = false;
+    }, 300);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 内容 key 驱动；键已含全部字段
+  }, [wizardSnapshotKey]);
+  useEffect(
+    () => () => {
+      /* 卸载补写：300ms 写入窗口内跳走时把最后一份快照立即落盘 */
+      if (wizardSnapshotDirtyRef.current && wizardSnapshotDataRef.current) {
+        persistWizardSnapshot(wizardSnapshotDataRef.current);
+      }
+    },
+    [],
+  );
   const [pressedCategoryKey, setPressedCategoryKey] = useState<string | null>(null);
   /* 触摸拖动吞点击守卫：iOS 把「按住慢慢拖」判成 tap 时仍会派发 click（位移小/滚动接管慢），
      点击高亮（pressedCategoryKey → 卡片变白+顶线显形）就会在滑动时闪现。记录 touchstart 起点，
@@ -898,6 +1029,22 @@ export default function SelectionPage() {
       setExpandedKits(new Set());
     });
   }, [setSearchDraft]);
+
+  /* 恢复的快照对不上现状（分类/分组被删除或隐藏）：分类没了清空回首页；分组变了
+     按分类当前所属分组自愈——避免每次进入都停在空向导 */
+  useEffect(() => {
+    if (!cats.length) return;
+    if (slug) {
+      const live = cats.find((c) => c.slug === slug);
+      if (!live) {
+        goHome();
+        return;
+      }
+      if (live.groupId && live.groupId !== groupId) setGroupId(live.groupId);
+      return;
+    }
+    if (groupId && !groups.some((g) => g.id === groupId)) goHome();
+  }, [cats, slug, groupId, groups, goHome]);
   const restart = useCallback(() => {
     // 重新选择：同 resetCurrentCategory，清空后回顶
     stepScrollIntentRef.current = 'top';
@@ -1908,6 +2055,11 @@ export default function SelectionPage() {
           {t('selectionPage.backToCategories')}
         </button>
       </div>
+    </div>
+  ) : !liveCat && categoriesPending ? (
+    /* 快照恢复/重进时分类列表还在加载：先给加载态，不闪「分类为空」 */
+    <div className="flex min-h-[260px]">
+      <PageRefreshIndicator label={t('selectionPage.categories.refreshing')} />
     </div>
   ) : !liveCat || (!search && specKeys.length === 0 && categoryProductCount === 0) ? (
     <div className="text-center py-16">
