@@ -1428,6 +1428,7 @@ export const zhCN: { translation: TranslationMap } = {
       modelNo: '型号',
     },
     selectionPage: {
+      restartAll: '重新选型',
       allCategories: '全部分类',
       autoSelected: '自动',
       backStep: '回退上一步',
@@ -1509,7 +1510,12 @@ export const zhCN: { translation: TranslationMap } = {
         restart: '重新选择',
         title: '选型结果',
       },
-      restoredToast: '已恢复上次的选型进度',
+      resume: {
+        title: '继续上次未完成的选型？',
+        detail: '上次选到：{{category}}（已选 {{count}} 项）',
+        continue: '继续',
+        restart: '重新开始',
+      },
       share: {
         categoryGeneratedTitle: '分类链接已生成',
         categoryLink: '生成分类链接',

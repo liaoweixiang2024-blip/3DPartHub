@@ -1048,7 +1048,13 @@ export const deDEMajorFormsTranslation: TranslationMap = {
     },
   },
   selectionPage: {
-    restoredToast: 'Letzten Auswahlfortschritt wiederhergestellt',
+    restartAll: 'Neue Auswahl',
+    resume: {
+      title: 'Letzte Auswahl fortsetzen?',
+      detail: 'Zuletzt: {{category}} ({{count}} Angaben)',
+      continue: 'Fortsetzen',
+      restart: 'Neu starten',
+    },
     allCategories: 'Alle Kategorien',
     autoSelected: 'Automatisch',
     backStep: 'Einen Schritt zurück',

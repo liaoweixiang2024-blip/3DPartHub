@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { startTransition, useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate, useLocation, useNavigationType } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useSWR from 'swr';
 import {
   filterSelectionProducts,
@@ -27,6 +27,7 @@ import {
   applyManualSpecs,
   stableJson,
   useDebouncedValue,
+  isRecentSelectionJumpLeave,
   selectionMotion,
   selectionPress,
   mobileCategoryListClass,
@@ -76,13 +77,19 @@ const stickyHeaderOffsetOf = (container: HTMLElement, isDesktop: boolean) => {
    选型结果页点「模型」跳模型详情（移动端是同视图导航，选型页组件整个卸载），
    返回/重进选型页时所有 useState 向导状态已丢——此前直接退回选型首页从头选。
    快照把进行中的选型（分组/分类/已选参数/跳过项/搜索词/展开的套件）落一份到
-   localStorage（2h 有效——覆盖点开模型看看/切出去沟通一圈再回来的会话连续性，
-   不做隔天持久化，过期即全新开始），重进时恢复。规则：
-   - 显式入口（?c= 深链 / 选型分享链接）优先，不恢复；
-   - 点菜单/侧栏主动进入的恢复弹提示告知（POP 返回/刷新的恢复静默）；
-   - 「首页」「重新选择」「清空」等明确重来意图：立即删快照，下次全新开始。 */
+   localStorage，作为**永久草稿**保存——直到用户点横幅「继续」、开始新的选型
+   （选分组/分类、「重新选择」「清空」「首页」）或快照里的分类被删，才清除；
+   不过期。进入时的行为按「是否同会话延续」区分：
+   - 同会话（2h 内返回/刷新）：自动静默恢复（点模型看看/切出去沟通再回来）；
+   - 主动进入（点选型菜单/侧栏/底部 tab）或快照已超过 2h：首页横幅问
+     「继续 / 重新开始」，恢复与否交还用户——没有确认就一直保存，等下次
+     重新选型才清除；但从结果卡点「模型」「技术支持」跳出去看、15 分钟内
+     回来（含点选型 tab 进入）则静默恢复，不多这一次点击；
+   - 显式入口（?c= 深链 / 选型分享链接）优先，不恢复不问。 */
 const WIZARD_SNAPSHOT_KEY = 'selection:wizard-snapshot';
-const WIZARD_SNAPSHOT_TTL_MS = 2 * 60 * 60 * 1000;
+/* 同会话窗口：快照最后更新距今在该窗口内视为「会话延续」（静默恢复），
+   超出则视为历史草稿（横幅问询，不静默恢复） */
+const WIZARD_SESSION_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 interface WizardSnapshot {
   v: 1;
@@ -97,13 +104,34 @@ interface WizardSnapshot {
   searchDraft: string;
 }
 
+/* 「进入选型页的方式」判定：点菜单/链接进入要弹「已恢复」提示，返回/刷新静默。
+   不能用 useNavigationType（懒加载路由挂载时读到旧值，实测点 Link 进来也是 POP），
+   也不能用 popstate 监听（history 库的监听器先收到事件并同步触发渲染，本页挂载时
+   自己的监听器还没跑）。改用纯值对比：
+   - location.key：PUSH 生成新 key，POP 返回复用旧 key——挂载时和本模块记录的
+     上一个 key 相同 = 返回到同一历史条目（静默）；不同 = 主动进入（提示）
+   - 文档导航条目：刷新/整页打开/直接输 URL 时，挂载紧随文档加载（静默） */
+let wizardLastKeyInfo: { key: string; at: number } | null = null;
+function shouldAskBeforeWizardRestore(returnedToSameEntry: boolean): boolean {
+  try {
+    const now = performance.now();
+    const entry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    // 初始进入（刷新/直接打开/PWA 重开）：挂载紧随文档加载 → 静默恢复
+    if (!entry || now - entry.startTime < 2000) return false;
+    // 浏览器/系统返回到离开前的同一历史条目 → 静默恢复
+    if (returnedToSameEntry) return false;
+  } catch {
+    return false;
+  }
+  return true;
+}
+
 function readWizardSnapshot(): WizardSnapshot | null {
   try {
     const raw = localStorage.getItem(WIZARD_SNAPSHOT_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<WizardSnapshot> | null;
     if (!parsed || parsed.v !== 1 || typeof parsed.savedAt !== 'number') return null;
-    if (Date.now() - parsed.savedAt > WIZARD_SNAPSHOT_TTL_MS) return null;
     const stringArray = (value: unknown) =>
       Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
     return {
@@ -154,19 +182,43 @@ export default function SelectionPage() {
   const prefersReducedMotion = useReducedMotion();
   const navigate = useNavigate();
   const location = useLocation();
-  const navigationType = useNavigationType();
   /* 快照恢复判定（一次性）：显式入口（?c= 深链 / 选型分享链接 state）优先于快照。
-     主动进入（点选型菜单/侧栏/底部 tab，PUSH 导航）发生恢复时弹提示告知——用户换了
-     场景回来，得说清楚状态从哪来的；返回/刷新（POP）的恢复体感是同一会话延续，静默 */
+     - 有实质进度（选过参数/跳过/填过）+ 主动进入 或 快照超过同会话窗口：
+       首页横幅问「继续 / 重新开始」，恢复与否交还用户，没确认就一直保存
+     - 同会话内的返回/刷新：自动静默恢复（体感是同一会话延续，问反而是打断）
+     - 无实质进度（只选了分组/分类就走）：仅同会话内静默恢复位置，陈旧则忽略（不问） */
   const wizardRestoreRef = useRef<WizardSnapshot | null | undefined>(undefined);
-  const wizardRestoredByMenuRef = useRef(false);
+  const wizardAskRef = useRef<WizardSnapshot | null>(null);
   if (wizardRestoreRef.current === undefined) {
     const explicitEntry =
       new URLSearchParams(location.search).get('c') !== null ||
       Boolean((location.state as { shareSlug?: string } | null)?.shareSlug);
     const restored = explicitEntry ? null : readWizardSnapshot();
-    wizardRestoreRef.current = restored;
-    wizardRestoredByMenuRef.current = Boolean(restored) && navigationType === 'PUSH';
+    // 渲染期只读对比（并发渲染会多次尝试，绝不能在这里写模块变量）；
+    // 返回判定还要求上次记录距今 >1.5s：同一次进入内的快速重挂不算返回
+    const lastInfo = wizardLastKeyInfo;
+    const returnedToSameEntry = lastInfo?.key === location.key && performance.now() - lastInfo.at > 1500;
+    let ask = false;
+    let autoRestore = false;
+    if (restored) {
+      const meaningful =
+        Object.keys(restored.specs ?? {}).length > 0 ||
+        (restored.skipped ?? []).length > 0 ||
+        Object.keys(restored.manualDrafts ?? {}).length > 0 ||
+        (restored.searchDraft ?? '') !== '';
+      const sameSession = Date.now() - restored.savedAt < WIZARD_SESSION_WINDOW_MS;
+      if (meaningful) {
+        // 浏览器/系统返回到同一历史条目（POP），或从结果卡点「模型」「技术支持」
+        // 跳出去看、15 分钟内回来（含点选型 tab 进入）——都是出去看一眼，静默恢复
+        const silentReturn = !shouldAskBeforeWizardRestore(returnedToSameEntry) || isRecentSelectionJumpLeave();
+        ask = sameSession ? !silentReturn : true;
+        autoRestore = !ask;
+      } else {
+        autoRestore = sameSession;
+      }
+    }
+    wizardAskRef.current = ask ? restored : null; // 挂横幅问，不直接恢复
+    wizardRestoreRef.current = autoRestore ? restored : null;
   }
   const wizardRestore = wizardRestoreRef.current;
   const previewCategoryImages = useMemo(
@@ -218,6 +270,8 @@ export default function SelectionPage() {
     inputProps: searchDraftInputProps,
   } = useImeSafeSearchInput({ initialValue: wizardRestore?.searchDraft ?? '' });
   const search = useDebouncedValue(searchDraft.trim(), 250);
+  /* 主动进入时的「继续上次选型」问询横幅（选中 = 待恢复的快照，null = 不显示） */
+  const [pendingResume, setPendingResume] = useState<WizardSnapshot | null>(null);
 
   /* 快照写入：向导状态实际变化才安排一次写（useMemo 的 key 覆盖全部字段，无关重渲染
      不重算、内容不变不重写）；300ms 内的连续变化——如搜索框逐字输入——合并成一次写。
@@ -275,27 +329,54 @@ export default function SelectionPage() {
   }, [wizardSnapshotKey]);
   useEffect(
     () => () => {
-      /* 卸载补写：300ms 写入窗口内跳走时把最后一份快照立即落盘 */
+      /* 卸载（跳去模型页/技术支持/别的页面）：未 hold 时把 savedAt 刷新为离开时刻，
+        「在结果页上停留很久才离开」的会话窗口（2h）也从离开重新起算 */
       if (wizardSnapshotDirtyRef.current && wizardSnapshotDataRef.current) {
         persistWizardSnapshot(wizardSnapshotDataRef.current);
+        wizardSnapshotDirtyRef.current = false;
+      } else if (!wizardSnapshotHoldRef.current && wizardSnapshotDataRef.current) {
+        const active = wizardSnapshotDataRef.current.groupId || wizardSnapshotDataRef.current.slug;
+        if (active) persistWizardSnapshot(wizardSnapshotDataRef.current);
       }
     },
     [],
   );
-  /* 点菜单进入且恢复了快照：告知一声（返回/刷新的恢复不弹——体感是同一会话延续） */
+  /* 主动进入 + 有快照：首页横幅问用户「继续 / 重新开始」（不自动恢复）。
+     挂载提交后记录本次 location.key——供下次挂载对比「是否返回到同一历史条目」 */
   useEffect(() => {
-    if (!wizardRestoredByMenuRef.current) return;
-    wizardRestoredByMenuRef.current = false;
-    toast(t('selectionPage.restoredToast'), 'info');
+    wizardLastKeyInfo = { key: location.key, at: performance.now() };
+    if (wizardAskRef.current) setPendingResume(wizardAskRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅挂载时判定一次
   }, []);
-  /* 明确的重来意图（重新选择/清空当前分类）：立即删快照并取消未落盘的写入；
-     之后重新选的参数会重新累计，但「点完就走」的下次进入是全新开始 */
+  /* 明确的重来意图（重新选择/清空当前分类/横幅「重新开始」）：立即删快照并取消
+     未落盘的写入；之后重新选的参数会重新累计，但「点完就走」的下次进入是全新开始 */
   const discardWizardSnapshot = useCallback(() => {
     wizardSnapshotHoldRef.current = true;
     wizardSnapshotDirtyRef.current = false;
     clearWizardSnapshot();
   }, []);
+  /* 横幅「继续」：把快照应用到向导状态（save effect 会随之重新累计快照） */
+  const applyPendingResume = useCallback(
+    (snapshot: WizardSnapshot) => {
+      startTransition(() => {
+        setGroupId(snapshot.groupId);
+        setSlug(snapshot.slug);
+        setSpecs(snapshot.specs ?? {});
+        setManualDrafts(snapshot.manualDrafts ?? {});
+        setSkipped(new Set(snapshot.skipped ?? []));
+        setAutoSelectedFields(new Set(snapshot.autoSelectedFields ?? []));
+        setExpandedKits(new Set(snapshot.expandedKits ?? []));
+        setSearchDraft(snapshot.searchDraft || '');
+      });
+      setPendingResume(null);
+    },
+    [setSearchDraft],
+  );
+  /* 横幅「重新开始」：用户不要这份进度，删快照保持全新开始 */
+  const dismissPendingResume = useCallback(() => {
+    discardWizardSnapshot();
+    setPendingResume(null);
+  }, [discardWizardSnapshot]);
   const [pressedCategoryKey, setPressedCategoryKey] = useState<string | null>(null);
   /* 触摸拖动吞点击守卫：iOS 把「按住慢慢拖」判成 tap 时仍会派发 click（位移小/滚动接管慢），
      点击高亮（pressedCategoryKey → 卡片变白+顶线显形）就会在滑动时闪现。记录 touchstart 起点，
@@ -933,8 +1014,10 @@ export default function SelectionPage() {
       setPressedCategoryKey(`group:${id}`);
       scheduleCategoryNavigation(
         () => {
-          // 新的导航选择：恢复快照累计（覆盖此前「重新选择」的 hold）
+          // 新的导航选择：恢复快照累计（覆盖此前「重新选择」的 hold）；
+          // 用户直接开始新选型 = 不要恢复那份进度，横幅撤下
           wizardSnapshotHoldRef.current = false;
+          setPendingResume(null);
           setGroupId(id);
           setSlug(null);
           setSpecs({});
@@ -957,8 +1040,10 @@ export default function SelectionPage() {
       pendingAutoAdvanceScrollRef.current = false;
       scheduleCategoryNavigation(
         () => {
-          // 新的导航选择：恢复快照累计（覆盖此前「重新选择」的 hold）
+          // 新的导航选择：恢复快照累计（覆盖此前「重新选择」的 hold）；
+          // 用户直接开始新选型 = 不要恢复那份进度，横幅撤下
           wizardSnapshotHoldRef.current = false;
+          setPendingResume(null);
           pushRecent(s);
           setSlug(s);
           setSpecs({});
@@ -1596,6 +1681,39 @@ export default function SelectionPage() {
         </button>
       </div>
     ) : null;
+
+  /* 「继续上次选型」问询横幅：主动进入 + 有快照时显示在选型首页顶部，
+     恢复与否交还用户（继续 = 应用快照；重新开始 = 删快照保持全新） */
+  const resumeBanner = pendingResume && (
+    <div
+      className={`mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-primary-container/25 bg-primary-container/8 px-3 py-2.5 md:px-4 ${selectionMotion}`}
+    >
+      <Icon name="history" size={18} className="shrink-0 text-primary-container" />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-on-surface">{t('selectionPage.resume.title')}</p>
+        <p className="mt-0.5 truncate text-xs text-on-surface-variant">
+          {t('selectionPage.resume.detail', {
+            category: catBySlug.get(pendingResume.slug ?? '')?.name ?? pendingResume.slug ?? '',
+            count: Object.keys(pendingResume.specs ?? {}).length,
+          })}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <button
+          onClick={() => applyPendingResume(pendingResume)}
+          className={`rounded-lg bg-primary-container px-3 py-1.5 text-xs font-bold text-on-primary hover:opacity-90 md:text-sm ${selectionPress}`}
+        >
+          {t('selectionPage.resume.continue')}
+        </button>
+        <button
+          onClick={dismissPendingResume}
+          className={`rounded-lg border border-outline-variant/30 px-3 py-1.5 text-xs font-medium text-on-surface-variant hover:bg-surface-container-high/50 md:text-sm ${selectionPress}`}
+        >
+          {t('selectionPage.resume.restart')}
+        </button>
+      </div>
+    </div>
+  );
 
   const groupContent = (
     <div className={isDesktop ? selectionCategoryPanelClass : mobileCategoryPanelClass}>
@@ -2742,14 +2860,16 @@ export default function SelectionPage() {
           </button>
         ) : null}
         {isDesktop && phase !== 'group' ? (
+          /* 完全重新开始选型（回选型首页并清空）：此前叫「全部分类」+收纳箱图标，
+             用户看不懂这是重选入口，改为明确的「重新选型」+ 重来图标 */
           <button
             onClick={goHome}
             data-tooltip-ignore
             className={`inline-flex h-8 w-8 shrink-0 items-center justify-center whitespace-nowrap rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface md:h-9 md:w-auto md:gap-1.5 md:px-3 ${selectionPress}`}
-            aria-label={t('selectionPage.allCategories')}
+            aria-label={t('selectionPage.restartAll')}
           >
-            <Icon name="inventory_2" size={14} />
-            <span className="hidden text-xs font-bold md:inline">{t('selectionPage.allCategories')}</span>
+            <Icon name="restart_alt" size={14} />
+            <span className="hidden text-xs font-bold md:inline">{t('selectionPage.restartAll')}</span>
           </button>
         ) : null}
         {!isDesktop && phase === 'wizard' ? (
@@ -2791,9 +2911,9 @@ export default function SelectionPage() {
           onClick={goHome}
           data-tooltip-ignore
           className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant"
-          aria-label={t('selectionPage.allCategories')}
+          aria-label={t('selectionPage.restartAll')}
         >
-          <Icon name="inventory_2" size={15} />
+          <Icon name="restart_alt" size={15} />
         </button>
       </div>
     ) : null;
@@ -2837,6 +2957,7 @@ export default function SelectionPage() {
     // 那张卡整张变纯白。入场动画期间 framer-motion 会临时建层（0.16s 后自动
     // 释放），不需要常驻层提示。
     <motion.div key={selectionPhaseKey} {...phaseMotionProps} className="min-w-0">
+      {phase === 'group' && resumeBanner}
       {phase === 'group' && groupContent}
       {phase === 'sub' && subContent}
       {phase === 'wizard' &&

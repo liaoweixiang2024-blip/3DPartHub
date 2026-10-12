@@ -1299,7 +1299,13 @@ export const jaJPMajorFormsTranslation: TranslationMap = {
     },
   },
   selectionPage: {
-    restoredToast: '前回の選定内容を復元しました',
+    restartAll: '選定をやり直す',
+    resume: {
+      title: '前回の選定を続けますか？',
+      detail: '前回：{{category}}（{{count}} 項目選択済み）',
+      continue: '続ける',
+      restart: '最初から',
+    },
     allCategories: 'すべてのカテゴリ',
     autoSelected: '自動',
     backStep: '1ステップ戻る',

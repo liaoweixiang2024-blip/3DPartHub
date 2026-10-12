@@ -10,7 +10,7 @@ import Icon from '../shared/Icon';
 import SafeImage from '../shared/SafeImage';
 import { useToast } from '../shared/Toast';
 import { CatalogZoomModal } from './CatalogZoomModal';
-import { displayProductName, selectionMotion, selectionPress } from './selectionUtils';
+import { displayProductName, markSelectionJumpLeave, selectionMotion, selectionPress } from './selectionUtils';
 
 export function ResultCard({
   product,
@@ -318,6 +318,7 @@ export function ResultCard({
             href={`/model/${product.matchedModelId}`}
             target="_blank"
             rel="noopener"
+            onClick={markSelectionJumpLeave}
             className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
           >
             <Icon name="view_in_ar" size={14} />
@@ -326,6 +327,7 @@ export function ResultCard({
         ) : null}
         <button
           onClick={() => {
+            markSelectionJumpLeave();
             onPrepareSourceUrl?.();
             navigate(`/support`, {
               state: {

@@ -174,6 +174,19 @@ export function useDebouncedValue<T>(value: T, delayMs: number) {
   return debouncedValue;
 }
 
+/* 选型结果卡「跳出去看」标记（模型详情/技术支持）：点这些按钮离开选型流程后，
+   15 分钟内回到选型页（含点选型 tab 进入——移动端从模型页回来的主要路径）
+   一律静默恢复——看模型/图纸、提工单都在一刻钟内，回来继续是大概率意图；
+   超过 15 分钟意图已模糊（可能切去干别的了），回来弹横幅让用户选 */
+let selectionJumpLeaveAt = 0;
+const SELECTION_JUMP_RETURN_MS = 15 * 60 * 1000;
+export function markSelectionJumpLeave() {
+  selectionJumpLeaveAt = Date.now();
+}
+export function isRecentSelectionJumpLeave(): boolean {
+  return selectionJumpLeaveAt > 0 && Date.now() - selectionJumpLeaveAt < SELECTION_JUMP_RETURN_MS;
+}
+
 export const selectionMotion =
   'transition-[transform,border-color,background-color,box-shadow,color,opacity] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none';
 export const selectionPress = `${selectionMotion} active:scale-[0.985]`;

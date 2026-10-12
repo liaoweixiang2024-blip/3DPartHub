@@ -1437,6 +1437,7 @@ export const enUS: { translation: TranslationMap } = {
       modelNo: 'Model',
     },
     selectionPage: {
+      restartAll: 'New selection',
       allCategories: 'All categories',
       autoSelected: 'Auto',
       backStep: 'Back one step',
@@ -1520,7 +1521,12 @@ export const enUS: { translation: TranslationMap } = {
         restart: 'Start over',
         title: 'Selection Results',
       },
-      restoredToast: 'Restored your previous selection progress',
+      resume: {
+        title: 'Continue your last selection?',
+        detail: 'Last time: {{category}} ({{count}} selections made)',
+        continue: 'Continue',
+        restart: 'Start over',
+      },
       share: {
         categoryGeneratedTitle: 'Category link generated',
         categoryLink: 'Generate category link',
