@@ -159,6 +159,15 @@ export function sendAcceleratedFile(
     return;
   }
 
+  // forceStream（备份等大文件 Node 直连流式下发）：链路上的 nginx 反代默认对响应做
+  // 磁盘缓冲（proxy_buffering on，temp file 上限默认 1GiB）。GB 级流超限或缓冲异常时
+  // 上游连接被掐、浏览器端收到「提前正常结束但短于 Content-Length」的响应——Chrome
+  // 表现为「进度走完却不标记成功、从头整单重下」。X-Accel-Buffering: no 是 nginx 官方
+  // 的响应级开关：无需改任何代理配置，链路上的代理都会对本响应禁用缓冲直接透传。
+  if (forceStream) {
+    res.setHeader('X-Accel-Buffering', 'no');
+  }
+
   // 加速（X-Accel-Redirect）由 nginx 的 X-Accel-Available 头驱动（client/nginx.conf 显式设置）。
   // 注意：resource_download_acceleration_enabled 设置默认 false，且 initDefaultSettings 用
   // skipDuplicates 不可回填，若按该设置门控会关掉生产环境既有的 nginx 加速，故此处保持头驱动。
@@ -197,16 +206,42 @@ export function sendAcceleratedFile(
   }
 
   const stream = createReadStream(absolutePath, streamOptions);
+  // 响应完整性核对：用于定位「浏览器下载完成后又从头重下」类问题——区分
+  // 「流中途被代理掐断」（close 早于 finish 且字节未发满）与「字节收满仍被判定失败」
+  // （finish 但计数短于 Content-Length）。data 计数与 pipe 兼容（仅观察读取量）。
+  const expectedBytes = streamOptions ? streamOptions.end! - streamOptions.start! + 1 : fileSize;
+  let bytesSent = 0;
+  let responseFinished = false;
+  stream.on('data', (chunk: Buffer | string) => {
+    bytesSent += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
+  });
+  res.on('finish', () => {
+    responseFinished = true;
+    if (bytesSent !== expectedBytes) {
+      log.error(
+        { filePath: absolutePath, expectedBytes, bytesSent, byteRange: streamOptions ?? null },
+        'Download response ended short of Content-Length',
+      );
+    }
+  });
   stream.on('error', (err) => {
     // 读流失败必须留痕且在连接层掐断：只 destroy 流会让响应以「短于 Content-Length
     // 的正常结束」收尾，客户端可能把截断文件当下载成功保存；destroy 响应则明确
     // 标记中断，浏览器/下载工具会走断点续传（配合上面的 ETag/If-Range 可靠恢复）。
-    log.error({ err, filePath: absolutePath }, 'File download stream failed');
+    log.error({ err, filePath: absolutePath, expectedBytes, bytesSent }, 'File download stream failed');
     stream.destroy();
     res.destroy();
   });
   res.on('close', () => {
     if (!stream.destroyed) stream.destroy();
+    // close 早于 finish = 连接在响应写完前被客户端/代理掐断（keep-alive 正常复用的
+    // close 发生在 finish 之后）。此时字节未发满即是大文件「下载被中断重下」的服务端证据。
+    if (!responseFinished && bytesSent < expectedBytes) {
+      log.warn(
+        { filePath: absolutePath, expectedBytes, bytesSent, byteRange: streamOptions ?? null },
+        'Download connection closed before full body was sent',
+      );
+    }
   });
   stream.pipe(res);
 }
