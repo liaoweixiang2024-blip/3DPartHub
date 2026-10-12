@@ -1509,6 +1509,7 @@ export const zhCN: { translation: TranslationMap } = {
         restart: '重新选择',
         title: '选型结果',
       },
+      restoredToast: '已恢复上次的选型进度',
       share: {
         categoryGeneratedTitle: '分类链接已生成',
         categoryLink: '生成分类链接',

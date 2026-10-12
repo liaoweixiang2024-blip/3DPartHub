@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { transform } from 'esbuild';
 import { defineConfig, type Plugin } from 'vite';
 
 const devProxyTarget = process.env.VITE_DEV_PROXY_TARGET || 'http://127.0.0.1:8000';
@@ -91,16 +92,39 @@ function stripIndexHtmlCommentsPlugin(): Plugin {
     apply: 'build',
     transformIndexHtml: {
       order: 'post',
-      handler(html) {
-        return html
+      async handler(html) {
+        const stripped = html
           // 1) HTML 注释（负向前瞻保住 <!--# SSI 指令；只吞掉紧跟的一个换行，保留后续行自身缩进）
-          .replace(/[ \t]*<!--(?!#)[\s\S]*?-->\n?/g, '')
-          // 2) 内联 <script>（无 src，不参与打包压缩）里的整行 // 注释；
-          //    只匹配行首缩进后的 //，不会误伤字符串里的 "//"
-          .replace(/(<script(?![^>]*\bsrc\b)[^>]*>)([\s\S]*?)(<\/script>)/g, (_m, open: string, body: string, close: string) => {
-            const cleaned = body.replace(/^[ \t]*\/\/[^\n]*$\n?/gm, '');
-            return `${open}${cleaned}${close}`;
-          });
+          .replace(/[ \t]*<!--(?!#)[\s\S]*?-->\n?/g, '');
+        // 2) 内联 <script>（无 src，不参与打包压缩）：整体过一遍 esbuild minifyWhitespace——
+        //    行注释/块注释全剥（字符串里的 "//" "/*" 也不会误伤），变量名不动、行为等价。
+        //    此前只正则剥 // 行注释，/* */ 块注释原样进生产（首帧主题脚本的大段中文注释被
+        //    用户在 view-source 里看到）。transform 失败（语法异常）时回退原文，构建不因此挂掉。
+        const inlineScripts: string[] = [];
+        const withPlaceholders = stripped.replace(
+          /(<script(?![^>]*\bsrc\b)[^>]*>)([\s\S]*?)(<\/script>)/g,
+          (_m, open: string, body: string, close: string) => {
+            // 非可执行内容（如 type="application/json" 的数据块）不进 JS 管道
+            const typeMatch = open.match(/type\s*=\s*["']?([^"'\s>]+)/i);
+            const type = typeMatch?.[1]?.toLowerCase();
+            if (type && type !== 'module' && type !== 'text/javascript' && type !== 'application/javascript') {
+              return `${open}${body}${close}`;
+            }
+            inlineScripts.push(body);
+            return `${open}__INLINE_SCRIPT_${inlineScripts.length - 1}__${close}`;
+          },
+        );
+        const cleaned = await Promise.all(
+          inlineScripts.map((body) =>
+            transform(body, { loader: 'js', minifyWhitespace: true, legalComments: 'none' })
+              .then((result) => result.code)
+              .catch(() => body),
+          ),
+        );
+        return withPlaceholders.replace(
+          /__INLINE_SCRIPT_(\d+)__/g,
+          (_m, index: string) => cleaned[Number(index)] ?? '',
+        );
       },
     },
   };
@@ -123,7 +147,10 @@ function versionJsonPlugin(): Plugin {
     name: 'emit-version-json',
     apply: 'build',
     closeBundle() {
-      writeFileSync(join(__dirname, 'dist/version.json'), `${JSON.stringify({ version: process.env.VITE_APP_VERSION || '' })}\n`);
+      writeFileSync(
+        join(__dirname, 'dist/version.json'),
+        `${JSON.stringify({ version: process.env.VITE_APP_VERSION || '' })}\n`,
+      );
     },
   };
 }

@@ -1299,6 +1299,7 @@ export const jaJPMajorFormsTranslation: TranslationMap = {
     },
   },
   selectionPage: {
+    restoredToast: '前回の選定内容を復元しました',
     allCategories: 'すべてのカテゴリ',
     autoSelected: '自動',
     backStep: '1ステップ戻る',

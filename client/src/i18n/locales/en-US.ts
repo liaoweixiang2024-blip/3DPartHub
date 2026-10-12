@@ -1520,6 +1520,7 @@ export const enUS: { translation: TranslationMap } = {
         restart: 'Start over',
         title: 'Selection Results',
       },
+      restoredToast: 'Restored your previous selection progress',
       share: {
         categoryGeneratedTitle: 'Category link generated',
         categoryLink: 'Generate category link',

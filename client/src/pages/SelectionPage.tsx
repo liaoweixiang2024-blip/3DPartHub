@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { startTransition, useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useNavigationType } from 'react-router-dom';
 import useSWR from 'swr';
 import {
   filterSelectionProducts,
@@ -77,8 +77,10 @@ const stickyHeaderOffsetOf = (container: HTMLElement, isDesktop: boolean) => {
    返回/重进选型页时所有 useState 向导状态已丢——此前直接退回选型首页从头选。
    快照把进行中的选型（分组/分类/已选参数/跳过项/搜索词/展开的套件）落一份到
    localStorage（2h 有效——覆盖点开模型看看/切出去沟通一圈再回来的会话连续性，
-   不做隔天持久化，过期即全新开始），重进时恢复。显式入口（?c= 深链 / 选型分享
-   链接）优先于快照；用户明确回选型首页（分组/分类都清空）即删快照。 */
+   不做隔天持久化，过期即全新开始），重进时恢复。规则：
+   - 显式入口（?c= 深链 / 选型分享链接）优先，不恢复；
+   - 点菜单/侧栏主动进入的恢复弹提示告知（POP 返回/刷新的恢复静默）；
+   - 「首页」「重新选择」「清空」等明确重来意图：立即删快照，下次全新开始。 */
 const WIZARD_SNAPSHOT_KEY = 'selection:wizard-snapshot';
 const WIZARD_SNAPSHOT_TTL_MS = 2 * 60 * 60 * 1000;
 
@@ -152,13 +154,19 @@ export default function SelectionPage() {
   const prefersReducedMotion = useReducedMotion();
   const navigate = useNavigate();
   const location = useLocation();
-  /* 快照恢复判定（一次性）：显式入口（?c= 深链 / 选型分享链接 state）优先于快照 */
+  const navigationType = useNavigationType();
+  /* 快照恢复判定（一次性）：显式入口（?c= 深链 / 选型分享链接 state）优先于快照。
+     主动进入（点选型菜单/侧栏/底部 tab，PUSH 导航）发生恢复时弹提示告知——用户换了
+     场景回来，得说清楚状态从哪来的；返回/刷新（POP）的恢复体感是同一会话延续，静默 */
   const wizardRestoreRef = useRef<WizardSnapshot | null | undefined>(undefined);
+  const wizardRestoredByMenuRef = useRef(false);
   if (wizardRestoreRef.current === undefined) {
     const explicitEntry =
       new URLSearchParams(location.search).get('c') !== null ||
       Boolean((location.state as { shareSlug?: string } | null)?.shareSlug);
-    wizardRestoreRef.current = explicitEntry ? null : readWizardSnapshot();
+    const restored = explicitEntry ? null : readWizardSnapshot();
+    wizardRestoreRef.current = restored;
+    wizardRestoredByMenuRef.current = Boolean(restored) && navigationType === 'PUSH';
   }
   const wizardRestore = wizardRestoreRef.current;
   const previewCategoryImages = useMemo(
@@ -231,12 +239,22 @@ export default function SelectionPage() {
   );
   const wizardSnapshotDataRef = useRef<Omit<WizardSnapshot, 'v' | 'savedAt'> | null>(null);
   const wizardSnapshotDirtyRef = useRef(false);
+  /* hold：刚点了「重新选择/清空」且还没有新选择——保持已清空状态，不把空进度写回快照 */
+  const wizardSnapshotHoldRef = useRef(false);
   useEffect(() => {
     if (!groupId && !slug) {
+      wizardSnapshotHoldRef.current = false;
       wizardSnapshotDirtyRef.current = false;
       clearWizardSnapshot();
       return;
     }
+    const hasWizardProgress =
+      Object.keys(specs).length > 0 ||
+      skipped.size > 0 ||
+      Object.keys(manualDrafts).length > 0 ||
+      searchDraft.trim() !== '';
+    if (wizardSnapshotHoldRef.current && !hasWizardProgress) return;
+    wizardSnapshotHoldRef.current = false;
     wizardSnapshotDataRef.current = {
       groupId,
       slug,
@@ -264,6 +282,20 @@ export default function SelectionPage() {
     },
     [],
   );
+  /* 点菜单进入且恢复了快照：告知一声（返回/刷新的恢复不弹——体感是同一会话延续） */
+  useEffect(() => {
+    if (!wizardRestoredByMenuRef.current) return;
+    wizardRestoredByMenuRef.current = false;
+    toast(t('selectionPage.restoredToast'), 'info');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅挂载时判定一次
+  }, []);
+  /* 明确的重来意图（重新选择/清空当前分类）：立即删快照并取消未落盘的写入；
+     之后重新选的参数会重新累计，但「点完就走」的下次进入是全新开始 */
+  const discardWizardSnapshot = useCallback(() => {
+    wizardSnapshotHoldRef.current = true;
+    wizardSnapshotDirtyRef.current = false;
+    clearWizardSnapshot();
+  }, []);
   const [pressedCategoryKey, setPressedCategoryKey] = useState<string | null>(null);
   /* 触摸拖动吞点击守卫：iOS 把「按住慢慢拖」判成 tap 时仍会派发 click（位移小/滚动接管慢），
      点击高亮（pressedCategoryKey → 卡片变白+顶线显形）就会在滑动时闪现。记录 touchstart 起点，
@@ -901,6 +933,8 @@ export default function SelectionPage() {
       setPressedCategoryKey(`group:${id}`);
       scheduleCategoryNavigation(
         () => {
+          // 新的导航选择：恢复快照累计（覆盖此前「重新选择」的 hold）
+          wizardSnapshotHoldRef.current = false;
           setGroupId(id);
           setSlug(null);
           setSpecs({});
@@ -923,6 +957,8 @@ export default function SelectionPage() {
       pendingAutoAdvanceScrollRef.current = false;
       scheduleCategoryNavigation(
         () => {
+          // 新的导航选择：恢复快照累计（覆盖此前「重新选择」的 hold）
+          wizardSnapshotHoldRef.current = false;
           pushRecent(s);
           setSlug(s);
           setSpecs({});
@@ -949,6 +985,7 @@ export default function SelectionPage() {
   }, [setSearchDraft]);
   const resetCurrentCategory = useCallback(() => {
     // 清空后回到第一个步骤：显式「回顶」意图，避免桌面居中公式把带大图的高步骤滚到中间
+    discardWizardSnapshot();
     stepScrollIntentRef.current = 'top';
     pendingAutoAdvanceScrollRef.current = false;
     setSpecs({});
@@ -976,7 +1013,7 @@ export default function SelectionPage() {
         el.scrollIntoView({ behavior: 'auto', block: 'start' });
       }
     }, 40);
-  }, [isDesktop, setSearchDraft]);
+  }, [discardWizardSnapshot, isDesktop, setSearchDraft]);
   const pickVal = useCallback((key: string, val: string) => {
     setPendingOptionKey(`${key}:${val}`);
     setAutoSelectedFields((prev) => {
@@ -1047,6 +1084,7 @@ export default function SelectionPage() {
   }, [cats, slug, groupId, groups, goHome]);
   const restart = useCallback(() => {
     // 重新选择：同 resetCurrentCategory，清空后回顶
+    discardWizardSnapshot();
     stepScrollIntentRef.current = 'top';
     pendingAutoAdvanceScrollRef.current = false;
     startTransition(() => {
@@ -1074,7 +1112,7 @@ export default function SelectionPage() {
         el.scrollIntoView({ behavior: 'auto', block: 'start' });
       }
     }, 120);
-  }, [isDesktop]);
+  }, [discardWizardSnapshot, isDesktop]);
   const toggleInquiryProduct = useCallback(
     (product: SelectionProduct) => {
       const result = inquiryCart.toggleProduct(product);
@@ -1235,8 +1273,12 @@ export default function SelectionPage() {
     }
     setSharingTarget(withResults ? 'result' : 'category');
     try {
+      // 服务端快照的 productIds 上限 500（selection-shares.ts）：匹配结果超限时不再
+      // 冻结产品列表，改存纯参数快照（productIds 空）——分享链接打开后自动回跳
+      // 选型页按 specs 实时过滤（SelectionSharePage 的 selection-mode 分支），结果一致
+      const shareSelectionMode = withResults && filteredTotal > 500;
       const productIds =
-        withResults && filteredTotal > 0
+        withResults && !shareSelectionMode && filteredTotal > 0
           ? (
               await filterSelectionProducts(slug, {
                 specs,
@@ -1258,11 +1300,16 @@ export default function SelectionPage() {
       return `/selection/s/${result.token}`;
     } catch (err: unknown) {
       if (import.meta.env.DEV) console.error('[Share] Error:', err instanceof Error ? err.message : String(err));
-      const resp = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
-      const data = typeof resp === 'object' && resp !== null ? (resp as Record<string, unknown>).data : undefined;
-      const apiMsg = typeof data === 'object' && data !== null ? (data as Record<string, unknown>).message : undefined;
-      const errMsg = err instanceof Error ? err.message : t('selectionPage.unknownError');
-      toast(t('selectionPage.share.failed', { message: apiMsg || errMsg }), 'error');
+      // 预创建（autoCreated）是后台任务：失败静默即可（结果卡跳工单有模型页/选型首页
+      // 回退），绝不能把「产品数量不能超过 500」这类快照限制弹给没在分享的用户
+      if (!autoCreated) {
+        const resp = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
+        const data = typeof resp === 'object' && resp !== null ? (resp as Record<string, unknown>).data : undefined;
+        const apiMsg =
+          typeof data === 'object' && data !== null ? (data as Record<string, unknown>).message : undefined;
+        const errMsg = err instanceof Error ? err.message : t('selectionPage.unknownError');
+        toast(t('selectionPage.share.failed', { message: apiMsg || errMsg }), 'error');
+      }
       return null;
     } finally {
       setSharingTarget(null);
@@ -2612,6 +2659,7 @@ export default function SelectionPage() {
         {specKeys.length > 0 ? (
           <button
             onClick={() => {
+              discardWizardSnapshot();
               setSpecs({});
               setManualDrafts({});
               setSkipped(new Set());

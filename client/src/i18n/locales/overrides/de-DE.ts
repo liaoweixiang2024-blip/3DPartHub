@@ -1048,6 +1048,7 @@ export const deDEMajorFormsTranslation: TranslationMap = {
     },
   },
   selectionPage: {
+    restoredToast: 'Letzten Auswahlfortschritt wiederhergestellt',
     allCategories: 'Alle Kategorien',
     autoSelected: 'Automatisch',
     backStep: 'Einen Schritt zurück',

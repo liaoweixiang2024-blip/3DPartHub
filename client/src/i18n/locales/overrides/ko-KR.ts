@@ -1021,6 +1021,7 @@ export const koKRMajorFormsTranslation: TranslationMap = {
     },
   },
   selectionPage: {
+    restoredToast: '이전 선택 진행 상황을 복원했습니다',
     allCategories: '전체 카테고리',
     autoSelected: '자동',
     backStep: '한 단계 뒤로',
