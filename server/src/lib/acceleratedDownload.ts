@@ -154,18 +154,19 @@ export function sendAcceleratedFile(
   res.setHeader('ETag', etag);
   res.setHeader('Last-Modified', lastModified);
 
-  if (req.method === 'HEAD') {
-    res.status(200).end();
-    return;
-  }
-
   // forceStream（备份等大文件 Node 直连流式下发）：链路上的 nginx 反代默认对响应做
   // 磁盘缓冲（proxy_buffering on，temp file 上限默认 1GiB）。GB 级流超限或缓冲异常时
   // 上游连接被掐、浏览器端收到「提前正常结束但短于 Content-Length」的响应——Chrome
   // 表现为「进度走完却不标记成功、从头整单重下」。X-Accel-Buffering: no 是 nginx 官方
   // 的响应级开关：无需改任何代理配置，链路上的代理都会对本响应禁用缓冲直接透传。
+  // （HEAD 也要带：下载工具会先 HEAD 探测链路，保持行为一致）
   if (forceStream) {
     res.setHeader('X-Accel-Buffering', 'no');
+  }
+
+  if (req.method === 'HEAD') {
+    res.status(200).end();
+    return;
   }
 
   // 加速（X-Accel-Redirect）由 nginx 的 X-Accel-Available 头驱动（client/nginx.conf 显式设置）。
