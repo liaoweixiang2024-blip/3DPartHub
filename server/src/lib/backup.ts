@@ -213,25 +213,35 @@ function getDockerContainer(): string | null {
   }
 }
 
-/** pg_dump to file — works with local install or Docker container */
-function pgDumpToFile(dbUrl: string, outputPath: string, extraArgs: string[], timeout: number) {
+/** pg_dump to file — works with local install or Docker container.
+ * spawn 异步版：execFileSync 会阻塞事件循环，GB 级导出几分钟里进度心跳/keepalive
+ * 全部停摆（界面表现为百分比卡死）；异步化后 onProgress 每 5s 报已用时。 */
+async function pgDumpToFile(
+  dbUrl: string,
+  outputPath: string,
+  extraArgs: string[],
+  timeout: number,
+  onProgress?: (elapsedSec: number) => void,
+): Promise<void> {
   const container = getDockerContainer();
   const outputFd = openSync(outputPath, 'w');
+  const startedAt = Date.now();
+  const heartbeat = onProgress
+    ? setInterval(() => onProgress(Math.max(0, Math.round((Date.now() - startedAt) / 1000))), 5000)
+    : null;
   try {
+    let command: string;
+    let args: string[];
+    let env: NodeJS.ProcessEnv | undefined;
     if (container) {
       const dbName = new URL(dbUrl).pathname.replace(/^\//, '');
       const user = new URL(dbUrl).username;
-      execFileSync('docker', ['exec', container, 'pg_dump', '-U', user, '-d', dbName, ...extraArgs], {
-        stdio: ['ignore', outputFd, 'pipe'],
-        timeout,
-      });
-      return;
-    }
-    const url = new URL(dbUrl);
-    const env = { ...process.env, PGPASSWORD: url.password };
-    execFileSync(
-      'pg_dump',
-      [
+      command = 'docker';
+      args = ['exec', container, 'pg_dump', '-U', user, '-d', dbName, ...extraArgs];
+    } else {
+      const url = new URL(dbUrl);
+      command = 'pg_dump';
+      args = [
         '-U',
         url.username,
         '-d',
@@ -241,14 +251,27 @@ function pgDumpToFile(dbUrl: string, outputPath: string, extraArgs: string[], ti
         '-p',
         url.port || '5432',
         ...extraArgs,
-      ],
-      {
-        stdio: ['ignore', outputFd, 'pipe'],
-        timeout,
-        env,
-      },
-    );
+      ];
+      env = { ...process.env, PGPASSWORD: url.password };
+    }
+    await new Promise<void>((resolve, reject) => {
+      let stderr = '';
+      const proc = spawn(command, args, { stdio: ['ignore', outputFd, 'pipe'], timeout, env });
+      proc.stderr?.on('data', (chunk: Buffer) => {
+        if (stderr.length < 8192) stderr += chunk.toString('utf-8');
+      });
+      proc.on('error', (err) => reject(err));
+      proc.on('close', (code, signal) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        const detail = signal ? `signal=${signal}` : `code=${code ?? 'unknown'}`;
+        reject(new Error(`pg_dump 失败 (${detail}): ${stderr.trim().split(/\r?\n/).slice(-3).join(' | ')}`));
+      });
+    });
   } finally {
+    if (heartbeat) clearInterval(heartbeat);
     closeSync(outputFd);
   }
 }
@@ -379,10 +402,13 @@ const BACKUP_SCOPE_LABELS: Record<BackupScope, string> = {
 };
 
 const MODULE_BACKUP_STATIC_DIRS: Record<Exclude<BackupScope, 'full'>, string[]> = {
-  models: ['models', 'thumbnails', 'originals', 'drawings'],
+  // html-previews/surface-patches 是每模型维度的正式文件（删除模型时会一并清理）；
+  // 缺席时跨服务器模块迁移会丢模型预览与转换修复网格
+  models: ['models', 'thumbnails', 'originals', 'drawings', 'html-previews', 'surface-patches'],
   selection: ['option-images', 'selection-assets', 'selection-categories-ai'],
   product_wall: ['product-wall'],
-  config: ['logo', 'favicon', 'watermark'],
+  // category-nav 是设置管理的站点资产（settings 行引用其 URL），随系统配置一起走
+  config: ['logo', 'favicon', 'watermark', 'category-nav'],
   users: [],
   tickets: ['ticket-attachments'],
   inquiries: ['inquiry-attachments'],
@@ -398,6 +424,7 @@ export const MODULE_BACKUP_TABLE_KEYS: Record<Exclude<BackupScope, 'full'>, read
     'modelVersions',
     'favorites',
     'downloads',
+    'downloadEvents',
     'comments',
     'shareLinks',
   ],
@@ -462,6 +489,8 @@ export interface BackupRecord {
   name: string;
   scope?: BackupScope;
   scopeLabel?: string;
+  /** 创建来源：手动 / 定时任务。定时全量按保留数清理，手动全量豁免（存量记录无此字段按手动处理） */
+  source?: 'manual' | 'scheduled';
   createdAt: string;
   fileSize: number;
   fileSizeText: string;
@@ -870,6 +899,8 @@ function cleanupExpiredSafetySnapshots(maxAgeMs = 7 * 24 * 60 * 60 * 1000) {
         if (!entry.isFile()) continue;
         // marker 文件本身不按年龄清理——marker 是否该删由它引用的快照决定
         if (entry.name.startsWith(RESTORE_IN_PROGRESS_MARKER_PREFIX)) continue;
+        // 自动维护模式标记同样不按年龄清理——误删会让维护模式失去还原凭据（永远开下去）
+        if (entry.name === basename(RESTORE_AUTO_MAINTENANCE_FLAG)) continue;
         const path = join(SAFETY_SNAPSHOT_DIR, entry.name);
         if (referenced.has(resolve(path))) continue;
         const { mtime } = statSync(path);
@@ -985,6 +1016,12 @@ function markWorkerExitIfStillRunning<T extends MonitoredWorkerJob>(job: T, mess
   addLog(latest, message);
   syncJob(latest);
   releaseLockForJob(job.id);
+  // 恢复 worker 异常退出且未进入破坏性阶段（数据未动）→ 还原自动维护模式；
+  // 破坏性阶段中崩溃则保持维护，交给中断恢复流程还原
+  const asRestore = latest as T & { destructiveStarted?: boolean };
+  if (!asRestore.destructiveStarted) {
+    void releaseAutoMaintenanceAfterRestore();
+  }
 }
 
 function monitorWorkerExit<T extends MonitoredWorkerJob>(child: ChildProcess, job: T, label: string) {
@@ -1149,6 +1186,8 @@ export function cancelRestoreJob(jobId: string): { cancelled: boolean; message: 
   // worker 死后会残留进行中 marker → 下次启动误报「中断恢复可回滚」。取消=用户确认数据未动，
   // 主动清掉 marker 防止管理员之后误点回滚，把取消后的业务写入一并回滚掉。
   clearRestoreInProgressMarker(jobId);
+  // 取消发生在破坏性阶段前（数据未动），还原恢复自动开启的维护模式
+  void releaseAutoMaintenanceAfterRestore();
   releaseLockForJob(jobId);
   return { cancelled: true, message: job.message };
 }
@@ -1302,9 +1341,17 @@ async function runImportSave(job: ImportSaveJob, archPath: string, originalName:
     const tmpDir = prepareWorkDir(`peek_${job.id}`);
     try {
       const readableArchive = await materializeReadableBackupArchive(archPath, tmpDir);
-      const entries = listArchiveEntries(readableArchive);
+      const entries = await listArchiveEntriesWithProgress(readableArchive, ({ elapsedMs, entryCount }) => {
+        const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
+        job.message = `正在读取归档条目... 已扫描 ${entryCount} 项，用时 ${elapsedSec}s`;
+        syncJob(job);
+      });
       if (entries.length === 0) throw new Error('备份归档内容为空');
-      await assertSafeArchiveEntriesForExtraction(readableArchive, entries);
+      await assertSafeArchiveEntriesForExtraction(readableArchive, entries, ({ elapsedMs, entryCount }) => {
+        const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
+        job.message = `正在校验归档安全... 已检查 ${entryCount} 项，用时 ${elapsedSec}s`;
+        syncJob(job);
+      });
       addLog(job, `归档包含 ${entries.length} 个条目`);
 
       // Stage 2: Read meta
@@ -1319,9 +1366,15 @@ async function runImportSave(job: ImportSaveJob, archPath: string, originalName:
       job.message = '正在统计模型数量...';
       syncJob(job);
       try {
-        const sqlPath = extractRestoreSqlPath(readableArchive, tmpDir);
+        const sqlPath = await extractRestoreSqlPath(readableArchive, tmpDir, (elapsedSec) => {
+          job.message = `正在从归档提取数据库文件用于统计... 已用时 ${elapsedSec}s`;
+          syncJob(job);
+        });
         if (sqlPath) {
-          const modelCount = await countStepModelsInSqlDump(sqlPath);
+          const modelCount = await countStepModelsInSqlDump(sqlPath, (elapsedSec) => {
+            job.message = `正在统计模型数量... 已用时 ${elapsedSec}s`;
+            syncJob(job);
+          });
           if (modelCount > 0) addLog(job, `发现 ${modelCount} 个 STEP 模型`);
         }
       } catch {
@@ -1335,7 +1388,8 @@ async function runImportSave(job: ImportSaveJob, archPath: string, originalName:
     // Stage 4: Copy archive to backup storage
     job.stage = 'copying_archive';
     job.percent = 50;
-    job.message = '正在保存备份文件...';
+    // saveAsBackupRecord 内部还有解密/条目扫描/SQL 提取统计等耗时步骤（无更细粒度回调），提示预期耗时
+    job.message = '正在检查并保存备份文件（大文件可能需要数分钟）...';
     addLog(job, '正在复制归档到备份存储...');
     syncJob(job);
 
@@ -1506,7 +1560,16 @@ async function runBackup(job: BackupJob) {
     job.message = '正在导出数据库...';
     addLog(job, '正在导出数据库 (pg_dump)...');
 
-    pgDumpToFile(DB_URL_CLEAN, join(tmpDir, 'database.sql'), ['--no-owner', '--no-privileges'], DB_DUMP_TIMEOUT_MS);
+    await pgDumpToFile(
+      DB_URL_CLEAN,
+      join(tmpDir, 'database.sql'),
+      ['--no-owner', '--no-privileges'],
+      DB_DUMP_TIMEOUT_MS,
+      (elapsedSec) => {
+        job.message = `正在导出数据库 (pg_dump)... 已用时 ${elapsedSec}s`;
+        syncJob(job);
+      },
+    );
 
     if (!existsSync(join(tmpDir, 'database.sql'))) {
       throw new Error('数据库导出失败：文件未生成');
@@ -1706,6 +1769,7 @@ async function runBackup(job: BackupJob) {
       name: `备份 ${formatDate(new Date())}`,
       scope: 'full',
       scopeLabel: backupScopeLabel('full'),
+      source: job.source,
       createdAt: new Date().toISOString(),
       fileSize,
       fileSizeText: formatSize(fileSize),
@@ -1890,6 +1954,7 @@ async function runModuleBackup(job: BackupJob, scope: Exclude<BackupScope, 'full
       name: `${label}备份 ${formatDate(new Date())}`,
       scope,
       scopeLabel: label,
+      source: job.source,
       createdAt: new Date().toISOString(),
       fileSize,
       fileSizeText: formatSize(fileSize),
@@ -2061,6 +2126,9 @@ async function buildModuleBackupPayload(scope: Exclude<BackupScope, 'full'>): Pr
             modelVersions: await tx.modelVersion.findMany({ orderBy: [{ createdAt: 'asc' }] }),
             favorites: await tx.favorite.findMany({ orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }] }),
             downloads: await tx.download.findMany({ orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }] }),
+            // download_events 有 FK 指向 models（TRUNCATE CASCADE 会级联清空它），
+            // 必须随模块一起导出/回填，否则模型库模块恢复会静默抹掉下载统计
+            downloadEvents: await tx.downloadEvent.findMany({ orderBy: [{ createdAt: 'asc' }] }),
             comments: await tx.comment.findMany({ orderBy: [{ modelId: 'asc' }, { createdAt: 'asc' }] }),
             shareLinks: await tx.shareLink.findMany({ orderBy: [{ createdById: 'asc' }, { createdAt: 'asc' }] }),
           },
@@ -3034,7 +3102,16 @@ async function runModuleRestoreFromArchive(
     t = addLogStart(job, '正在导出当前数据库安全快照（模块恢复失败时自动回滚）...');
     try {
       safetySnapshot = join(tmpDir, 'safety_snapshot.sql');
-      pgDumpToFile(DB_URL_CLEAN, safetySnapshot, ['--no-owner', '--no-privileges'], DB_DUMP_TIMEOUT_MS);
+      await pgDumpToFile(
+        DB_URL_CLEAN,
+        safetySnapshot,
+        ['--no-owner', '--no-privileges'],
+        DB_DUMP_TIMEOUT_MS,
+        (elapsedSec) => {
+          job.message = `正在导出当前数据库安全快照（模块恢复失败时自动回滚）... 已用时 ${elapsedSec}s`;
+          syncJob(job);
+        },
+      );
       const snapSize = statSync(safetySnapshot).size;
       if (snapSize === 0) throw new Error('安全快照为空');
       addLogEnd(job, t, `安全快照已创建（${formatSize(snapSize)}）`);
@@ -3157,6 +3234,10 @@ export async function runRestoreWorker(jobId: string, mode: 'backup' | 'file', t
   };
   restoreJobs.set(job.id, job);
   syncJob(job);
+  // 恢复期间自动开维护模式（破坏性阶段普通用户请求会打到半空 schema）；
+  // 正常结束/失败/回滚都在 finally 还原。硬中断（SIGKILL/OOM）时 finally 不执行，
+  // 维护保持开启由中断恢复流程还原——半恢复态不放行普通用户是正确行为。
+  await engageAutoMaintenanceForRestore(job);
   try {
     if (mode === 'backup') {
       await runRestore(job, target);
@@ -3164,6 +3245,12 @@ export async function runRestoreWorker(jobId: string, mode: 'backup' | 'file', t
       await runRestoreFromFile(job, target, removeAfter);
     }
   } finally {
+    // marker 仍在 = 破坏性阶段后没有成功回到安全状态（恢复失败且快照回滚也失败），
+    // 此时数据库可能是空库——保持维护模式，由中断恢复流程处理后再还原。
+    // 正常完成 / 失败后成功回滚 / 破坏性阶段前的失败，marker 都已被清（或从未写过）。
+    if (!existsSync(restoreInProgressMarkerPath(job.id))) {
+      await releaseAutoMaintenanceAfterRestore();
+    }
     stopLockKeepAlive();
     releaseLockForJob(job.id);
   }
@@ -3220,7 +3307,11 @@ async function runRestoreFromArchive(
     syncJob(job);
 
     t = addLogStart(job, '正在校验备份包完整性（条目检查 + SHA256）...');
-    await assertSafeArchiveEntriesForExtraction(readableArchivePath, allEntries);
+    await assertSafeArchiveEntriesForExtraction(readableArchivePath, allEntries, ({ elapsedMs, entryCount }) => {
+      const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
+      job.message = `正在校验备份完整性... 安全扫描已检查 ${entryCount} 项，用时 ${elapsedSec}s`;
+      syncJob(job);
+    });
     validateArchiveEntries(allEntries, archiveManifest);
     addLogEnd(job, t, '备份包完整性校验通过');
 
@@ -3230,13 +3321,19 @@ async function runRestoreFromArchive(
 
     t = addLogStart(job, `正在从备份包提取数据库文件（${formatSize(archiveManifest.database.size)}）...`);
     const dbEntry = archiveManifest.database.path;
-    const sqlPath = extractDbToTmp(readableArchivePath, tmpDir, dbEntry);
+    const sqlPath = await extractDbToTmp(readableArchivePath, tmpDir, dbEntry, (elapsedSec) => {
+      job.message = `正在从备份包提取数据库文件（${formatSize(archiveManifest.database.size)}）... 已用时 ${elapsedSec}s`;
+      syncJob(job);
+    });
     addLogEnd(job, t, '数据库文件提取完成');
     job.percent = 25;
     syncJob(job);
 
     t = addLogStart(job, '正在校验数据库文件 SHA256...');
-    const actualSha256 = await sha256File(sqlPath);
+    const actualSha256 = await sha256FileWithProgress(sqlPath, (percent) => {
+      job.message = `正在校验数据库文件 SHA256... ${percent}%`;
+      syncJob(job);
+    });
     if (actualSha256 !== archiveManifest.database.sha256) {
       throw new Error('数据库备份 SHA256 校验失败');
     }
@@ -3286,7 +3383,15 @@ async function runRestoreFromArchive(
       job.message = '正在预处理数据库...';
       syncJob(job);
       t = addLogStart(job, '正在流式预处理 SQL 数据（过滤危险语句）...');
-      await sanitizeSqlDumpStreaming(sqlPath, sanitizedSqlPath);
+      await sanitizeSqlDumpStreaming(sqlPath, sanitizedSqlPath, {
+        onProgress: ({ percent, processedBytes, totalBytes }) => {
+          job.message =
+            totalBytes > 0
+              ? `正在流式预处理 SQL 数据... ${percent}%（${formatSize(processedBytes)}/${formatSize(totalBytes)}）`
+              : `正在流式预处理 SQL 数据... 已处理 ${formatSize(processedBytes)}`;
+          syncJob(job);
+        },
+      });
       const sanitizedSize = statSync(sanitizedSqlPath).size;
       addLogEnd(job, t, `SQL 预处理完成（输出 ${formatSize(sanitizedSize)}）`);
 
@@ -3296,7 +3401,16 @@ async function runRestoreFromArchive(
       t = addLogStart(job, '正在导出当前数据库安全快照（恢复失败时自动回滚）...');
       try {
         safetySnapshot = join(tmpDir, 'safety_snapshot.sql');
-        pgDumpToFile(DB_URL_CLEAN, safetySnapshot, ['--no-owner', '--no-privileges'], DB_DUMP_TIMEOUT_MS);
+        await pgDumpToFile(
+          DB_URL_CLEAN,
+          safetySnapshot,
+          ['--no-owner', '--no-privileges'],
+          DB_DUMP_TIMEOUT_MS,
+          (elapsedSec) => {
+            job.message = `正在导出当前数据库安全快照（恢复失败时自动回滚）... 已用时 ${elapsedSec}s`;
+            syncJob(job);
+          },
+        );
         const snapSize = statSync(safetySnapshot).size;
         if (snapSize === 0) throw new Error('安全快照为空');
         addLogEnd(job, t, `安全快照已创建（${formatSize(snapSize)}）`);
@@ -3350,7 +3464,16 @@ async function runRestoreFromArchive(
 
           addLog(job, '检测到历史数据存在孤儿外键，改用跳过外键约束模式恢复...');
           const noFkSqlPath = join(tmpDir, 'database.restore.no-fk.sql');
-          await sanitizeSqlDumpStreaming(sqlPath, noFkSqlPath, { skipForeignKeys: true });
+          await sanitizeSqlDumpStreaming(sqlPath, noFkSqlPath, {
+            skipForeignKeys: true,
+            onProgress: ({ percent, processedBytes, totalBytes }) => {
+              job.message =
+                totalBytes > 0
+                  ? `正在按跳过外键模式预处理 SQL... ${percent}%（${formatSize(processedBytes)}/${formatSize(totalBytes)}）`
+                  : `正在按跳过外键模式预处理 SQL... 已处理 ${formatSize(processedBytes)}`;
+              syncJob(job);
+            },
+          });
           await resetDatabaseSchema(DB_URL_CLEAN);
           try {
             await restoreSqlIntoDatabase(DB_URL_CLEAN, noFkSqlPath, {
@@ -3775,7 +3898,7 @@ async function inspectBackupArchive(id: string, archive: string, originalName: s
     }
 
     try {
-      const sqlPath = extractRestoreSqlPath(readableArchive, tmpDir);
+      const sqlPath = await extractRestoreSqlPath(readableArchive, tmpDir);
       if (sqlPath) {
         record.modelCount = await countStepModelsInSqlDump(sqlPath);
       }
@@ -3903,7 +4026,9 @@ async function restoreModelsModule(
   job: RestoreJob,
 ): Promise<number> {
   await tx.$executeRawUnsafe(
-    'TRUNCATE TABLE "model_versions", "model_drawings", "favorites", "downloads", "comments", "share_links", "models", "model_groups", "categories" RESTART IDENTITY CASCADE',
+    // download_events 显式列入：它有 FK 指向 models，即使不写也会被 CASCADE 级联清空——
+    // 显式声明意图，且保证下方回填顺序在 models 之后
+    'TRUNCATE TABLE "model_versions", "model_drawings", "favorites", "downloads", "download_events", "comments", "share_links", "models", "model_groups", "categories" RESTART IDENTITY CASCADE',
   );
 
   const categories = tableRows(payload, 'categories');
@@ -3913,6 +4038,7 @@ async function restoreModelsModule(
   const modelVersions = tableRows(payload, 'modelVersions');
   const favorites = tableRows(payload, 'favorites');
   const downloads = tableRows(payload, 'downloads');
+  const downloadEvents = tableRows(payload, 'downloadEvents');
   const comments = tableRows(payload, 'comments');
   const shareLinks = tableRows(payload, 'shareLinks');
   const userContext = await getRestoreUserContext(
@@ -3922,6 +4048,7 @@ async function restoreModelsModule(
       modelVersions.length > 0 ||
       favorites.length > 0 ||
       downloads.length > 0 ||
+      downloadEvents.length > 0 ||
       comments.length > 0 ||
       shareLinks.length > 0,
   );
@@ -4009,6 +4136,18 @@ async function restoreModelsModule(
     .filter((row): row is Record<string, unknown> => Boolean(row));
   await createManyInChunks(tx.download, downloadData);
 
+  // 下载事件流水（管理端统计/趋势图数据源）：modelId 挂不上（备份里没有该模型）的行丢弃，
+  // userId 悬空置 null（schema SetNull 语义），shareId 是纯字符串原样保留
+  const downloadEventData = downloadEvents
+    .map((row) => {
+      const data = reviveDateFields(row, ['createdAt']);
+      data.userId = pickRestoreUserId(data.userId, userContext);
+      data.modelId = keepIdIfPresent(data.modelId, modelIds);
+      return data.modelId ? data : null;
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  await createManyInChunks(tx.downloadEvent, downloadEventData);
+
   const commentData = comments
     .map((row) => {
       const data = reviveDateFields(row, ['createdAt']);
@@ -4039,7 +4178,7 @@ async function restoreModelsModule(
 
   addLog(
     job,
-    `模型库表已重建: ${modelData.length} 个模型，${drawingData.length} 份图纸，${versionData.length} 个版本，${favoriteData.length} 条收藏，${downloadData.length} 条下载，${commentData.length} 条评论，${shareLinkData.length} 条分享`,
+    `模型库表已重建: ${modelData.length} 个模型，${drawingData.length} 份图纸，${versionData.length} 个版本，${favoriteData.length} 条收藏，${downloadData.length} 条下载，${downloadEventData.length} 条下载事件，${commentData.length} 条评论，${shareLinkData.length} 条分享`,
   );
   return (
     modelData.length +
@@ -4047,6 +4186,7 @@ async function restoreModelsModule(
     versionData.length +
     favoriteData.length +
     downloadData.length +
+    downloadEventData.length +
     commentData.length +
     shareLinkData.length
   );
@@ -4533,22 +4673,32 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 // 安全校验流式版：spawn tar tvzf 边读边查，内存只随条目数线性增长（不整包载入 stdout），
 // 因此不再需要条目数上限——损坏/异常包的极端体量表现为扫描耗时变长，而非内存爆炸。
-export function assertArchiveContainsOnlyRegularFilesAndDirectories(archive: string): Promise<void> {
+export function assertArchiveContainsOnlyRegularFilesAndDirectories(
+  archive: string,
+  onProgress?: (info: { elapsedMs: number; entryCount: number }) => void,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     let bufferedLine = '';
     let stderr = '';
     let settled = false;
+    let scanned = 0;
+    const startedAt = Date.now();
     const proc = spawn('tar', ['tvzf', archive], { stdio: ['ignore', 'pipe', 'pipe'] });
     const timeout = setTimeout(() => {
       if (settled) return;
       proc.kill('SIGKILL');
       reject(new Error(`备份包安全校验超时（${Math.round(ARCHIVE_LIST_TIMEOUT_MS / 1000)}s），已中止`));
     }, ARCHIVE_LIST_TIMEOUT_MS);
+    // verbose 扫描与 tzf 一样是全量过一遍归档（GB 级要几分钟），无心跳会让人以为卡死
+    const progressTimer = onProgress
+      ? setInterval(() => onProgress({ elapsedMs: Date.now() - startedAt, entryCount: scanned }), 2000)
+      : null;
 
     const fail = (err: Error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (progressTimer) clearInterval(progressTimer);
       reject(err);
     };
 
@@ -4556,6 +4706,7 @@ export function assertArchiveContainsOnlyRegularFilesAndDirectories(archive: str
       const parts = `${bufferedLine}${chunk.toString('utf-8')}`.split(/\r?\n/);
       bufferedLine = parts.pop() || '';
       for (const line of parts) {
+        scanned += 1;
         if (isUnsafeBackupArchiveVerboseEntry(line)) {
           proc.kill('SIGKILL');
           fail(new Error(`备份包包含符号链接、硬链接或特殊文件，已中止恢复: ${summarizeTarVerboseLine(line)}`));
@@ -4572,6 +4723,7 @@ export function assertArchiveContainsOnlyRegularFilesAndDirectories(archive: str
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (progressTimer) clearInterval(progressTimer);
       if (code === 0) {
         const remainder = bufferedLine.trim();
         if (remainder && isUnsafeBackupArchiveVerboseEntry(remainder)) {
@@ -4586,12 +4738,16 @@ export function assertArchiveContainsOnlyRegularFilesAndDirectories(archive: str
   });
 }
 
-async function assertSafeArchiveEntriesForExtraction(archive: string, entries: string[]) {
+async function assertSafeArchiveEntriesForExtraction(
+  archive: string,
+  entries: string[],
+  onProgress?: (info: { elapsedMs: number; entryCount: number }) => void,
+) {
   const unsafeEntry = entries.find(isUnsafeBackupArchiveEntry);
   if (unsafeEntry) {
     throw new Error(`备份包包含不安全路径: ${unsafeEntry}`);
   }
-  await assertArchiveContainsOnlyRegularFilesAndDirectories(archive);
+  await assertArchiveContainsOnlyRegularFilesAndDirectories(archive, onProgress);
 }
 
 function listArchiveEntries(archive: string): string[] {
@@ -4730,11 +4886,27 @@ function validateArchiveEntries(entries: string[], manifest: BackupManifest): vo
   }
 }
 
-function extractDbToTmp(archive: string, tmpDir: string, dbEntry: string): string {
-  if (!extractArchiveEntry(archive, tmpDir, dbEntry)) {
-    throw new Error(`备份包缺少数据库文件: ${dbEntry}`);
+async function extractDbToTmp(
+  archive: string,
+  tmpDir: string,
+  dbEntry: string,
+  onProgress?: (elapsedSec: number) => void,
+): Promise<string> {
+  // GB 级 database.sql 的单条目解压可能几分钟；extractArchiveEntryAsync 是 spawn 版
+  // （不阻塞事件循环），心跳只报已用时——tar 单条目提取拿不到真实百分比。
+  const startedAt = Date.now();
+  const heartbeat = onProgress
+    ? setInterval(() => onProgress(Math.max(0, Math.round((Date.now() - startedAt) / 1000))), 5000)
+    : null;
+  try {
+    const extracted = await extractArchiveEntryAsync(archive, tmpDir, dbEntry);
+    if (!extracted) {
+      throw new Error(`备份包缺少数据库文件: ${dbEntry}`);
+    }
+    return join(tmpDir, dbEntry);
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
   }
-  return join(tmpDir, dbEntry);
 }
 
 function computeRestorableDirs(entries: string[], manifest: BackupManifest): string[] {
@@ -4854,7 +5026,8 @@ async function validateModuleBackupArchive(
     if (statSync(readableArchive).size <= 0) throw new Error('备份文件为空');
     const entries = await listArchiveEntriesWithProgress(readableArchive, options.onEntryProgress);
     if (entries.length === 0) throw new Error('备份归档内容为空');
-    await assertSafeArchiveEntriesForExtraction(readableArchive, entries);
+    options.onStage?.('正在检查归档安全（符号链接/特殊文件）...');
+    await assertSafeArchiveEntriesForExtraction(readableArchive, entries, options.onEntryProgress);
 
     // 以下深度校验各阶段上报阶段文案——条目扫描结束后还有多步耗时操作
     // （读清单 / 流式哈希数据文件），不报阶段会让界面停在扫描最后一行假死。
@@ -4881,7 +5054,20 @@ async function validateModuleBackupArchive(
     }
 
     options.onStage?.(`正在流式校验模块数据文件（${formatSize(manifest.data.size)}，大文件可能需要数分钟）...`);
-    const dataStats = await inspectArchiveDatabase(readableArchive, manifest.data.path);
+    const dataStats = await inspectArchiveDatabase(
+      readableArchive,
+      manifest.data.path,
+      ({ bytesRead, totalBytes, elapsedMs }) => {
+        const percent = totalBytes > 0 ? Math.min(99, Math.floor((bytesRead / totalBytes) * 100)) : 0;
+        const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
+        options.onStage?.(
+          totalBytes > 0
+            ? `正在流式校验模块数据文件... ${percent}%（${formatSize(bytesRead)}/${formatSize(totalBytes)}），已用时 ${elapsedSec}s`
+            : `正在流式校验模块数据文件... 已读 ${formatSize(bytesRead)}，已用时 ${elapsedSec}s`,
+        );
+      },
+      manifest.data.size,
+    );
     if (dataStats.size !== manifest.data.size) {
       throw new Error(`模块数据大小不一致: manifest=${manifest.data.size}, archive=${dataStats.size}`);
     }
@@ -4919,7 +5105,8 @@ async function validatePlainBackupArchive(
 
   const entries = await listArchiveEntriesWithProgress(archive, options.onEntryProgress);
   if (entries.length === 0) throw new Error('备份归档内容为空');
-  await assertSafeArchiveEntriesForExtraction(archive, entries);
+  options.onStage?.('正在检查归档安全（符号链接/特殊文件）...');
+  await assertSafeArchiveEntriesForExtraction(archive, entries, options.onEntryProgress);
   if (!archiveHasEntry(entries, BACKUP_DATABASE_ENTRY) && !archiveHasEntry(entries, 'database.sql')) {
     throw new Error('备份包缺少数据库文件');
   }
@@ -4955,7 +5142,20 @@ async function validatePlainBackupArchive(
   }
 
   options.onStage?.(`正在流式校验数据库文件（${formatSize(manifest.database.size)}，大库可能需要数分钟）...`);
-  const archiveDbStats = await inspectArchiveDatabase(archive, manifest.database.path);
+  const archiveDbStats = await inspectArchiveDatabase(
+    archive,
+    manifest.database.path,
+    ({ bytesRead, totalBytes, elapsedMs }) => {
+      const percent = totalBytes > 0 ? Math.min(99, Math.floor((bytesRead / totalBytes) * 100)) : 0;
+      const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
+      options.onStage?.(
+        totalBytes > 0
+          ? `正在流式校验数据库文件... ${percent}%（${formatSize(bytesRead)}/${formatSize(totalBytes)}），已用时 ${elapsedSec}s`
+          : `正在流式校验数据库文件... 已读 ${formatSize(bytesRead)}，已用时 ${elapsedSec}s`,
+      );
+    },
+    manifest.database.size,
+  );
   if (archiveDbStats.size !== manifest.database.size) {
     throw new Error(`数据库备份大小不一致: manifest=${manifest.database.size}, archive=${archiveDbStats.size}`);
   }
@@ -4995,20 +5195,33 @@ function readArchiveManifest(archive: string): BackupManifest | null {
 async function inspectArchiveDatabase(
   archive: string,
   databaseEntry: string,
+  onProgress?: (info: { bytesRead: number; totalBytes: number; elapsedMs: number }) => void,
+  expectedSize = 0,
 ): Promise<{ size: number; sha256: string }> {
   // 流式校验：tar xO 直接把条目内容写到 stdout，管道进哈希——不再解压落盘。
   // 大库（GB 级）原先要「解压到临时目录 + 读回哈希」双倍 IO，现在一遍流过。
   return new Promise((resolve, reject) => {
     const hash = createHash('sha256');
     let size = 0;
+    let lastReported = 0;
+    const startedAt = Date.now();
     const proc = spawn('tar', ['xOzf', archive, '--', databaseEntry], { timeout: ARCHIVE_META_TIMEOUT_MS });
     let stderr = '';
     const failTimer = setTimeout(() => {
       proc.kill('SIGKILL');
       reject(new Error(`数据库文件校验超时（>${Math.round(ARCHIVE_META_TIMEOUT_MS / 60000)} 分钟）`));
     }, ARCHIVE_META_TIMEOUT_MS);
+    // 流式哈希对大库是几分钟的黑盒，按已读字节报心跳防止界面假死
+    const progressTimer = onProgress
+      ? setInterval(() => {
+          if (Date.now() - lastReported < 2000) return;
+          lastReported = Date.now();
+          onProgress({ bytesRead: size, totalBytes: expectedSize, elapsedMs: Date.now() - startedAt });
+        }, 2000)
+      : null;
     const settled = (fn: () => void) => {
       clearTimeout(failTimer);
+      if (progressTimer) clearInterval(progressTimer);
       fn();
     };
     proc.stdout?.on('data', (chunk: Buffer) => {
@@ -5136,29 +5349,57 @@ function isArchiveStepEntry(entry: string): boolean {
   return Boolean(fileName && isStepFileName(fileName));
 }
 
-function extractRestoreSqlPath(archive: string, tmpDir: string): string | null {
-  const nestedEntry = '_backup_db/database.sql';
-  if (extractArchiveEntry(archive, tmpDir, nestedEntry)) {
-    return join(tmpDir, nestedEntry);
-  }
+async function extractRestoreSqlPath(
+  archive: string,
+  tmpDir: string,
+  onProgress?: (elapsedSec: number) => void,
+): Promise<string | null> {
+  // GB 级 database.sql 提取几分钟，spawn 版 + 已用时心跳（与 extractDbToTmp 同款）
+  const startedAt = Date.now();
+  const heartbeat = onProgress
+    ? setInterval(() => onProgress(Math.max(0, Math.round((Date.now() - startedAt) / 1000))), 5000)
+    : null;
+  try {
+    const nestedEntry = '_backup_db/database.sql';
+    if (await extractArchiveEntryAsync(archive, tmpDir, nestedEntry)) {
+      return join(tmpDir, nestedEntry);
+    }
 
-  const directEntry = 'database.sql';
-  if (extractArchiveEntry(archive, tmpDir, directEntry)) {
-    return join(tmpDir, directEntry);
-  }
+    const directEntry = 'database.sql';
+    if (await extractArchiveEntryAsync(archive, tmpDir, directEntry)) {
+      return join(tmpDir, directEntry);
+    }
 
-  return null;
+    return null;
+  } finally {
+    if (heartbeat) clearInterval(heartbeat);
+  }
 }
 
 async function sanitizeSqlDumpStreaming(
   source: string,
   destination: string,
-  options: { skipForeignKeys?: boolean } = {},
+  options: {
+    skipForeignKeys?: boolean;
+    onProgress?: (info: { percent: number; processedBytes: number; totalBytes: number }) => void;
+  } = {},
 ) {
   // Stream through the SQL dump, filtering out problematic lines
   const rl = createInterface({ input: createReadStream(source, { encoding: 'utf-8' }), crlfDelay: Infinity });
   const ws = createWriteStream(destination, { encoding: 'utf-8' });
   let pendingAlterTableLine: string | null = null;
+  // GB 级 SQL 流式过滤要几分钟，按已处理字节报心跳（行字符数近似字节，进度展示够用）
+  const totalBytes = statSync(source).size;
+  let processedBytes = 0;
+  let lastReportedAt = 0;
+  const reportProgress = () => {
+    if (!options.onProgress) return;
+    const now = Date.now();
+    if (now - lastReportedAt < 2000) return;
+    lastReportedAt = now;
+    const percent = totalBytes > 0 ? Math.min(99, Math.floor((processedBytes / totalBytes) * 100)) : 0;
+    options.onProgress({ percent, processedBytes, totalBytes });
+  };
 
   const DANGEROUS_SQL = [
     /^\\/, // psql meta-commands (\!, \copy, \i, etc.)
@@ -5197,6 +5438,8 @@ async function sanitizeSqlDumpStreaming(
   };
 
   for await (const line of rl) {
+    processedBytes += line.length + 1;
+    reportProgress();
     if (options.skipForeignKeys && pendingAlterTableLine !== null) {
       if (/\bFOREIGN KEY\b/.test(line)) {
         pendingAlterTableLine = null;
@@ -5560,6 +5803,7 @@ function listLeftoverRestoreBackupDirs(): string[] {
 }
 
 // 管理员确认后清理残留旧目录（见 /api/settings/backup/clear-leftover-restore-dirs）。
+// 清理=管理员确认不需要文件侧回滚，中断处理到此为止——顺带还原自动维护模式。
 export function clearLeftoverRestoreBackupDirs(): { removed: number; errors: string[] } {
   const errors: string[] = [];
   let removed = 0;
@@ -5570,6 +5814,9 @@ export function clearLeftoverRestoreBackupDirs(): { removed: number; errors: str
     } catch (err: unknown) {
       errors.push(`${dir}: ${getErrorMessage(err)}`);
     }
+  }
+  if (errors.length === 0) {
+    void releaseAutoMaintenanceAfterRestore();
   }
   return { removed, errors };
 }
@@ -5582,6 +5829,41 @@ export function isValidDurableRestoreSnapshot(path: string): boolean {
     return resolved.startsWith(root) && resolved.endsWith('.sql') && existsSync(resolved);
   } catch {
     return false;
+  }
+}
+
+// ─── 恢复期间自动维护模式 ────────────────────────────────────────────────────
+// 恢复的破坏性阶段（DROP+导入，大库几十分钟）期间站点保持在线的话，普通用户的
+// 请求会全部打到空/半空 schema 上（全站报错）。恢复开始时自动开启维护模式，
+// 结束/取消/安全回滚后自动还原；管理员手动开启的维护不受影响（不越权关闭）。
+// 标记文件放在持久的 _safety_snapshots/ 里（worker 进程写、API 进程读）：
+// 破坏性阶段被硬中断时标记留存 → 维护保持开启（半恢复态本就不该放行普通用户），
+// 由中断恢复流程（performInterruptedRestoreRecovery / 残留清理）负责还原。
+const RESTORE_AUTO_MAINTENANCE_FLAG = join(SAFETY_SNAPSHOT_DIR, '.restore_auto_maintenance');
+
+async function engageAutoMaintenanceForRestore(job: { logs?: string[] }): Promise<void> {
+  try {
+    const { getSetting, setSetting } = await import('./settings.js');
+    if (await getSetting<boolean>('maintenance_enabled')) return; // 管理员已手动开启，不越权
+    await setSetting('maintenance_enabled', true);
+    mkdirSync(SAFETY_SNAPSHOT_DIR, { recursive: true });
+    writeFileSync(RESTORE_AUTO_MAINTENANCE_FLAG, new Date().toISOString());
+    addLog(job, '已自动开启维护模式（恢复期间普通用户暂不可访问，完成后自动恢复）');
+  } catch (err: unknown) {
+    // 开不了维护不阻塞恢复——恢复本身有快照/回滚兜底，这里只是体验加固
+    log.warn({ err }, 'Failed to engage auto maintenance mode for restore');
+  }
+}
+
+async function releaseAutoMaintenanceAfterRestore(): Promise<void> {
+  try {
+    if (!existsSync(RESTORE_AUTO_MAINTENANCE_FLAG)) return;
+    rmSync(RESTORE_AUTO_MAINTENANCE_FLAG, { force: true });
+    const { setSetting } = await import('./settings.js');
+    await setSetting('maintenance_enabled', false);
+    log.info('Auto maintenance mode released after restore');
+  } catch (err: unknown) {
+    log.warn({ err }, 'Failed to release auto maintenance mode after restore');
   }
 }
 
@@ -5641,6 +5923,8 @@ export async function performInterruptedRestoreRecovery(
       };
     }
     clearRestoreInProgressMarkerBySnapshot(durableSnapshot);
+    // 数据库已回到恢复前状态，还原恢复进程自动开启的维护模式
+    await releaseAutoMaintenanceAfterRestore();
     return { ok: true, message: '已成功回滚到恢复前的数据库状态' };
   } finally {
     stopKeepAlive();
@@ -5837,7 +6121,10 @@ async function commitRestoreFilePlan(plan: RestoreFilePlan, job: RestoreJob): Pr
     updateFileProgress('正在解压所有文件目录...');
     const t = addLogStart(job, `一次性解压 ${entriesToExtract.length} 个目录（避免重复扫描备份包）...`);
 
-    await extractMultipleArchiveEntries(plan.archive, batchStageRoot, entriesToExtract);
+    await extractMultipleArchiveEntries(plan.archive, batchStageRoot, entriesToExtract, (elapsedSec) => {
+      job.message = `正在解压所有文件目录... 已用时 ${elapsedSec}s（大备份解压可能较久）`;
+      syncJob(job);
+    });
     addLogEnd(job, t, '全部目录解压完成');
 
     // Phase 2: Replace each directory one by one (fast — just filesystem moves)
@@ -6023,19 +6310,33 @@ async function _restoreArchiveDirectory(
   }
 }
 
-async function extractMultipleArchiveEntries(archive: string, destination: string, entries: string[]): Promise<void> {
+async function extractMultipleArchiveEntries(
+  archive: string,
+  destination: string,
+  entries: string[],
+  onProgress?: (elapsedSec: number) => void,
+): Promise<void> {
   if (entries.length === 0) return;
 
   return new Promise((resolve, reject) => {
     // '--' 终止选项解析：条目名即使以 - 开头也不会被 tar 当作选项（参数注入）
     const args = ['xzf', archive, '-C', destination, '--', ...entries];
+    const startedAt = Date.now();
     const proc = spawn('tar', args, { timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
+    // 单次 tar 解压全部目录是恢复文件阶段最长的黑盒（GB 级可十几分钟），报已用时防止假死
+    const heartbeat = onProgress
+      ? setInterval(() => onProgress(Math.max(0, Math.round((Date.now() - startedAt) / 1000))), 5000)
+      : null;
     let stderr = '';
     proc.stderr?.on('data', (chunk: Buffer) => {
       stderr += chunk.toString();
     });
-    proc.on('error', (err) => reject(new Error(`解压失败: ${err.message}`)));
+    proc.on('error', (err) => {
+      if (heartbeat) clearInterval(heartbeat);
+      reject(new Error(`解压失败: ${err.message}`));
+    });
     proc.on('close', (code) => {
+      if (heartbeat) clearInterval(heartbeat);
       if (code === 0) return resolve();
       if (stderr && /not found in archive|could not find/i.test(stderr)) {
         return reject(new Error(`备份包缺少部分目录: ${stderr.trim()}`));
@@ -6372,7 +6673,12 @@ async function runBackupSchedulerTick() {
 
   try {
     const jobId = startScheduledBackupJob();
+    // 启动即写日期键：当天不再重复触发。写太晚（等成功才写）有两重副作用——
+    // ① 备份运行期间的每分钟 tick 都因「未写日期」反复尝试启动（锁忙→状态被刷成
+    //   skipped，展示噪音）；② 持久性失败（磁盘满/工具缺失）当天每分钟重拉一次
+    //   完整 pg_dump+tar 的重试风暴。失败当天不再自动重试，管理员凭失败通知手动处理。
     await updateBackupPolicySettings({
+      backup_last_auto_date: localDateKey(),
       backup_last_auto_status: 'running',
       backup_last_auto_message: '自动备份正在执行',
       backup_last_auto_job_id: jobId,
@@ -6390,18 +6696,26 @@ async function runBackupSchedulerTick() {
 }
 
 // 保留策略核心分组逻辑（纯函数便于测试）：
-// 按「备份类型分组」各保留最近 keep 份，整站备份豁免清理 ——
-// 模块备份体积小、创建频繁，全局计数会把唯一的整站备份挤掉。
+// 按「备份类型分组」各保留最近 keep 份。手动创建的整站备份豁免清理（模块备份
+// 体积小、创建频繁，全局计数会把唯一的整站备份挤掉）；但定时任务产生的整站
+// 备份按保留数清理——否则自动备份每天一份 GB 级全量在本机与镜像目录无限累积。
+// 存量记录无 source 字段，按手动（豁免）处理，行为与旧版完全一致。
 // 输入需已按创建时间倒序（listBackups 的天然顺序）。
-export function selectRetentionPolicyRemovals<T extends { scope?: BackupScope }>(backups: T[], keep: number): T[] {
+export function selectRetentionPolicyRemovals<T extends { scope?: BackupScope; source?: string }>(
+  backups: T[],
+  keep: number,
+): T[] {
   if (!Number.isFinite(keep) || keep <= 0) return [];
   const counts = new Map<string, number>();
   const out: T[] = [];
   for (const backup of backups) {
     const scope = backup.scope && backup.scope !== 'full' ? backup.scope : 'full';
-    const seen = (counts.get(scope) || 0) + 1;
-    counts.set(scope, seen);
-    if (scope !== 'full' && seen > keep) out.push(backup);
+    const isScheduledFull = scope === 'full' && backup.source === 'scheduled';
+    const groupKey = isScheduledFull ? 'full:scheduled' : scope;
+    const seen = (counts.get(groupKey) || 0) + 1;
+    counts.set(groupKey, seen);
+    const exempt = scope === 'full' && !isScheduledFull;
+    if (!exempt && seen > keep) out.push(backup);
   }
   return out;
 }
@@ -6551,13 +6865,10 @@ function cleanupMirrorBackups(mirrorDir: string, keep: number, job: { logs?: str
       .filter((record): record is BackupRecord => Boolean(record))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    // 与 applyBackupRetentionPolicy 同规则：整站备份豁免，模块备份按 scope 分组各保留 keep 份
-    const counts = new Map<string, number>();
+    // 与 applyBackupRetentionPolicy 同规则：手动整站豁免，定时整站与模块备份按 keep 清理
+    const removable = new Set(selectRetentionPolicyRemovals(records, keep).map((record) => record.id));
     for (const record of records) {
-      const scope = record.scope && record.scope !== 'full' ? record.scope : 'full';
-      const seen = (counts.get(scope) || 0) + 1;
-      counts.set(scope, seen);
-      if (scope === 'full' || seen <= keep) continue;
+      if (!removable.has(record.id)) continue;
       rmSync(join(mirrorDir, `${record.id}.json`), { force: true });
       rmSync(join(mirrorDir, `${record.id}.tar.gz`), { force: true });
       addLog(job, `已清理外部镜像旧${backupScopeLabel(record.scope || 'full')}备份: ${record.name || record.id}`);
@@ -6766,11 +7077,20 @@ async function countStepModelsInDatabase(): Promise<number> {
   return await prisma.model.count({ where: completedStepWhere });
 }
 
-async function countStepModelsInSqlDump(sqlPath: string): Promise<number> {
+async function countStepModelsInSqlDump(sqlPath: string, onProgress?: (elapsedSec: number) => void): Promise<number> {
   return new Promise((resolve) => {
     let count = 0;
     const input = createReadStream(sqlPath, { encoding: 'utf-8' });
     const rl = createInterface({ input, crlfDelay: Infinity });
+    // GB 级 dump 的流式统计可能几分钟，报已用时心跳
+    const startedAt = Date.now();
+    const heartbeat = onProgress
+      ? setInterval(() => onProgress(Math.max(0, Math.round((Date.now() - startedAt) / 1000))), 5000)
+      : null;
+    const finish = (value: number) => {
+      if (heartbeat) clearInterval(heartbeat);
+      resolve(value);
+    };
 
     let inModelsCopy = false;
     let formatIndex = -1;
@@ -6806,8 +7126,8 @@ async function countStepModelsInSqlDump(sqlPath: string): Promise<number> {
       }
     });
 
-    rl.on('close', () => resolve(count));
-    input.on('error', () => resolve(0));
+    rl.on('close', () => finish(count));
+    input.on('error', () => finish(0));
   });
 }
 

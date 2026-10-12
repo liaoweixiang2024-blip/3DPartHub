@@ -37,7 +37,11 @@ import {
   pollImportSaveProgress,
   listServerBackupFiles,
   importBackupFromPath,
+  fetchInterruptedRestores,
+  recoverInterruptedRestore,
+  clearLeftoverRestoreDirs,
   type ServerBackupFile,
+  type InterruptedRestoreInfo,
   checkUpdate,
   getVersion,
   type SystemSettings,
@@ -4981,6 +4985,11 @@ function Content() {
   const [checkingBackupPolicy, setCheckingBackupPolicy] = useState(false);
   const [verifyingBackupId, setVerifyingBackupId] = useState<string | null>(null);
   const [backupList, setBackupList] = useState<BackupRecord[]>([]);
+  // 硬中断（断电/OOM/容器被杀）的恢复任务：非空时在备份页顶部渲染红色告警条，
+  // 提供一键回滚到恢复前快照 + 残留旧目录清理
+  const [interruptedRestores, setInterruptedRestores] = useState<InterruptedRestoreInfo[]>([]);
+  const [recoveringSnapshot, setRecoveringSnapshot] = useState<string | null>(null);
+  const [leftoverCleanupBusy, setLeftoverCleanupBusy] = useState(false);
   const [backupScope, setBackupScope] = useState<BackupScope>('full');
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ stage: '', percent: 0, message: '', logs: [] as string[] });
@@ -5034,6 +5043,7 @@ function Content() {
   const importActionInFlight = useRef(false);
   const verifyActionInFlight = useRef(false);
   const backupDeleteInFlight = useRef(false);
+  const backupDownloadInFlight = useRef(false);
   const policyCheckInFlight = useRef(false);
   const jobToastKeys = useRef<Set<string>>(new Set());
 
@@ -5698,6 +5708,86 @@ function Content() {
     } catch {
       // Backup list load failure — user can still use the page
     }
+    // 中断恢复检测与备份列表同生命周期刷新（初始加载/恢复完成/导入完成后都会走到这里）
+    try {
+      setInterruptedRestores(await fetchInterruptedRestores());
+    } catch {
+      // best-effort：检测失败不阻塞页面
+    }
+  }
+
+  async function loadInterruptedRestoresOnly() {
+    try {
+      setInterruptedRestores(await fetchInterruptedRestores());
+    } catch {
+      // best-effort
+    }
+  }
+
+  async function handleRecoverInterrupted(info: InterruptedRestoreInfo) {
+    if (!info.durableSnapshot || recoveringSnapshot) return;
+    const when = info.startedAt ? new Date(info.startedAt).toLocaleString() : '未知时间';
+    if (
+      !window.confirm(
+        `确认回滚数据库到 ${when} 恢复操作之前的状态？\n\n` +
+          '· 当前数据库会被重置并导入恢复前快照（大库可能需要几十分钟）\n' +
+          '· 回滚期间请勿关闭页面和服务器\n' +
+          '· 若文件目录也被中断替换过，回滚完成后请重新执行一次完整恢复以同步文件',
+      )
+    )
+      return;
+    setRecoveringSnapshot(info.durableSnapshot);
+    toast('已发起回滚，大库可能需要几十分钟，完成后此告警会自动消失', 'info', 8000);
+    try {
+      await recoverInterruptedRestore(info.durableSnapshot);
+    } catch {
+      // 代理可能掐断长连接但服务端会继续执行完成——不提示失败，靠轮询感知结果
+    }
+    // 轮询直到该快照从中断列表消失（每 10s，最长 30 分钟）
+    for (let i = 0; i < 180; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      let current: InterruptedRestoreInfo[] = [];
+      try {
+        current = await fetchInterruptedRestores();
+      } catch {
+        continue;
+      }
+      setInterruptedRestores(current);
+      if (!current.some((item) => item.durableSnapshot === info.durableSnapshot)) {
+        toast('已成功回滚到恢复前的数据库状态', 'success');
+        setRecoveringSnapshot(null);
+        loadBackupList();
+        return;
+      }
+    }
+    setRecoveringSnapshot(null);
+    toast('回滚仍在执行或耗时较长，请稍后刷新页面查看告警是否消失', 'info', 8000);
+  }
+
+  async function handleClearLeftoverDirs() {
+    if (leftoverCleanupBusy) return;
+    if (
+      !window.confirm(
+        '确认清理文件替换阶段残留的旧目录备份？\n\n' +
+          '· 这些目录是恢复被中断时自动保留的旧文件副本，清理后无法再用于文件侧恢复\n' +
+          '· 仅在「数据库已回滚/重新完整恢复成功」或「确认现状可用」后执行',
+      )
+    )
+      return;
+    setLeftoverCleanupBusy(true);
+    try {
+      const result = await clearLeftoverRestoreDirs();
+      if (result.ok) {
+        toast(result.message || `已清理 ${result.removed} 个残留目录`, 'success');
+      } else {
+        toast(result.message || '部分残留目录清理失败', 'error');
+      }
+    } catch (err: unknown) {
+      toast(errorMessage(err, '清理残留目录失败'), 'error');
+    } finally {
+      setLeftoverCleanupBusy(false);
+      loadInterruptedRestoresOnly();
+    }
   }
 
   async function loadVersion() {
@@ -5846,7 +5936,13 @@ function Content() {
   }
 
   async function handleDownloadBackup(id: string) {
+    // 防重入：大文件从点击到浏览器下载条出现可能有数秒延迟（令牌请求 + 代理缓冲），
+    // 期间页面无任何反馈，重复点击会拉起多个并行下载——第二个文件名带 (1)，
+    // 表现为「下载完又下载一遍」。
+    if (backupDownloadInFlight.current) return;
+    backupDownloadInFlight.current = true;
     try {
+      toast('已发起下载，请在浏览器下载列表查看进度', 'success');
       const { rangeSupported } = await downloadBackup(id);
       // 下载已正常发起；这是链路体检结果：代理/CDN 剥 Range 时大文件中断后会整单重下
       if (rangeSupported === false) {
@@ -5854,6 +5950,8 @@ function Content() {
       }
     } catch {
       toast('下载失败', 'error');
+    } finally {
+      backupDownloadInFlight.current = false;
     }
   }
 
@@ -7032,6 +7130,74 @@ function Content() {
                       id="backup"
                       className="scroll-mt-24 bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden"
                     >
+                      {/* 硬中断恢复告警：恢复任务在破坏性阶段被断电/OOM/容器重启打断时，
+                          数据库可能处于不完整状态，且恢复前快照已持久化——提供一键回滚入口 */}
+                      {interruptedRestores.length > 0 && (
+                        <div className="mx-4 mt-4 sm:mx-6 rounded-lg border border-error/40 bg-error-container/10 p-4 space-y-3">
+                          <div className="flex items-start gap-2">
+                            <Icon name="warning" size={18} className="text-error mt-0.5 shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-error">检测到被中断的恢复任务，数据库可能不完整</p>
+                              <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">
+                                恢复操作在数据写入阶段被强制中断（服务器重启/断电/OOM）。系统已自动保留恢复前的数据库快照，
+                                可一键回滚；普通用户在处理完成前会看到维护页。
+                              </p>
+                            </div>
+                          </div>
+                          {interruptedRestores.map((info) => (
+                            <div
+                              key={info.jobId + info.durableSnapshot}
+                              className="rounded-md border border-outline-variant/30 bg-surface/60 p-3 space-y-2"
+                            >
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-on-surface-variant">
+                                <span>
+                                  中断任务: <span className="font-mono">{info.jobId}</span>
+                                </span>
+                                {info.startedAt && <span>开始于 {new Date(info.startedAt).toLocaleString()}</span>}
+                              </div>
+                              {info.durableSnapshot ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRecoverInterrupted(info)}
+                                    disabled={Boolean(recoveringSnapshot)}
+                                    className="px-3 py-1.5 text-xs font-bold bg-error text-white rounded-md hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-1"
+                                  >
+                                    <Icon name="restore" size={13} />
+                                    {recoveringSnapshot === info.durableSnapshot
+                                      ? '回滚进行中…'
+                                      : '一键回滚到恢复前状态'}
+                                  </button>
+                                  <span className="text-xs text-on-surface-variant">
+                                    回滚会把数据库恢复到本次恢复操作之前的状态（大库可能需要几十分钟）
+                                  </span>
+                                </div>
+                              ) : (
+                                <p className="text-xs text-on-surface-variant leading-relaxed">
+                                  数据库已导入成功，仅文件目录替换阶段被中断（数据库与文件可能不一致）。
+                                  建议：重新执行一次完整恢复以同步文件；若确认现状可用，可清理下方残留旧目录。
+                                </p>
+                              )}
+                              {(info.leftoverRestoreBackupDirs?.length ?? 0) > 0 && (
+                                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-outline-variant/20">
+                                  <span className="text-xs text-on-surface-variant">
+                                    文件替换阶段残留 {info.leftoverRestoreBackupDirs!.length} 个旧目录备份
+                                    （数据库回滚/重新恢复成功后可清理）
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={handleClearLeftoverDirs}
+                                    disabled={leftoverCleanupBusy}
+                                    className="px-2.5 py-1 text-[11px] font-medium text-error border border-error/40 rounded-md hover:bg-error/10 disabled:opacity-50 transition-colors"
+                                  >
+                                    {leftoverCleanupBusy ? '清理中…' : '清理残留目录'}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       <div className="divide-y divide-outline-variant/5">
                         {/* 备份保障 + 创建备份（融合区块） */}
                         <div className="px-4 py-4 sm:px-6">

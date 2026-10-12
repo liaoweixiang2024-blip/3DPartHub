@@ -133,6 +133,9 @@ test('module backups include user-facing dependent records', () => {
     'modelVersions',
     'favorites',
     'downloads',
+    // download_events 的 FK 指向 models，TRUNCATE CASCADE 会级联清空它——
+    // 不随模块导出/回填的话，恢复模型库模块会静默抹掉下载统计
+    'downloadEvents',
     'comments',
     'shareLinks',
   ]);
@@ -223,10 +226,11 @@ test('users merge-update omits empty email/username instead of writing empty str
   assert.equal(noUsername.email, 'a@b.com');
 });
 
-test('retention policy groups by scope and never removes full backups', () => {
-  // 按创建时间倒序（listBackups 的天然顺序）：3 个整站 + 4 个用户模块 + 2 个工单模块
+test('retention policy groups by scope; manual full exempt, scheduled full cleaned by keep', () => {
+  // 按创建时间倒序（listBackups 的天然顺序）：3 个手动整站 + 3 个定时整站 + 4 个用户模块 + 2 个工单模块
   const backups = [
     { id: 'f3', scope: 'full' as const },
+    { id: 's3', scope: 'full' as const, source: 'scheduled' },
     { id: 'f2', scope: 'full' as const },
     { id: 'u4', scope: 'users' as const },
     { id: 'u3', scope: 'users' as const },
@@ -237,16 +241,35 @@ test('retention policy groups by scope and never removes full backups', () => {
     { id: 'u1', scope: 'users' as const },
   ];
 
-  // keep=2：整站全部豁免（即使有 3 个）；users 保留 u4/u3 清 u2/u1；tickets 恰好 2 个全保留
+  // keep=2：手动整站全部豁免（即使有 3 个）；定时整站保留 s3（只有 1 个）；
+  // users 保留 u4/u3 清 u2/u1；tickets 恰好 2 个全保留
   const removed = selectRetentionPolicyRemovals(backups, 2).map((b) => b.id);
-  assert.deepEqual(removed.sort(), ['u1', 'u2'], 'only overflow module backups are removed, full backups exempt');
+  assert.deepEqual(removed.sort(), ['u1', 'u2'], 'only overflow module backups are removed, manual full exempt');
 
-  // keep=1：users 清 3 个，tickets 清 1 个，整站仍全部保留
+  // 定时整站超过 keep 也要清理：4 个 scheduled full + keep=2 → 清最旧的 2 个
+  const scheduled = [
+    { id: 's4', scope: 'full' as const, source: 'scheduled' },
+    { id: 's3', scope: 'full' as const, source: 'scheduled' },
+    { id: 's2', scope: 'full' as const, source: 'scheduled' },
+    { id: 's1', scope: 'full' as const, source: 'scheduled' },
+  ];
+  const removedScheduled = selectRetentionPolicyRemovals(scheduled, 2).map((b) => b.id);
+  assert.deepEqual(removedScheduled.sort(), ['s1', 's2'], 'scheduled full backups beyond keep are removed');
+  // 手动全量与定时全量分组独立：混入手动全量不挤占定时的保留名额
+  const mixed = [...scheduled.slice(0, 2), { id: 'f1', scope: 'full' as const }, ...scheduled.slice(2)];
+  assert.deepEqual(
+    selectRetentionPolicyRemovals(mixed, 2)
+      .map((b) => b.id)
+      .sort(),
+    ['s1', 's2'],
+  );
+
+  // keep=1：users 清 3 个，tickets 清 1 个，手动整站仍全部保留
   const removedStrict = selectRetentionPolicyRemovals(backups, 1).map((b) => b.id);
   assert.equal(removedStrict.length, 4);
-  assert.equal(removedStrict.filter((id) => id.startsWith('f')).length, 0, 'full backups never removed');
+  assert.equal(removedStrict.filter((id) => id.startsWith('f')).length, 0, 'manual full backups never removed');
 
-  // 旧记录 scope=undefined 归入 full 组（保守豁免，不误删来历不明的备份）
+  // 旧记录 scope=undefined / 无 source 归入手动 full 组（保守豁免，不误删来历不明的备份）
   const legacy = [{ id: 'legacy-1' }, { id: 'legacy-2' }, { id: 'legacy-3' }];
   assert.deepEqual(selectRetentionPolicyRemovals(legacy as never, 2), []);
 

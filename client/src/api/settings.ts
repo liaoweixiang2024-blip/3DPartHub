@@ -883,11 +883,13 @@ export async function downloadBackup(id: string): Promise<{ rangeSupported: bool
         ? `/api/settings/backup/download/${encodeURIComponent(id)}/${encodeURIComponent(created.token)}`
         : '');
     if (!url) throw new Error('获取下载令牌失败');
-    // 下载前体检：GB 级备份对断点续传敏感，代理/CDN 剥 Range 会让中断后整单重下。
-    // 串行只多一个 1 字节请求的 RTT；探测失败(null)不阻塞下载。
-    const rangeSupported = await probeRangeDownloadSupport(url);
+    // 先触发下载再探测：探测（1 字节 Range 请求）串行在前会把浏览器下载条的出现
+    // 推迟一个 RTT，大文件经代理缓冲时下载条出现得更慢——期间页面零反馈，用户
+    // 以为没点上会再点一次，造成两个并行下载（表现为「下载完又下载一遍」）。
+    // 下载一旦触发即可返回，探测与下载并行，结果只用于续传预警提示。
+    const probePromise = probeRangeDownloadSupport(url).catch(() => null);
     await downloadBrowserFile(url, { preparedWindow });
-    return { rangeSupported };
+    return { rangeSupported: await probePromise };
   } catch (error) {
     cancelPreparedBrowserDownload(preparedWindow);
     throw error;
@@ -901,6 +903,37 @@ export async function renameBackup(id: string, name: string): Promise<BackupReco
 
 export async function deleteBackup(id: string): Promise<void> {
   await client.delete(`/settings/backup/delete/${id}`, { data: { confirm: id } });
+}
+
+export interface InterruptedRestoreInfo {
+  jobId: string;
+  durableSnapshot: string;
+  startedAt: string;
+  markerPath: string;
+  /** 文件替换阶段硬中断残留的 .restore_backup_* 旧目录（无 marker 也会报告） */
+  leftoverRestoreBackupDirs?: string[];
+}
+
+/** 检测被硬中断（断电/OOM/容器被杀）的恢复任务——非空说明数据库可能处于破损态，需处理 */
+export async function fetchInterruptedRestores(): Promise<InterruptedRestoreInfo[]> {
+  const res = await client.get('/settings/backup/interrupted-restores', { timeout: 30000 });
+  return unwrapApiData<{ interrupted: InterruptedRestoreInfo[] }>(res).interrupted || [];
+}
+
+/**
+ * 用恢复前持久快照一键回滚数据库。大库回滚（重置 schema + 导入快照）可能几十分钟，
+ * 代理可能在 HTTP 层掐断连接但服务端会继续执行完成——调用方失败后应轮询
+ * fetchInterruptedRestores 直到列表清空来感知完成，而不是依赖本请求返回。
+ */
+export async function recoverInterruptedRestore(durableSnapshot: string): Promise<{ ok: boolean; message: string }> {
+  const res = await client.post('/settings/backup/recover-interrupted', { durableSnapshot }, { timeout: 600000 });
+  return unwrapApiData<{ ok: boolean; message: string }>(res);
+}
+
+/** 清理文件替换阶段硬中断残留的 .restore_backup_* 旧目录（确认不需要文件侧回滚时用） */
+export async function clearLeftoverRestoreDirs(): Promise<{ ok: boolean; removed: number; message: string }> {
+  const res = await client.post('/settings/backup/clear-leftover-restore-dirs', {}, { timeout: 120000 });
+  return unwrapApiData<{ ok: boolean; removed: number; message: string }>(res);
 }
 
 export async function startRestore(id: string, force = false): Promise<string> {
