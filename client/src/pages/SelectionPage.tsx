@@ -1970,7 +1970,8 @@ export default function SelectionPage() {
                           disabled={pendingOptionKey !== null}
                           // 移动端不带 active:scale/选中放大/hover：滑动列表时 :active 会粘在落点
                           // 卡上全程缩小、抬手弹回（弹跳感）；选中确认由边框+阴影+对勾承担
-                          className={`group relative flex flex-col items-stretch rounded-xl border transition-all duration-150 ${isDesktop ? 'active:scale-[0.97]' : ''} ${
+                          // overflow-hidden：把白色图片底裁进外层圆角，否则其方角会盖住边框圆角（左上/右上看着缺角）
+                          className={`group relative flex flex-col items-stretch rounded-xl border overflow-hidden transition-all duration-150 ${isDesktop ? 'active:scale-[0.97]' : ''} ${
                             pending || selected
                               ? `border-primary-container shadow-sm ${isDesktop ? 'scale-[1.02]' : ''}`
                               : `border-outline-variant/20 bg-surface-container-low ${isDesktop ? 'hover:border-primary-container/40' : ''}`

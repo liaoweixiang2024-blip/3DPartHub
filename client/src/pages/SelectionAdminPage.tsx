@@ -455,6 +455,8 @@ function Content() {
   // 反查弹窗产品批量管理：行勾选（批量删除）+ 新增产品草稿行（默认带首行数据，改完确认创建）
   const [valueProductsSelected, setValueProductsSelected] = useState<Set<string>>(new Set());
   const [valueProductsDraft, setValueProductsDraft] = useState<ValueProductDraft | null>(null);
+  // 反查弹窗单行编辑：{ id, draft }，与新增草稿互斥（同时只开一个行内编辑）
+  const [valueProductsEdit, setValueProductsEdit] = useState<{ id: string; draft: ValueProductDraft } | null>(null);
   const [valueProductsBusy, setValueProductsBusy] = useState(false);
   const [valueDeleteConfirmOpen, setValueDeleteConfirmOpen] = useState(false);
   // 新增草稿行插在表格首行：打开时把表格滚回顶部，保证草稿行可见
@@ -525,10 +527,11 @@ function Content() {
     setBatchFieldValue('');
     setBatchFieldPickerOpen(false);
   }, [valueProductsView]);
-  // 勾选/新增草稿跟随弹窗目标重置：打开新选项值或关闭都清空
+  // 勾选/新增草稿/行内编辑跟随弹窗目标重置：打开新选项值或关闭都清空
   useEffect(() => {
     setValueProductsSelected(new Set());
     setValueProductsDraft(null);
+    setValueProductsEdit(null);
   }, [valueProductsView]);
   useEffect(() => {
     if (!productCatOpen) return;
@@ -984,9 +987,10 @@ function Content() {
       setBatchFieldBusy(false);
     }
   };
-  // ---- 反查弹窗：新增产品（草稿行默认带首行/上一行数据，改完 ✓ 确认创建）+ 批量删除勾选行 ----
+  // ---- 反查弹窗：新增产品（草稿行默认带首行/上一行数据，改完 ✓ 确认创建）+ 单行编辑 + 批量删除勾选行 ----
   const startValueProductsDraft = () => {
     if (!valueProductsView) return;
+    setValueProductsEdit(null);
     valueProductsScrollRef.current?.scrollTo({ top: 0 });
     const tpl = products.find(
       (p) => (p.specs as Record<string, string>)[valueProductsView.field] === valueProductsView.value,
@@ -1012,8 +1016,17 @@ function Content() {
       toast('请至少填写型号或名称', 'error');
       return;
     }
+    // 型号在分类内是产品身份（批量导入按 categoryId+modelNo upsert）：
+    // 草稿默认复制首行数据，未改动直接确认等于复制出同型号产品 → 拦截
+    if (modelNo && products.some((p) => (p.modelNo || '').trim() === modelNo)) {
+      toast(`型号「${modelNo}」已存在，请修改型号后再新增`, 'error');
+      return;
+    }
     // 新行必须属于当前选项值（当前字段锁定为该值，其余参数可改）
     const specs = { ...valueProductsDraft.specs, [valueProductsView.field]: valueProductsView.value };
+    // specs['型号'] 与 modelNo 镜像同步（与批量导入同规则），避免带出的旧镜像和填写的型号不一致
+    if (modelNo) specs['型号'] = modelNo;
+    else delete specs['型号'];
     setValueProductsBusy(true);
     try {
       await createProduct({
@@ -1032,6 +1045,51 @@ function Content() {
       mutateProds();
     } catch (err: unknown) {
       toast(getApiErrorMessage(err, '新增产品失败'), 'error');
+    } finally {
+      setValueProductsBusy(false);
+    }
+  };
+  // 反查弹窗「编辑」：行内修改单个产品的型号/名称/参数（含当前选项值列，可把产品挪到别的选项值下）
+  const startValueProductsEdit = (p: SelectionProduct) => {
+    setValueProductsDraft(null);
+    setValueProductsEdit({
+      id: p.id,
+      draft: {
+        modelNo: p.modelNo || '',
+        name: p.name || '',
+        specs: { ...(p.specs as Record<string, string>) },
+      },
+    });
+  };
+  const handleValueProductSave = async () => {
+    if (!valueProductsEdit || valueProductsBusy) return;
+    const modelNo = valueProductsEdit.draft.modelNo.trim();
+    const name = valueProductsEdit.draft.name.trim();
+    if (!modelNo && !name) {
+      toast('请至少填写型号或名称', 'error');
+      return;
+    }
+    // 改型号撞上分类内其他产品 → 拦截（型号是产品身份，同型号会造成批量导入 upsert 冲突）
+    if (modelNo && products.some((p) => (p.modelNo || '').trim() === modelNo && p.id !== valueProductsEdit.id)) {
+      toast(`型号「${modelNo}」已被其他产品使用，请换一个型号`, 'error');
+      return;
+    }
+    // PUT 的 specs 是整体替换：带上草稿里的全部参数列，清空的列即清除该参数
+    const specs: Record<string, string> = {};
+    for (const [k, v] of Object.entries(valueProductsEdit.draft.specs)) {
+      const t = (v ?? '').trim();
+      if (t) specs[k] = t;
+    }
+    // specs['型号'] 是 modelNo 的镜像：改了型号要同步，避免残留旧值（表格里型号只显示专用列）
+    if (modelNo) specs['型号'] = modelNo;
+    setValueProductsBusy(true);
+    try {
+      await updateProduct(valueProductsEdit.id, { name: name || modelNo, modelNo: modelNo || undefined, specs });
+      toast('产品已更新', 'success');
+      setValueProductsEdit(null);
+      mutateProds();
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, '保存失败'), 'error');
     } finally {
       setValueProductsBusy(false);
     }
@@ -1381,6 +1439,25 @@ function Content() {
     }
     return result;
   }, [activeCat, products]);
+  // 选项值卡片跟随产品数据自动同步：反查弹窗里批量修改/新增/删除产品（或改了某个产品的参数值）后，
+  // 卡片列表即时增删——角标计数本来就实时，这里同步的是卡片本身，不必退出选项设置再重新进入。
+  // 增量合并：以当前列表为基准，保留未保存的手动排序，只剔除已无产品使用的值、追加新出现的值。
+  useEffect(() => {
+    if (!optImgField) return;
+    const vals = new Set(fieldOptions[optImgField] || []);
+    const savedOrderRaw = (activeCat?.optionOrder as Record<string, string[] | string> | undefined)?.[optImgField];
+    const savedOrder = Array.isArray(savedOrderRaw) ? savedOrderRaw : [];
+    setOrderItems((prev) => {
+      // 基准：已有列表（保留手动/智能排序）；尚未初始化时（如选字段时产品还没加载完）按已保存顺序兜底
+      const base = prev.length
+        ? prev
+        : [...savedOrder.filter((v) => vals.has(v)), ...Array.from(vals).filter((v) => !savedOrder.includes(v))];
+      const kept = base.filter((v) => vals.has(v));
+      const added = Array.from(vals).filter((v) => !base.includes(v));
+      if (kept.length === base.length && added.length === 0) return prev;
+      return [...kept, ...added];
+    });
+  }, [optImgField, fieldOptions, activeCat?.optionOrder]);
   // 「字段+选项值 → 命中产品」反查索引：选项值卡片角标计数 + 反查弹窗数据源
   const productsByOptionValue = useMemo(() => {
     const map = new Map<string, SelectionProduct[]>();
@@ -3641,6 +3718,9 @@ function Content() {
           activeCat &&
           (() => {
             const fieldDef = activeCat.columns.find((c) => c.key === valueProductsView.field);
+            // specs['型号'] 是 modelNo 的镜像（批量导入会写入）：参数列跳过它，型号统一由专用列展示/编辑，
+            // 否则表格会出现两列「型号」（保存时同步镜像，见 handleValueProductCreate/Save）
+            const paramCols = activeCat.columns.filter((c) => c.key !== '型号');
             const matched =
               productsByOptionValue.get(`${valueProductsView.field}\u0000${valueProductsView.value}`) || [];
             const MAX_ROWS = 200;
@@ -3658,6 +3738,15 @@ function Content() {
               } else if (e.key === 'Escape') {
                 e.stopPropagation();
                 setValueProductsDraft(null);
+              }
+            };
+            const onEditKey = (e: React.KeyboardEvent) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void handleValueProductSave();
+              } else if (e.key === 'Escape') {
+                e.stopPropagation();
+                setValueProductsEdit(null);
               }
             };
             return (
@@ -3726,7 +3815,7 @@ function Content() {
                           </AdminTableHeadCell>
                           <AdminTableHeadCell className="whitespace-nowrap">型号</AdminTableHeadCell>
                           <AdminTableHeadCell className="whitespace-nowrap">名称</AdminTableHeadCell>
-                          {activeCat.columns.map((col) => (
+                          {paramCols.map((col) => (
                             <AdminTableHeadCell
                               key={col.key}
                               className={`whitespace-nowrap ${col.key === valueProductsView.field ? 'text-primary-container' : ''}`}
@@ -3735,6 +3824,10 @@ function Content() {
                               {col.unit ? ` (${col.unit})` : ''}
                             </AdminTableHeadCell>
                           ))}
+                          {/* 操作列 sticky 右侧固定：宽表横向滚动时 ✓/✗/编辑按钮始终可见 */}
+                          <AdminTableHeadCell className="sticky right-0 w-24 border-l border-outline-variant/12">
+                            <div className="text-center">操作</div>
+                          </AdminTableHeadCell>
                         </AdminTableHeadRow>
                       </thead>
                       <tbody>
@@ -3767,7 +3860,7 @@ function Content() {
                                 className={`${draftInputClass} w-32 sm:w-40`}
                               />
                             </AdminTableCell>
-                            {activeCat.columns.map((col) => (
+                            {paramCols.map((col) => (
                               <AdminTableCell key={col.key} className="whitespace-nowrap px-1.5 py-1.5">
                                 <input
                                   name={`draft-spec-${col.key}`}
@@ -3789,66 +3882,180 @@ function Content() {
                                 />
                               </AdminTableCell>
                             ))}
-                            <AdminTableCell className="px-2 py-1.5 text-right whitespace-nowrap">
-                              <button
-                                onClick={() => void handleValueProductCreate()}
-                                disabled={valueProductsBusy}
-                                title="确认新增（回车）"
-                                className="grid h-7 w-7 place-items-center rounded-md bg-primary-container text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
-                              >
-                                <Icon name={valueProductsBusy ? 'hourglass_empty' : 'check'} size={14} />
-                              </button>
-                              <button
-                                onClick={() => setValueProductsDraft(null)}
-                                disabled={valueProductsBusy}
-                                title="取消（Esc）"
-                                className="ml-1 grid h-7 w-7 place-items-center rounded-md border border-outline-variant/20 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-50"
-                              >
-                                <Icon name="close" size={14} />
-                              </button>
+                            <AdminTableCell className="sticky right-0 w-24 border-l border-outline-variant/12 bg-surface-container-low whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => void handleValueProductCreate()}
+                                  disabled={valueProductsBusy}
+                                  title="确认新增（回车）"
+                                  aria-label="确认新增"
+                                  className="grid h-7 w-7 place-items-center rounded-md bg-primary-container text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
+                                >
+                                  <Icon name={valueProductsBusy ? 'hourglass_empty' : 'check'} size={14} />
+                                </button>
+                                <button
+                                  onClick={() => setValueProductsDraft(null)}
+                                  disabled={valueProductsBusy}
+                                  title="取消（Esc）"
+                                  aria-label="取消新增"
+                                  className="grid h-7 w-7 place-items-center rounded-md border border-outline-variant/20 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-50"
+                                >
+                                  <Icon name="close" size={14} />
+                                </button>
+                              </div>
                             </AdminTableCell>
                           </AdminTableBodyRow>
                         )}
-                        {rows.map((p) => (
-                          <AdminTableBodyRow key={p.id} className={p.hidden ? 'opacity-50' : undefined}>
-                            <AdminTableCell className="w-12 px-3 py-2.5">
-                              <input
-                                type="checkbox"
-                                checked={valueProductsSelected.has(p.id)}
-                                onChange={() =>
-                                  setValueProductsSelected((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(p.id)) next.delete(p.id);
-                                    else next.add(p.id);
-                                    return next;
-                                  })
-                                }
-                                className="h-4 w-4 accent-primary-container"
-                                aria-label={`选择 ${p.modelNo || p.name}`}
-                              />
-                            </AdminTableCell>
-                            <AdminTableCell className="whitespace-nowrap font-medium">
-                              {p.modelNo || '—'}
-                            </AdminTableCell>
-                            <AdminTableCell muted className="max-w-48 truncate" title={p.name}>
-                              {p.name}
-                            </AdminTableCell>
-                            {activeCat.columns.map((col) => {
-                              const v = (p.specs as Record<string, string>)[col.key];
-                              return (
-                                <AdminTableCell
-                                  key={col.key}
-                                  muted={col.key !== valueProductsView.field}
-                                  className={`whitespace-nowrap ${
-                                    col.key === valueProductsView.field ? 'font-medium !text-primary-container' : ''
-                                  }`}
-                                >
-                                  {v ?? '—'}
-                                </AdminTableCell>
-                              );
-                            })}
-                          </AdminTableBodyRow>
-                        ))}
+                        {rows.map((p) => {
+                          const editing = valueProductsEdit?.id === p.id;
+                          return (
+                            <AdminTableBodyRow
+                              key={p.id}
+                              className={`group ${editing ? 'bg-primary-container/5' : ''} ${
+                                p.hidden ? 'opacity-50' : ''
+                              }`}
+                            >
+                              <AdminTableCell className="w-12 px-3 py-2.5">
+                                <input
+                                  type="checkbox"
+                                  checked={valueProductsSelected.has(p.id)}
+                                  onChange={() =>
+                                    setValueProductsSelected((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(p.id)) next.delete(p.id);
+                                      else next.add(p.id);
+                                      return next;
+                                    })
+                                  }
+                                  className="h-4 w-4 accent-primary-container"
+                                  aria-label={`选择 ${p.modelNo || p.name}`}
+                                />
+                              </AdminTableCell>
+                              {editing ? (
+                                <>
+                                  <AdminTableCell className="whitespace-nowrap px-1.5 py-1.5">
+                                    <input
+                                      name={`edit-model-no-${p.id}`}
+                                      value={valueProductsEdit.draft.modelNo}
+                                      onChange={(e) =>
+                                        setValueProductsEdit((s) =>
+                                          s ? { ...s, draft: { ...s.draft, modelNo: e.target.value } } : s,
+                                        )
+                                      }
+                                      onKeyDown={onEditKey}
+                                      autoFocus
+                                      placeholder="型号"
+                                      className={`${draftInputClass} w-24 sm:w-28`}
+                                    />
+                                  </AdminTableCell>
+                                  <AdminTableCell className="px-1.5 py-1.5">
+                                    <input
+                                      name={`edit-name-${p.id}`}
+                                      value={valueProductsEdit.draft.name}
+                                      onChange={(e) =>
+                                        setValueProductsEdit((s) =>
+                                          s ? { ...s, draft: { ...s.draft, name: e.target.value } } : s,
+                                        )
+                                      }
+                                      onKeyDown={onEditKey}
+                                      placeholder="名称"
+                                      className={`${draftInputClass} w-32 sm:w-40`}
+                                    />
+                                  </AdminTableCell>
+                                  {paramCols.map((col) => (
+                                    <AdminTableCell key={col.key} className="whitespace-nowrap px-1.5 py-1.5">
+                                      <input
+                                        name={`edit-spec-${p.id}-${col.key}`}
+                                        value={valueProductsEdit.draft.specs[col.key] ?? ''}
+                                        onChange={(e) =>
+                                          setValueProductsEdit((s) =>
+                                            s
+                                              ? {
+                                                  ...s,
+                                                  draft: {
+                                                    ...s.draft,
+                                                    specs: { ...s.draft.specs, [col.key]: e.target.value },
+                                                  },
+                                                }
+                                              : s,
+                                          )
+                                        }
+                                        onKeyDown={onEditKey}
+                                        placeholder={col.label}
+                                        className={`${draftInputClass} w-20 sm:w-24`}
+                                        title={
+                                          col.key === valueProductsView.field
+                                            ? '修改后该产品会移动到对应的选项值下'
+                                            : col.label
+                                        }
+                                      />
+                                    </AdminTableCell>
+                                  ))}
+                                </>
+                              ) : (
+                                <>
+                                  <AdminTableCell className="whitespace-nowrap font-medium">
+                                    {p.modelNo || '—'}
+                                  </AdminTableCell>
+                                  <AdminTableCell muted className="max-w-48 truncate" title={p.name}>
+                                    {p.name}
+                                  </AdminTableCell>
+                                  {paramCols.map((col) => {
+                                    const v = (p.specs as Record<string, string>)[col.key];
+                                    return (
+                                      <AdminTableCell
+                                        key={col.key}
+                                        muted={col.key !== valueProductsView.field}
+                                        className={`whitespace-nowrap ${
+                                          col.key === valueProductsView.field
+                                            ? 'font-medium !text-primary-container'
+                                            : ''
+                                        }`}
+                                      >
+                                        {v ?? '—'}
+                                      </AdminTableCell>
+                                    );
+                                  })}
+                                </>
+                              )}
+                              <AdminTableCell className="sticky right-0 w-24 border-l border-outline-variant/12 bg-surface-container-low whitespace-nowrap group-hover:bg-surface-container-high">
+                                <div className="flex items-center justify-center gap-1">
+                                  {editing ? (
+                                    <>
+                                      <button
+                                        onClick={() => void handleValueProductSave()}
+                                        disabled={valueProductsBusy}
+                                        title="确认修改（回车）"
+                                        aria-label="保存修改"
+                                        className="grid h-7 w-7 place-items-center rounded-md bg-primary-container text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
+                                      >
+                                        <Icon name={valueProductsBusy ? 'hourglass_empty' : 'check'} size={14} />
+                                      </button>
+                                      <button
+                                        onClick={() => setValueProductsEdit(null)}
+                                        disabled={valueProductsBusy}
+                                        title="取消（Esc）"
+                                        aria-label="取消编辑"
+                                        className="grid h-7 w-7 place-items-center rounded-md border border-outline-variant/20 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-50"
+                                      >
+                                        <Icon name="close" size={14} />
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      onClick={() => startValueProductsEdit(p)}
+                                      title="编辑该产品（型号/名称/参数）"
+                                      aria-label="编辑产品"
+                                      className={SELECTION_ICON_BUTTON_EDIT}
+                                    >
+                                      <Icon name="edit" size={14} />
+                                    </button>
+                                  )}
+                                </div>
+                              </AdminTableCell>
+                            </AdminTableBodyRow>
+                          );
+                        })}
                       </tbody>
                     </AdminTable>
                   </div>
@@ -3858,11 +4065,13 @@ function Content() {
                     <p className="min-w-0 flex-1 truncate text-[11px] text-on-surface-variant">
                       {valueProductsDraft
                         ? '新增行默认带首行数据，修改后点 ✓ 或回车确认；Esc 取消。'
-                        : batchFieldEditOpen
-                          ? `填值后 ✓ 应用到已勾选的 ${selectedInView.length} 个产品；Esc 或点「批量修改」收起。`
-                          : selectedInView.length > 0
-                            ? `已选 ${selectedInView.length} 个产品：批量删除、批量修改都只作用于勾选行。`
-                            : '先勾选行，再批量删除或批量修改（只作用于勾选行）；新增产品默认带首行数据。'}
+                        : valueProductsEdit
+                          ? '编辑行：修改型号/名称/参数后点 ✓ 或回车保存；Esc 取消。'
+                          : batchFieldEditOpen
+                            ? `填值后 ✓ 应用到已勾选的 ${selectedInView.length} 个产品；Esc 或点「批量修改」收起。`
+                            : selectedInView.length > 0
+                              ? `已选 ${selectedInView.length} 个产品：批量删除、批量修改都只作用于勾选行。`
+                              : '先勾选行，再批量删除或批量修改（只作用于勾选行）；行尾 ✎ 编辑单个产品；新增默认带首行数据。'}
                     </p>
                     {batchFieldEditOpen && (
                       <>
@@ -3948,6 +4157,7 @@ function Content() {
                           type="button"
                           disabled={batchFieldBusy || !batchFieldValue.trim() || selectedInView.length === 0}
                           onClick={() => void handleBatchFieldUpdate()}
+                          aria-label="应用批量修改"
                           title={
                             selectedInView.length > 0
                               ? `只应用到已勾选的 ${selectedInView.length} 个产品，操作不可撤销`
