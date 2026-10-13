@@ -91,6 +91,19 @@ const PRODUCT_MODEL_HEADERS = ['型号编号', '型号', 'modelNo', 'modelno', '
 const PRODUCT_NAME_HEADERS = ['名称', '产品名称', 'name', 'Name'];
 const SELECTION_CATEGORY_GRID_COLUMNS = 'minmax(220px,1.4fr) minmax(120px,0.8fr) 92px 92px 80px 104px';
 
+/** 反查弹窗「新增产品」草稿行：默认复制首行（上一行）数据，管理端改完确认后创建 */
+interface ValueProductDraft {
+  modelNo: string;
+  name: string;
+  specs: Record<string, string>;
+  /** 以下为静默携带的模板行属性（草稿行内不可编辑，复制保持一致） */
+  image?: string;
+  pdfUrl?: string;
+  isKit?: boolean;
+  components?: SelectionComponent[];
+  sortOrder?: number;
+}
+
 // ========== Content ==========
 // ---- 产品行 memo 组件：行内容只随自身数据/删除态变化 ----
 // 5000 个产品的分类下，表格 120 行×20+ 列全量重渲染约 340ms/次，
@@ -439,6 +452,13 @@ function Content() {
   // 批量修改列选择：自定义下拉（同 optFieldPicker 原因——原生 select 在弹窗内偶发跳动）
   const [batchFieldPickerOpen, setBatchFieldPickerOpen] = useState(false);
   const batchFieldPickerRef = useRef<HTMLDivElement | null>(null);
+  // 反查弹窗产品批量管理：行勾选（批量删除）+ 新增产品草稿行（默认带首行数据，改完确认创建）
+  const [valueProductsSelected, setValueProductsSelected] = useState<Set<string>>(new Set());
+  const [valueProductsDraft, setValueProductsDraft] = useState<ValueProductDraft | null>(null);
+  const [valueProductsBusy, setValueProductsBusy] = useState(false);
+  const [valueDeleteConfirmOpen, setValueDeleteConfirmOpen] = useState(false);
+  // 新增草稿行插在表格首行：打开时把表格滚回顶部，保证草稿行可见
+  const valueProductsScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [renameField, setRenameField] = useState<string>('');
   const [renameOldVal, setRenameOldVal] = useState<string>('');
@@ -504,6 +524,11 @@ function Content() {
     setBatchFieldKey('name');
     setBatchFieldValue('');
     setBatchFieldPickerOpen(false);
+  }, [valueProductsView]);
+  // 勾选/新增草稿跟随弹窗目标重置：打开新选项值或关闭都清空
+  useEffect(() => {
+    setValueProductsSelected(new Set());
+    setValueProductsDraft(null);
   }, [valueProductsView]);
   useEffect(() => {
     if (!productCatOpen) return;
@@ -921,7 +946,7 @@ function Content() {
       setBatchBusy(false);
     }
   };
-  // 反查弹窗「批量修改」：把当前选项值命中的全部产品的所选列统一设置为填写值
+  // 反查弹窗「批量修改」：勾选了行只应用到勾选的，未勾选应用到当前选项值命中的全部产品
   const handleBatchFieldUpdate = async () => {
     if (!valueProductsView || batchFieldBusy) return;
     const value = batchFieldValue.trim();
@@ -935,13 +960,16 @@ function Content() {
       (p) => (p.specs as Record<string, string>)[valueProductsView.field] === valueProductsView.value,
     );
     if (!matched.length) return;
+    // 批量修改只作用于勾选行：没勾选不允许改（防误改该选项值下全部产品）
+    const matchedIds = new Set(matched.map((p) => p.id));
+    const targetIds = [...valueProductsSelected].filter((id) => matchedIds.has(id));
+    if (!targetIds.length) {
+      toast('请先勾选要修改的产品', 'error');
+      return;
+    }
     setBatchFieldBusy(true);
     try {
-      const { updated } = await batchUpdateSelectionProductField(
-        matched.map((p) => p.id),
-        batchFieldKey,
-        value,
-      );
+      const { updated } = await batchUpdateSelectionProductField(targetIds, batchFieldKey, value);
       const fieldLabel =
         batchFieldKey === 'name'
           ? '名称'
@@ -954,6 +982,85 @@ function Content() {
       toast(getApiErrorMessage(err, '批量修改失败'), 'error');
     } finally {
       setBatchFieldBusy(false);
+    }
+  };
+  // ---- 反查弹窗：新增产品（草稿行默认带首行/上一行数据，改完 ✓ 确认创建）+ 批量删除勾选行 ----
+  const startValueProductsDraft = () => {
+    if (!valueProductsView) return;
+    valueProductsScrollRef.current?.scrollTo({ top: 0 });
+    const tpl = products.find(
+      (p) => (p.specs as Record<string, string>)[valueProductsView.field] === valueProductsView.value,
+    );
+    setValueProductsDraft({
+      modelNo: tpl?.modelNo || '',
+      name: tpl?.name || '',
+      specs: tpl
+        ? { ...(tpl.specs as Record<string, string>) }
+        : { [valueProductsView.field]: valueProductsView.value },
+      image: tpl?.image || undefined,
+      pdfUrl: tpl?.pdfUrl || undefined,
+      isKit: tpl?.isKit || undefined,
+      components: tpl?.components ? [...tpl.components] : undefined,
+      sortOrder: tpl?.sortOrder,
+    });
+  };
+  const handleValueProductCreate = async () => {
+    if (!valueProductsView || !activeCat || !valueProductsDraft || valueProductsBusy) return;
+    const modelNo = valueProductsDraft.modelNo.trim();
+    const name = valueProductsDraft.name.trim();
+    if (!modelNo && !name) {
+      toast('请至少填写型号或名称', 'error');
+      return;
+    }
+    // 新行必须属于当前选项值（当前字段锁定为该值，其余参数可改）
+    const specs = { ...valueProductsDraft.specs, [valueProductsView.field]: valueProductsView.value };
+    setValueProductsBusy(true);
+    try {
+      await createProduct({
+        categoryId: activeCat.id,
+        name: name || modelNo,
+        modelNo: modelNo || undefined,
+        specs,
+        image: valueProductsDraft.image,
+        pdfUrl: valueProductsDraft.pdfUrl,
+        isKit: valueProductsDraft.isKit,
+        components: valueProductsDraft.components,
+        sortOrder: valueProductsDraft.sortOrder,
+      });
+      toast(`已新增产品「${name || modelNo}」`, 'success');
+      setValueProductsDraft(null);
+      mutateProds();
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, '新增产品失败'), 'error');
+    } finally {
+      setValueProductsBusy(false);
+    }
+  };
+  const handleValueProductsDelete = async () => {
+    if (!valueProductsView || valueProductsBusy) return;
+    const ids = products
+      .filter(
+        (p) =>
+          (p.specs as Record<string, string>)[valueProductsView.field] === valueProductsView.value &&
+          valueProductsSelected.has(p.id),
+      )
+      .map((p) => p.id);
+    if (!ids.length) {
+      setValueDeleteConfirmOpen(false);
+      setValueProductsSelected(new Set());
+      return;
+    }
+    setValueProductsBusy(true);
+    try {
+      const { deleted } = await batchDeleteSelectionProducts(ids);
+      toast(`已删除 ${deleted} 个产品`, 'success');
+      setValueDeleteConfirmOpen(false);
+      setValueProductsSelected(new Set());
+      mutateProds();
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, '批量删除失败'), 'error');
+    } finally {
+      setValueProductsBusy(false);
     }
   };
   const handleBatchDeleteProducts = async () => {
@@ -2880,7 +2987,7 @@ function Content() {
           onClick={() => setShowOptImgModal(false)}
         >
           <div
-            className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] max-w-none bg-surface-container-low rounded-2xl border border-outline-variant/20 p-3 space-y-3 flex min-h-0 flex-col overflow-hidden shadow-2xl sm:relative sm:inset-auto sm:w-full sm:max-w-2xl sm:max-h-[90dvh] sm:p-5 sm:space-y-4 sm:rounded-xl"
+            className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] max-w-none bg-surface-container-low rounded-2xl border border-outline-variant/20 p-3 space-y-3 flex min-h-0 flex-col overflow-hidden shadow-2xl sm:relative sm:inset-auto sm:w-full sm:max-w-3xl sm:max-h-[90dvh] sm:p-5 sm:space-y-4 sm:rounded-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3 shrink-0 pb-2 border-b border-outline-variant/10 sm:pb-0 sm:border-b-0">
@@ -2899,112 +3006,114 @@ function Content() {
               拖拽调整顺序，点击图片上传/更换，点击编辑图标修改名称。
             </p>
 
-            {/* Field selector + view toggle */}
-            <div className="grid grid-cols-1 gap-2 shrink-0 pb-2 border-b border-outline-variant/10 sm:flex sm:flex-wrap sm:items-center sm:pb-0 sm:border-b-0">
-              <div ref={optFieldPickerRef} className="relative w-full sm:w-56 shrink-0">
-                <button
-                  type="button"
-                  name="opt-img-field"
-                  onClick={() => setOptFieldOpen((v) => !v)}
-                  className={`flex w-full items-center justify-between gap-2 rounded-lg border bg-surface-container-lowest px-3 py-2 text-left text-sm transition-colors ${
-                    optFieldOpen
-                      ? 'border-primary-container ring-2 ring-primary-container/20'
-                      : 'border-outline-variant/20 hover:border-outline-variant/40'
-                  }`}
-                >
-                  <span className={`truncate ${optImgField ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>
-                    {optImgField ? `${optImgField}（${fieldOptions[optImgField]?.length ?? 0} 个选项）` : '选择字段…'}
-                  </span>
-                  <Icon
-                    name="expand_more"
-                    size={16}
-                    className={`shrink-0 text-on-surface-variant transition-transform ${optFieldOpen ? 'rotate-180' : ''}`}
-                  />
-                </button>
-                {optFieldOpen && (
-                  <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-64 overflow-y-auto rounded-xl border border-outline-variant/20 bg-surface-container-low py-1 shadow-2xl">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        pickOptField('');
-                        setOptFieldOpen(false);
-                      }}
-                      className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                        optImgField === ''
-                          ? 'bg-primary-container/10 font-medium text-primary-container'
-                          : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-                      }`}
-                    >
-                      <span>选择字段…</span>
-                      <span className="text-[10px] text-on-surface-variant/60">
-                        {Object.keys(fieldOptions).length} 个字段
-                      </span>
-                    </button>
-                    {filteredOptionFields.map((f) => (
+            {/* Field selector + view toggle；搜索框独占下一行，输入搜索词后不再被计数徽章挤窄 */}
+            <div className="grid grid-cols-1 gap-2 shrink-0 pb-2 border-b border-outline-variant/10 sm:pb-0 sm:border-b-0">
+              <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                <div ref={optFieldPickerRef} className="relative w-full sm:w-56 shrink-0">
+                  <button
+                    type="button"
+                    name="opt-img-field"
+                    onClick={() => setOptFieldOpen((v) => !v)}
+                    className={`flex w-full items-center justify-between gap-2 rounded-lg border bg-surface-container-lowest px-3 py-2 text-left text-sm transition-colors ${
+                      optFieldOpen
+                        ? 'border-primary-container ring-2 ring-primary-container/20'
+                        : 'border-outline-variant/20 hover:border-outline-variant/40'
+                    }`}
+                  >
+                    <span className={`truncate ${optImgField ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>
+                      {optImgField ? `${optImgField}（${fieldOptions[optImgField]?.length ?? 0} 个选项）` : '选择字段…'}
+                    </span>
+                    <Icon
+                      name="expand_more"
+                      size={16}
+                      className={`shrink-0 text-on-surface-variant transition-transform ${optFieldOpen ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+                  {optFieldOpen && (
+                    <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-64 overflow-y-auto rounded-xl border border-outline-variant/20 bg-surface-container-low py-1 shadow-2xl">
                       <button
                         type="button"
-                        key={f}
                         onClick={() => {
-                          pickOptField(f);
+                          pickOptField('');
                           setOptFieldOpen(false);
                         }}
                         className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                          f === optImgField
+                          optImgField === ''
                             ? 'bg-primary-container/10 font-medium text-primary-container'
                             : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                         }`}
                       >
-                        <span className="truncate">{f}</span>
-                        <span className="shrink-0 text-[10px] tabular-nums text-on-surface-variant/60">
-                          {fieldOptions[f].length} 项
+                        <span>选择字段…</span>
+                        <span className="text-[10px] text-on-surface-variant/60">
+                          {Object.keys(fieldOptions).length} 个字段
                         </span>
                       </button>
-                    ))}
+                      {filteredOptionFields.map((f) => (
+                        <button
+                          type="button"
+                          key={f}
+                          onClick={() => {
+                            pickOptField(f);
+                            setOptFieldOpen(false);
+                          }}
+                          className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                            f === optImgField
+                              ? 'bg-primary-container/10 font-medium text-primary-container'
+                              : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                          }`}
+                        >
+                          <span className="truncate">{f}</span>
+                          <span className="shrink-0 text-[10px] tabular-nums text-on-surface-variant/60">
+                            {fieldOptions[f].length} 项
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {optImgField && (
+                  <div className="grid grid-cols-2 rounded-md border border-outline-variant/20 overflow-hidden shrink-0 sm:flex">
+                    <button
+                      onClick={() => setOptViewMode('grid')}
+                      className={`px-3 py-2 text-xs flex items-center justify-center gap-1 transition-colors ${optViewMode === 'grid' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'}`}
+                    >
+                      <Icon name="grid_view" size={14} /> 卡片
+                    </button>
+                    <button
+                      onClick={() => setOptViewMode('list')}
+                      className={`px-3 py-2 text-xs flex items-center justify-center gap-1 transition-colors ${optViewMode === 'list' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'}`}
+                    >
+                      <Icon name="view_list" size={14} /> 列表
+                    </button>
                   </div>
+                )}
+                {optImgField && orderItems.length > 0 && (
+                  <button
+                    onClick={() => {
+                      const colDef = activeCat?.columns?.find((c: ColumnDef) => c.key === optImgField);
+                      setOrderItems(smartSortOptions(orderItems, colDef?.sortType));
+                    }}
+                    className="w-full sm:w-auto px-3 py-2 text-xs font-medium bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 rounded-md hover:bg-surface-container-high hover:text-on-surface transition-colors shrink-0"
+                  >
+                    <Icon name="sort" size={13} className="mr-0.5" /> 一键排序
+                  </button>
                 )}
               </div>
               {optImgField && (
-                <SearchField
-                  inputProps={optSettingsSearchInputProps}
-                  value={optSettingsSearchInputValue}
-                  onClear={() => setOptSettingsSearch('')}
-                  placeholder="搜索选项、型号或产品名..."
-                  className="sm:flex-1"
-                />
-              )}
-              {optSettingsSearch && (
-                <span className="text-[11px] text-on-surface-variant sm:mr-auto">
-                  {optImgField
-                    ? `${filteredOrderItems.length}/${orderItems.length} 个选项`
-                    : `${filteredOptionFields.length}/${Object.keys(fieldOptions).length} 个字段`}
-                </span>
-              )}
-              {optImgField && (
-                <div className="grid grid-cols-2 rounded-md border border-outline-variant/20 overflow-hidden shrink-0 sm:flex">
-                  <button
-                    onClick={() => setOptViewMode('grid')}
-                    className={`px-3 py-2 text-xs flex items-center justify-center gap-1 transition-colors ${optViewMode === 'grid' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'}`}
-                  >
-                    <Icon name="grid_view" size={14} /> 卡片
-                  </button>
-                  <button
-                    onClick={() => setOptViewMode('list')}
-                    className={`px-3 py-2 text-xs flex items-center justify-center gap-1 transition-colors ${optViewMode === 'list' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'}`}
-                  >
-                    <Icon name="view_list" size={14} /> 列表
-                  </button>
+                <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
+                  <SearchField
+                    inputProps={optSettingsSearchInputProps}
+                    value={optSettingsSearchInputValue}
+                    onClear={() => setOptSettingsSearch('')}
+                    placeholder="搜索选项、型号或产品名..."
+                    className="w-full sm:flex-1"
+                  />
+                  {optSettingsSearch && (
+                    <span className="shrink-0 text-[11px] text-on-surface-variant">
+                      {`${filteredOrderItems.length}/${orderItems.length} 个选项`}
+                    </span>
+                  )}
                 </div>
-              )}
-              {optImgField && orderItems.length > 0 && (
-                <button
-                  onClick={() => {
-                    const colDef = activeCat?.columns?.find((c: ColumnDef) => c.key === optImgField);
-                    setOrderItems(smartSortOptions(orderItems, colDef?.sortType));
-                  }}
-                  className="w-full sm:w-auto px-3 py-2 text-xs font-medium bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 rounded-md hover:bg-surface-container-high hover:text-on-surface transition-colors shrink-0"
-                >
-                  <Icon name="sort" size={13} className="mr-0.5" /> 一键排序
-                </button>
               )}
             </div>
 
@@ -3241,6 +3350,19 @@ function Content() {
         description={`确定删除已选的 ${selectedProdIds.size} 个产品吗？删除后不可恢复。`}
         confirmLabel={batchBusy ? '删除中...' : '确认删除'}
         confirmDisabled={batchBusy}
+      />
+
+      {/* 选项值反查弹窗：批量删除勾选产品确认 */}
+      <ConfirmDialog
+        open={valueDeleteConfirmOpen}
+        onClose={() => {
+          if (!valueProductsBusy) setValueDeleteConfirmOpen(false);
+        }}
+        onConfirm={() => void handleValueProductsDelete()}
+        title="删除所选产品"
+        description={`确定删除已选的 ${valueProductsSelected.size} 个产品吗？删除后不可恢复。`}
+        confirmLabel={valueProductsBusy ? '删除中...' : '确认删除'}
+        confirmDisabled={valueProductsBusy}
       />
 
       {/* ===== Single Option Upload Dialog ===== */}
@@ -3523,6 +3645,21 @@ function Content() {
               productsByOptionValue.get(`${valueProductsView.field}\u0000${valueProductsView.value}`) || [];
             const MAX_ROWS = 200;
             const rows = matched.slice(0, MAX_ROWS);
+            // 勾选只统计当前选项值命中的行（防关闭后残留或跨值误删）
+            const selectedInView = rows.filter((r) => valueProductsSelected.has(r.id));
+            const allInViewSelected = rows.length > 0 && selectedInView.length === rows.length;
+            // 新增草稿行内联输入框（型号/名称/各参数列共用）
+            const draftInputClass =
+              'h-7 w-full min-w-0 rounded border border-outline-variant/30 bg-surface-container-lowest px-1.5 text-xs text-on-surface outline-none transition-colors hover:border-outline-variant/50 focus:border-primary-container';
+            const onDraftKey = (e: React.KeyboardEvent) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void handleValueProductCreate();
+              } else if (e.key === 'Escape') {
+                e.stopPropagation();
+                setValueProductsDraft(null);
+              }
+            };
             return (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -3568,11 +3705,25 @@ function Content() {
                   {/* 表格：页面产品表格同款 AdminTable 组件（粘性表头/悬停行高亮/隐藏行置灰） */}
                   <div
                     // 只用 overflow-auto：面板类自带 overflow-hidden 会压掉横向滚动，宽表会被左右裁切
+                    ref={valueProductsScrollRef}
                     className="min-h-0 flex-1 overflow-auto custom-scrollbar"
                   >
                     <AdminTable>
                       <thead className={ADMIN_TABLE_HEAD_CLASS}>
                         <AdminTableHeadRow>
+                          <AdminTableHeadCell className="w-12 px-3">
+                            <input
+                              type="checkbox"
+                              checked={allInViewSelected}
+                              onChange={() =>
+                                setValueProductsSelected(allInViewSelected ? new Set() : new Set(rows.map((r) => r.id)))
+                              }
+                              disabled={rows.length === 0}
+                              className="h-4 w-4 accent-primary-container"
+                              aria-label="全选该选项值的产品"
+                              title={`全选/清选列表中的 ${rows.length} 个产品（仅当前显示的行）`}
+                            />
+                          </AdminTableHeadCell>
                           <AdminTableHeadCell className="whitespace-nowrap">型号</AdminTableHeadCell>
                           <AdminTableHeadCell className="whitespace-nowrap">名称</AdminTableHeadCell>
                           {activeCat.columns.map((col) => (
@@ -3587,8 +3738,95 @@ function Content() {
                         </AdminTableHeadRow>
                       </thead>
                       <tbody>
+                        {/* 新增产品草稿行：默认带首行（上一行）数据，改完 ✓ 或回车创建，Esc 取消 */}
+                        {valueProductsDraft && (
+                          <AdminTableBodyRow className="bg-primary-container/5">
+                            <AdminTableCell className="w-12 px-3 text-center text-primary-container">
+                              <Icon name="add_circle" size={16} />
+                            </AdminTableCell>
+                            <AdminTableCell className="whitespace-nowrap px-1.5 py-1.5">
+                              <input
+                                name="draft-model-no"
+                                value={valueProductsDraft.modelNo}
+                                onChange={(e) =>
+                                  setValueProductsDraft((d) => (d ? { ...d, modelNo: e.target.value } : d))
+                                }
+                                onKeyDown={onDraftKey}
+                                autoFocus
+                                placeholder="型号"
+                                className={`${draftInputClass} w-24 sm:w-28`}
+                              />
+                            </AdminTableCell>
+                            <AdminTableCell className="px-1.5 py-1.5">
+                              <input
+                                name="draft-name"
+                                value={valueProductsDraft.name}
+                                onChange={(e) => setValueProductsDraft((d) => (d ? { ...d, name: e.target.value } : d))}
+                                onKeyDown={onDraftKey}
+                                placeholder="名称"
+                                className={`${draftInputClass} w-32 sm:w-40`}
+                              />
+                            </AdminTableCell>
+                            {activeCat.columns.map((col) => (
+                              <AdminTableCell key={col.key} className="whitespace-nowrap px-1.5 py-1.5">
+                                <input
+                                  name={`draft-spec-${col.key}`}
+                                  value={valueProductsDraft.specs[col.key] ?? ''}
+                                  onChange={(e) =>
+                                    setValueProductsDraft((d) =>
+                                      d ? { ...d, specs: { ...d.specs, [col.key]: e.target.value } } : d,
+                                    )
+                                  }
+                                  onKeyDown={onDraftKey}
+                                  disabled={col.key === valueProductsView.field}
+                                  placeholder={col.label}
+                                  className={`${draftInputClass} w-20 sm:w-24 disabled:opacity-70`}
+                                  title={
+                                    col.key === valueProductsView.field
+                                      ? `当前选项值锁定为「${valueProductsView.value}」`
+                                      : col.label
+                                  }
+                                />
+                              </AdminTableCell>
+                            ))}
+                            <AdminTableCell className="px-2 py-1.5 text-right whitespace-nowrap">
+                              <button
+                                onClick={() => void handleValueProductCreate()}
+                                disabled={valueProductsBusy}
+                                title="确认新增（回车）"
+                                className="grid h-7 w-7 place-items-center rounded-md bg-primary-container text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
+                              >
+                                <Icon name={valueProductsBusy ? 'hourglass_empty' : 'check'} size={14} />
+                              </button>
+                              <button
+                                onClick={() => setValueProductsDraft(null)}
+                                disabled={valueProductsBusy}
+                                title="取消（Esc）"
+                                className="ml-1 grid h-7 w-7 place-items-center rounded-md border border-outline-variant/20 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-50"
+                              >
+                                <Icon name="close" size={14} />
+                              </button>
+                            </AdminTableCell>
+                          </AdminTableBodyRow>
+                        )}
                         {rows.map((p) => (
                           <AdminTableBodyRow key={p.id} className={p.hidden ? 'opacity-50' : undefined}>
+                            <AdminTableCell className="w-12 px-3 py-2.5">
+                              <input
+                                type="checkbox"
+                                checked={valueProductsSelected.has(p.id)}
+                                onChange={() =>
+                                  setValueProductsSelected((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(p.id)) next.delete(p.id);
+                                    else next.add(p.id);
+                                    return next;
+                                  })
+                                }
+                                className="h-4 w-4 accent-primary-container"
+                                aria-label={`选择 ${p.modelNo || p.name}`}
+                              />
+                            </AdminTableCell>
                             <AdminTableCell className="whitespace-nowrap font-medium">
                               {p.modelNo || '—'}
                             </AdminTableCell>
@@ -3618,9 +3856,13 @@ function Content() {
                       展开时小号下拉+输入框插在「批量修改」按钮左侧，最左侧提示文字与按钮都保留不遮挡 */}
                   <div className="flex shrink-0 flex-nowrap items-center gap-1.5 border-t border-outline-variant/10 bg-surface-container-low px-3 py-2 sm:gap-2 sm:px-5">
                     <p className="min-w-0 flex-1 truncate text-[11px] text-on-surface-variant">
-                      {batchFieldEditOpen
-                        ? `填值后 ✓ 应用到该选项值的 ${matched.length} 个产品；Esc 或点「批量修改」收起。`
-                        : '名称不统一？可批量把该选项值下全部产品的名称或参数列设置为同一值。'}
+                      {valueProductsDraft
+                        ? '新增行默认带首行数据，修改后点 ✓ 或回车确认；Esc 取消。'
+                        : batchFieldEditOpen
+                          ? `填值后 ✓ 应用到已勾选的 ${selectedInView.length} 个产品；Esc 或点「批量修改」收起。`
+                          : selectedInView.length > 0
+                            ? `已选 ${selectedInView.length} 个产品：批量删除、批量修改都只作用于勾选行。`
+                            : '先勾选行，再批量删除或批量修改（只作用于勾选行）；新增产品默认带首行数据。'}
                     </p>
                     {batchFieldEditOpen && (
                       <>
@@ -3704,18 +3946,49 @@ function Content() {
                         />
                         <button
                           type="button"
-                          disabled={batchFieldBusy || !batchFieldValue.trim()}
+                          disabled={batchFieldBusy || !batchFieldValue.trim() || selectedInView.length === 0}
                           onClick={() => void handleBatchFieldUpdate()}
-                          title={`应用到该选项值命中的 ${matched.length} 个产品（含隐藏产品），操作不可撤销`}
+                          title={
+                            selectedInView.length > 0
+                              ? `只应用到已勾选的 ${selectedInView.length} 个产品，操作不可撤销`
+                              : '请先勾选要修改的产品'
+                          }
                           className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-outline-variant/20 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-40"
                         >
                           <Icon name={batchFieldBusy ? 'hourglass_empty' : 'check'} size={15} />
                         </button>
                       </>
                     )}
+                    {/* 批量修改展开时隐藏新增/删除按钮，避免底部工具条在窄屏溢出 */}
+                    {!batchFieldEditOpen && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={valueProductsBusy}
+                          onClick={() => (valueProductsDraft ? setValueProductsDraft(null) : startValueProductsDraft())}
+                          className={`flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium transition-colors ${
+                            valueProductsDraft
+                              ? 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high'
+                              : 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface disabled:opacity-40'
+                          }`}
+                        >
+                          <Icon name={valueProductsDraft ? 'close' : 'add'} size={13} />
+                          {valueProductsDraft ? '取消新增' : '新增产品'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={selectedInView.length === 0 || valueProductsBusy}
+                          onClick={() => setValueDeleteConfirmOpen(true)}
+                          className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-outline-variant/20 px-2.5 text-xs font-medium text-on-surface-variant transition-colors hover:border-error/40 hover:bg-surface-container-high hover:text-error disabled:opacity-40 disabled:hover:border-outline-variant/20 disabled:hover:bg-transparent disabled:hover:text-on-surface-variant"
+                        >
+                          <Icon name="delete" size={13} />
+                          删除所选{selectedInView.length > 0 ? ` (${selectedInView.length})` : ''}
+                        </button>
+                      </>
+                    )}
                     <button
                       type="button"
-                      disabled={!batchFieldEditOpen && matched.length === 0}
+                      disabled={!batchFieldEditOpen && selectedInView.length === 0}
                       onClick={() => {
                         if (batchFieldEditOpen) {
                           setBatchFieldEditOpen(false);
