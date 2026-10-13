@@ -967,9 +967,11 @@ export default function SelectionPage() {
     const reveal = (attempt: number) => {
       /* 用户刚滚动过先不抢滚动，但不能就此放弃：滚轮/触控板惯性会持续几百毫秒地
          续期时间戳，「滚到最后一项顺手点击」的揭示滚动曾被惯性事件直接吞掉
-         （选完最后一项结果偶发不往上滚）。改为稍后重试，惯性结束就能滚到位。 */
+         （选完最后一项结果偶发不往上滚）。此前只重试 4 次（约 1.3 秒）就放弃，
+         步骤多的分类（如全铜快插接头）点最后一项前往往刚滚过，结果就再也不往上
+         滚了——重试窗口放宽到约 4 秒，惯性结束必能滚到位。 */
       if (Date.now() - lastUserScrollAtRef.current < 260) {
-        if (attempt < 4) resultRevealTimerRef.current = setTimeout(() => reveal(attempt + 1), 320);
+        if (attempt < 12) resultRevealTimerRef.current = setTimeout(() => reveal(attempt + 1), 320);
         return;
       }
       const el = resultRef.current;
@@ -979,9 +981,20 @@ export default function SelectionPage() {
       if (container) {
         const cRect = container.getBoundingClientRect();
         const eRect = el.getBoundingClientRect();
-        // 结果顶部已在视口上半区才视为「用户自己滚到/看到了」——刚探进底沿不算
-        if (eRect.top < cRect.top + cRect.height / 2) return;
-        const target = eRect.top - cRect.top + container.scrollTop - stickyHeaderOffset(container) - 18;
+        const offset = stickyHeaderOffset(container);
+        // 结果已完整可见（顶部没被吸顶头盖住、底部没出容器下沿）才视为「用户自己
+        // 滚到/看到了」。此前只看「顶部在上半区」就跳过——结果比剩余视口高一点时
+        // 底部被裁掉一截也不滚，短分辨率下看不全选型结果。
+        if (eRect.top >= cRect.top + offset - 4 && eRect.bottom <= cRect.bottom + 4) return;
+        const fitsViewport = eRect.height < cRect.height - offset - 8;
+        let target: number;
+        if (fitsViewport && eRect.top >= cRect.top + offset - 4) {
+          // 顶部已在视口内、只是底部被裁掉一点：最小滚动，只把底部补进视野
+          target = container.scrollTop + (eRect.bottom - cRect.bottom) + 8;
+        } else {
+          // 结果还在下半区 / 比视口还高：顶对齐（比视口高时只能露出开头）
+          target = eRect.top - cRect.top + container.scrollTop - offset - 18;
+        }
         container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
       } else {
         wizardWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
