@@ -114,6 +114,8 @@ export interface SelectionSearchResult {
         groupId: string | null;
         groupName: string | null;
         groupIcon: string | null;
+        /** v5.7.0 起返回（缓存 v2）：全局搜索列表页渲染各产品自己分类的参数列 */
+        columns?: ColumnDef[];
       };
     }
   >;

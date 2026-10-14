@@ -168,7 +168,8 @@ export function createSelectionPublicRouter() {
       const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size) || 20));
       const { selectionEnableMatch } = await getBusinessConfig();
 
-      const cacheKey = `cache:selections:search:${cacheKeyPart(search)}:${page}:${pageSize}`;
+      // v2：payload 增加分类 columns（旧 TTL 缓存无该字段，bump 版本一次性刷新）
+      const cacheKey = `cache:selections:search:v2:${cacheKeyPart(search)}:${page}:${pageSize}`;
       const { value: result } = await cacheGetOrSet(cacheKey, await selectionCacheTtl(), async () => {
         // 隐藏产品不出现在全局搜索；隐藏分类下的产品一并排除
         const where: Prisma.SelectionProductWhereInput = {
@@ -197,6 +198,8 @@ export function createSelectionPublicRouter() {
                   groupId: true,
                   groupName: true,
                   groupIcon: true,
+                  // 全局搜索列表页每个产品要渲染自己分类的参数列（结果跨分类）
+                  columns: true,
                 },
               },
             },

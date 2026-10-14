@@ -25,6 +25,8 @@ export function ResultCard({
   onToggleKit,
   navigate,
   isMobile,
+  categoryName,
+  onCategoryClick,
 }: {
   product: SelectionProduct;
   columns: ColumnDef[];
@@ -40,6 +42,11 @@ export function ResultCard({
   onToggleKit: (id: string) => void;
   navigate: ReturnType<typeof useNavigate>;
   isMobile: boolean;
+  /** 卡片右上角的所属分类名：仅全站搜索列表需要（同型号可能出现在多个分类），
+      向导内的结果都属同一分类，不传即不渲染 */
+  categoryName?: string | null;
+  /** 提供时分类可点击（如进入该分类的选型向导） */
+  onCategoryClick?: () => void;
 }) {
   const expanded = expandedKits.has(product.id);
   const { t } = useTranslation();
@@ -344,6 +351,20 @@ export function ResultCard({
           <Icon name="support_agent" size={14} />
           <span>{t('selectionResult.support')}</span>
         </button>
+        {categoryName && onCategoryClick ? (
+          /* 所属分类：纯图标小按钮（分类名文字太长，悬停 title / 无障碍 aria 展示），
+             点击进该分类的选型向导。仅全站搜索列表传；向导内不渲染 */
+          <button
+            type="button"
+            onClick={onCategoryClick}
+            data-category-badge
+            title={categoryName}
+            aria-label={categoryName}
+            className={`inline-flex items-center justify-center rounded-lg border border-outline-variant/30 px-2.5 py-1 text-on-surface-variant hover:bg-surface-container-high/50 md:py-1.5 ${selectionPress}`}
+          >
+            <Icon name="source" size={14} />
+          </button>
+        ) : null}
       </div>
 
       {/* 画册放大弹窗（portal 到 body + 图片缩放平移都在组件内）：卡片在选型页的
