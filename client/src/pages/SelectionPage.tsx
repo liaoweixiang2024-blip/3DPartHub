@@ -314,19 +314,30 @@ export default function SelectionPage() {
   /* 列表条目 key（push 时记录）+ 退出时最后搜索词：pop 回列表条目 = 恢复列表 */
   const listEntryKeyRef = useRef<string>('');
   const lastListQueryRef = useRef<string | null>(null);
+  /* 列表离开时的滚动位置（点标签进向导前保存）：pop 恢复列表后写回，
+     浏览器/边缘滑返回能落回点进去的位置而不是从头翻起。进入列表
+     （enterGlobalList）时清空——全新进入不消费旧位置 */
+  const listScrollRestoreRef = useRef<number | null>(null);
+  /* 进入列表时的 groupId（进入来源）：列表会话里点标签（goToListCategory）会把
+     groupId 改成标签所属大类；pop 恢复列表与「返回」退出都要还原到进入来源，
+     否则退出落在大类子页、标题带着与本场搜索无关的大类名 */
+  const listOriginGroupIdRef = useRef<string | null>(null);
   const prevLocationKeyRef = useRef(location.key);
   /* 下拉/内联「查看全部」→ 全站搜索列表态（词带入列表 hook，debounce 后自然触发请求）；
-     退出 = 回到进入前的大类/落地页（groupId/slug 未动） */
+     退出 = 回到进入前的大类/落地页（groupId 以进入来源为准，见 listOriginGroupIdRef） */
   const enterGlobalList = useCallback(
     (query: string) => {
       globalList.setValue(query);
       setGlobalListSearch(query);
       setMobileSearchOpen(false);
+      /* 全新进入列表：不消费上一次离开时保存的滚动位置 */
+      listScrollRestoreRef.current = null;
+      listOriginGroupIdRef.current = groupId;
       // 列表占据当前历史条目（replace 同 URL）：进向导时 push 新条目，浏览器返回
       // 即 pop 回列表条目；返回链不插入无效的同 URL 跳转
       navigate(`${location.pathname}${location.search}`, { replace: true });
     },
-    [globalList.setValue, location.pathname, location.search, navigate],
+    [globalList.setValue, groupId, location.pathname, location.search, navigate],
   );
   /* 退出列表态的唯一出口：先记住词（浏览器返回 pop 回列表条目时恢复用）再清
      state。列表/向导各自 push 同 URL 历史条目（地址栏不变），pop 回列表条目
@@ -350,9 +361,14 @@ export default function SelectionPage() {
     rememberListQuery();
     if (globalListStateRef.current.search !== null) {
       navigate(`${locationRef.current.pathname}${locationRef.current.search}`, { replace: true });
+      /* 还原进入来源的大类（列表里点过标签的话 groupId 已被改成标签所属大类）。
+         必须框在列表态内：clearGlobalList 还被 goToGroupCategories（✗ 回路，
+         自己手动还原来源后调用）和 resetCurrentCategory（向导内）复用，
+         无条件执行会拿旧 origin 覆盖它们的 groupId */
+      setGroupId(listOriginGroupIdRef.current);
     }
     setGlobalListSearch(null);
-  }, [navigate, rememberListQuery]);
+  }, [navigate, rememberListQuery, setGroupId]);
   const exitGlobalList = useCallback(() => clearGlobalList(), [clearGlobalList]);
   useEffect(() => {
     /* 在列表态时记录当前历史条目 key；浏览器 pop 回该条目且已不在列表态 → 恢复
@@ -376,6 +392,9 @@ export default function SelectionPage() {
       setAutoSelectedFields(new Set());
       setSearchDraft('');
       setExpandedKits(new Set());
+      /* groupId 一并还原进入来源（pop 前的向导来自标签直达，groupId 是标签
+         所属大类）；列表标题虽不带大类，但随后的「返回」退出要落回来源页 */
+      setGroupId(listOriginGroupIdRef.current);
       setGlobalListSearch(query);
     }
   }, [globalListSearch, location.key, setSearchDraft]);
@@ -1246,6 +1265,10 @@ export default function SelectionPage() {
          随后退列表（存词 + 清 state，不导航）：渲染时 key 已是新条目 ≠ 列表条目，
          恢复条件不成立。浏览器返回 pop 回列表条目 → 恢复列表 */
       navigate(`${location.pathname}${location.search}`, { replace: false });
+      /* 离开列表前的滚动位置（向导复用同一滚动容器，先存后跳）；pop 恢复列表后
+         由恢复 effect 写回，返回即落回点进去的位置 */
+      const leaveScrollContainer = scrollContainerRef.current || mobileMainRef.current;
+      if (leaveScrollContainer) listScrollRestoreRef.current = leaveScrollContainer.scrollTop;
       rememberListQuery();
       setGlobalListSearch(null);
       pickSub(item.category.slug);
@@ -2578,8 +2601,10 @@ export default function SelectionPage() {
   /* ── 全站搜索列表（「查看全部」）：向导搜索列表同款卡片栈，结果跨全部分类，
      每张卡渲染自己分类的参数列；询价条/询价车与向导共用 ── */
   const globalSearchListContent = (
-    /* 标题/计数/返回已上提工具栏左侧（toolbarSummary），列表区直接从状态/卡片开始 */
-    <div className="px-0 md:px-6 py-4 md:py-6">
+    /* 标题/计数/返回已上提工具栏左侧（toolbarSummary），列表区直接从状态/卡片开始。
+       移动端顶部 padding 归零 + 内容区 -mt 吃掉工具卡间距（见 contentClassName）：
+       工具卡（搜索框+计数）到首张产品卡 = 产品卡之间的 space-y-3（12px） */
+    <div className="px-0 pb-4 pt-0 md:px-6 md:py-6">
       {/* 防抖等待期 + query 提交帧间隙（词已变、响应未落地）都算加载：
           否则会先闪一帧「没有匹配的产品」再转圈出列表 */}
       {globalList.loading || (globalList.draftValue && !globalList.settled) ? (
@@ -2846,55 +2871,6 @@ export default function SelectionPage() {
     !isDesktop && inquiryCart.items.length > 0 && !mobileSearchTakeover ? (
       <div aria-hidden className="h-14 shrink-0" />
     ) : null;
-
-  /* 全页搜索底部操作条：询价条同款页面级固定条，但 bottom **不追软键盘**
-     （不加 --visual-viewport-bottom）。面板进入即聚焦弹键盘，iOS 上该变量
-     会被写成键盘高度把整条顶到屏幕中间大跳动；钉死在布局视口底部后键盘
-     盖住它即可（与底部导航键盘弹出时滑出屏幕一致），收起键盘自然复见。
-     计数占左侧（翻页小转圈出现只在计数区截断，右侧按钮纹丝不动）；
-     「查看全部 / 关闭搜索」幽灵样式按钮居右 */
-  const mobileSearchBottomBar = mobileSearchTakeover ? (
-    <div
-      className="fixed inset-x-0 z-[70] flex items-center gap-1.5 border-t border-outline-variant/12 bg-surface-container-high px-3 py-1 shadow-[0_-6px_18px_rgba(15,23,42,0.12)]"
-      style={{
-        bottom: `calc(${hideMobileBottomNav ? '0px' : '3.5rem'} + env(safe-area-inset-bottom, 0px))`,
-      }}
-    >
-      <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-on-surface-variant">
-        <span className="truncate tabular-nums">
-          {mobileSearch.loading
-            ? t('selectionPage.globalSearch.loading')
-            : mobileSearch.total > 0
-              ? t('selectionPage.globalSearch.total', { total: mobileSearch.total.toLocaleString() })
-              : t('selectionPage.globalSearch.emptyList')}
-        </span>
-        {mobileSearch.loadingMore ? (
-          <Icon name="refresh" size={13} className="animate-spin text-current motion-reduce:animate-none" />
-        ) : null}
-      </span>
-      {mobileSearch.query && mobileSearch.total > 0 && !mobileSearch.loading ? (
-        /* 「查看全部」：无按钮底色，保留主题色文字作为主操作提示 */
-        <button
-          type="button"
-          onClick={() => enterGlobalList(mobileSearch.query)}
-          className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-semibold text-primary-container ${selectionPress}`}
-        >
-          <Icon name="open_in_full" size={11} />
-          {t('selectionPage.globalSearch.viewAll')}
-        </button>
-      ) : null}
-      {/* 「关闭搜索」：幽灵样式（无底色/描边） */}
-      <button
-        type="button"
-        onClick={closeMobileSearch}
-        className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-medium text-on-surface-variant hover:text-on-surface ${selectionPress}`}
-      >
-        <Icon name="close" size={13} />
-        {t('selectionPage.globalSearch.close')}
-      </button>
-    </div>
-  ) : null;
-  const mobileSearchBarSpacer = mobileSearchTakeover ? <div aria-hidden className="h-10 shrink-0" /> : null;
 
   const shellTitle = (
     <span className="inline-flex min-w-0 max-w-full items-center gap-1 md:gap-1.5">
@@ -3253,14 +3229,16 @@ export default function SelectionPage() {
   /* 全局搜索文案（组件保持纯净由这里传翻译值） */
   const globalSearchLabels = useMemo<GlobalSearchLabels>(
     () => ({
+      close: t('selectionPage.globalSearch.close'),
       empty: t('selectionPage.globalSearch.empty'),
+      emptyList: t('selectionPage.globalSearch.emptyList'),
       error: t('selectionPage.globalSearch.error'),
       listLabel: t('selectionPage.globalSearch.listLabel'),
       loadMore: t('selectionPage.globalSearch.loadMore'),
       loading: t('selectionPage.globalSearch.loading'),
       retry: t('selectionPage.globalSearch.retry'),
       viewAll: t('selectionPage.globalSearch.viewAll'),
-      formatTotal: (total: number) => t('selectionPage.globalSearch.total', { total }),
+      formatTotal: (total: number | string) => t('selectionPage.globalSearch.total', { total }),
     }),
     [t],
   );
@@ -3486,6 +3464,21 @@ export default function SelectionPage() {
     scrollContainerRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     mobileMainRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [isDesktop, selectionPhaseKey]);
+  /* pop 恢复列表后的滚动位置写回：items 在列表 hook 里未被清，渲染即有内容高度；
+     双 rAF 等布局落定再写（clamp 防图片加载中高度不足过冲），只消费一次。
+     全新进入（enterGlobalList）已把保存值清空，此 effect 天然跳过 */
+  useEffect(() => {
+    if (globalListSearch === null || listScrollRestoreRef.current == null) return;
+    const saved = listScrollRestoreRef.current;
+    listScrollRestoreRef.current = null;
+    const el = scrollContainerRef.current || mobileMainRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.scrollTop = Math.min(saved, el.scrollHeight - el.clientHeight);
+      });
+    });
+  }, [globalListSearch]);
 
   const phaseMotionProps = prefersReducedMotion
     ? { initial: false as const }
@@ -3517,13 +3510,22 @@ export default function SelectionPage() {
       className={mobileSearchTakeover ? 'flex min-h-0 min-w-0 flex-1 flex-col' : 'min-w-0'}
     >
       {mobileSearchTakeover ? (
-        /* 全页搜索模式：搜索行 + 结果 + 底部操作条（共 N / 查看全部 / 关闭搜索）
-           同属一张卡片，钉在标题下方与页面底之间（flex 链给足高度，结果区内部
-           滚动、滚到底自动翻页；分类网格/恢复横幅让位） */
+        /* 全页搜索模式：搜索行 + 计数/操作行（共 N / 查看全部 / 关闭搜索，搜索框
+           正下方常驻）+ 结果区同属一张卡片，与「查看全部」列表页同构（flex 链
+           给足高度，结果区内部滚动、滚到底自动翻页；分类网格/恢复横幅让位） */
         <GlobalSearchMobilePanel
           s={mobileSearch}
           labels={globalSearchLabels}
           placeholder={t('selectionPage.globalSearch.placeholder')}
+          /* 查看全部 = 离开面板（词已按值传给列表 hook）：顺手清本实例的词，
+             否则返回首页再开面板还是旧词旧结果（与关闭搜索/选中行的清词一致；
+             清词放调用点而非 enterGlobalList——mobileSearch 声明在其后，
+             进 deps 会 TDZ，且桌面下拉本就不该清它） */
+          onViewAll={(query) => {
+            mobileSearch.setValue('');
+            enterGlobalList(query);
+          }}
+          onClose={closeMobileSearch}
         />
       ) : (
         <>
@@ -3652,7 +3654,16 @@ export default function SelectionPage() {
                min-h-full 又垫了底——不强制压掉它们，面板会被内容撑破 */
             mobileSearchTakeover ? 'flex-1 !shrink !min-h-0' : ''
           }`}
-          contentClassName={`flex flex-col ${mobileSearchTakeover ? 'min-h-0 flex-1 -mt-[1.125rem]' : ''}`}
+          contentClassName={`flex flex-col ${
+            mobileSearchTakeover
+              ? 'min-h-0 flex-1 -mt-[1.125rem]'
+              : /* 全站搜索列表（移动端）：内容区上提吃掉工具卡与内容区的叠层间距，
+                   让工具卡（搜索框+计数）到首张产品卡 = 产品卡之间的 12px
+                   （1.1875rem = 18px 间距 + 1px 内容卡上边框）；桌面布局不动 */
+                !isDesktop && phase === 'search'
+                ? '-mt-[1.1875rem]'
+                : ''
+          }`}
         >
           <AdminContentPanel
             className={`flex flex-col overflow-visible ${
@@ -3666,9 +3677,7 @@ export default function SelectionPage() {
           >
             {contentBody}
             {mobileActionBarSpacer}
-            {mobileSearchBarSpacer}
             {actionBar}
-            {mobileSearchBottomBar}
           </AdminContentPanel>
         </AdminManagementPage>
 

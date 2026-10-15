@@ -21,14 +21,16 @@ import Icon from '../shared/Icon';
 export type GlobalSearchItem = SelectionSearchResult['items'][number];
 
 export interface GlobalSearchLabels {
+  close: string;
   empty: string;
+  emptyList: string;
   error: string;
   listLabel: string;
   loadMore: string;
   loading: string;
   retry: string;
   viewAll: string;
-  formatTotal: (total: number) => string;
+  formatTotal: (total: number | string) => string;
 }
 
 const PAGE_SIZE = 20;
@@ -349,18 +351,24 @@ export function GlobalSearchDropdown({
   );
 }
 
-/** 移动端「全页搜索」卡片：搜索行 + 结果区，钉在标题下方、底部留给页面级
-    固定操作条（共 N / 查看全部 / 关闭搜索，询价条同款，由页面渲染）。
-    结果区在卡片内部滚动，搜索框常驻可见；滚到底自动加载下一页。
-    hook 实例（s）由页面持有。 */
+/** 移动端「全页搜索」卡片：搜索行 + 计数/操作行（共 N / 查看全部 / 关闭搜索）
+    + 结果区，与「查看全部」列表页同构（搜索框正下方就是计数行）。
+    计数/操作行在滚动区外常驻——结果滚动/翻页它不动，位于页面顶部区域，
+    软键盘弹出也遮不住（fixed 底栏要么被键盘盖住要么追跳，两难就此消失）。
+    结果区在卡片内部滚动，滚到底自动加载下一页。hook 实例（s）由页面持有。 */
 export function GlobalSearchMobilePanel({
   s,
   labels,
   placeholder,
+  onViewAll,
+  onClose,
 }: {
   s: SearchState;
   labels: GlobalSearchLabels;
   placeholder: string;
+  /** 提供时渲染「查看全部」——进入全站结果列表页 */
+  onViewAll?: (query: string) => void;
+  onClose: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   /* Esc = 清词（关闭入口是底栏「关闭搜索」按钮，不绑键盘行为） */
@@ -391,6 +399,42 @@ export function GlobalSearchMobilePanel({
           className="w-full"
         />
       </div>
+      {/* 计数/操作行：搜索框正下方常驻（列表页同款位置）。计数占左侧
+          flex-1（翻页小转圈只出现在计数区，右侧按钮逐像素不动）；
+          「查看全部」主题色文字 +「关闭搜索」幽灵样式，无按钮底色/描边。
+          计数与空态判定挂 settled：query 提交帧与 effect 置 loading 帧的间隙
+          里 loading 仍 false / items 已清，不挂会闪一帧「没有匹配的产品」
+          （SearchRows/列表页工具栏同款守卫） */}
+      <div className="flex shrink-0 items-center gap-1.5 px-2.5 pt-2 text-xs text-on-surface-variant">
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="truncate tabular-nums">
+            {s.loading || (s.query && !s.settled)
+              ? labels.loading
+              : s.total > 0
+                ? labels.formatTotal(s.total.toLocaleString())
+                : labels.emptyList}
+          </span>
+          {s.loadingMore ? <InlineSpinner /> : null}
+        </span>
+        {onViewAll && s.query && s.total > 0 && !s.loading && s.settled ? (
+          <button
+            type="button"
+            onClick={() => onViewAll(s.query)}
+            className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-semibold text-primary-container ${selectionPress}`}
+          >
+            <Icon name="open_in_full" size={11} />
+            {labels.viewAll}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onClose}
+          className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-medium text-on-surface-variant hover:text-on-surface ${selectionPress}`}
+        >
+          <Icon name="close" size={13} />
+          {labels.close}
+        </button>
+      </div>
       {/* 结果区：内部滚动 + 滚到底自动翻页；未输入词/无匹配时空态居中 */}
       <div
         className="mt-2 flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain px-1.5 pb-1.5 scrollbar-hidden"
@@ -399,7 +443,7 @@ export function GlobalSearchMobilePanel({
           if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) void s.loadMore();
         }}
       >
-        {!s.loading && !s.error && s.items.length === 0 ? (
+        {!s.loading && !s.error && s.items.length === 0 && !(s.query && !s.settled) ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 py-8 text-center">
             <Icon name="search_off" size={36} className="text-on-surface-variant/20" />
             <p className="text-sm text-on-surface-variant">{labels.empty}</p>
