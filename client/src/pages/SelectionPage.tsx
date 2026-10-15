@@ -2654,7 +2654,10 @@ export default function SelectionPage() {
       style={
         !isDesktop
           ? {
-              bottom: `calc(${hideMobileBottomNav ? '0px' : '3.5rem'} + env(safe-area-inset-bottom, 0px) + var(--visual-viewport-bottom, 0px))`,
+              /* 不追软键盘（--visual-viewport-bottom）：清单有货时在向导结果/搜索
+                 列表点搜索框弹键盘，追跳会把整条顶到屏幕中间（与全页搜索底栏
+                 同修）；钉死布局视口底部，键盘盖住即可 */
+              bottom: `calc(${hideMobileBottomNav ? '0px' : '3.5rem'} + env(safe-area-inset-bottom, 0px))`,
             }
           : undefined
       }
@@ -2844,14 +2847,17 @@ export default function SelectionPage() {
       <div aria-hidden className="h-14 shrink-0" />
     ) : null;
 
-  /* 全页搜索底部操作条：询价条同款页面级固定条（同 bottom 计算：底部导航/
-     安全区/软键盘让位）。计数占左侧（翻页小转圈出现只在计数区截断，右侧按钮
-     纹丝不动）；「查看全部 / 关闭搜索」幽灵样式按钮居右 */
+  /* 全页搜索底部操作条：询价条同款页面级固定条，但 bottom **不追软键盘**
+     （不加 --visual-viewport-bottom）。面板进入即聚焦弹键盘，iOS 上该变量
+     会被写成键盘高度把整条顶到屏幕中间大跳动；钉死在布局视口底部后键盘
+     盖住它即可（与底部导航键盘弹出时滑出屏幕一致），收起键盘自然复见。
+     计数占左侧（翻页小转圈出现只在计数区截断，右侧按钮纹丝不动）；
+     「查看全部 / 关闭搜索」幽灵样式按钮居右 */
   const mobileSearchBottomBar = mobileSearchTakeover ? (
     <div
       className="fixed inset-x-0 z-[70] flex items-center gap-1.5 border-t border-outline-variant/12 bg-surface-container-high px-3 py-1 shadow-[0_-6px_18px_rgba(15,23,42,0.12)]"
       style={{
-        bottom: `calc(${hideMobileBottomNav ? '0px' : '3.5rem'} + env(safe-area-inset-bottom, 0px) + var(--visual-viewport-bottom, 0px))`,
+        bottom: `calc(${hideMobileBottomNav ? '0px' : '3.5rem'} + env(safe-area-inset-bottom, 0px))`,
       }}
     >
       <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-on-surface-variant">
