@@ -1483,6 +1483,7 @@ export const zhCN: { translation: TranslationMap } = {
         retry: '重试',
         toggle: '搜索',
         viewAll: '查看全部',
+        close: '关闭搜索',
         total: '共 {{total}} 个结果',
       },
       inquiryCart: {

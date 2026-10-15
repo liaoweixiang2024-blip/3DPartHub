@@ -1494,6 +1494,7 @@ export const enUS: { translation: TranslationMap } = {
         retry: 'Retry',
         toggle: 'Search',
         viewAll: 'View all',
+        close: 'Close search',
         total: '{{total}} results',
       },
       inquiryCart: {

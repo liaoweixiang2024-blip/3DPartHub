@@ -1110,6 +1110,7 @@ export const deDEMajorFormsTranslation: TranslationMap = {
       retry: 'Erneut versuchen',
       toggle: 'Suchen',
       viewAll: 'Alle ansehen',
+      close: 'Suche schließen',
       total: '{{total}} Ergebnisse',
     },
     inquiryCart: {

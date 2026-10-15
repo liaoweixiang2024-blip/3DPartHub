@@ -1361,6 +1361,7 @@ export const jaJPMajorFormsTranslation: TranslationMap = {
       retry: '再試行',
       toggle: '検索',
       viewAll: 'すべて見る',
+      close: '検索を閉じる',
       total: '全 {{total}} 件',
     },
     inquiryCart: {

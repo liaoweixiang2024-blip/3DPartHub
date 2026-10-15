@@ -19,7 +19,7 @@ import {
 } from '../components/selection';
 import {
   GlobalSearchDropdown,
-  GlobalSearchInline,
+  GlobalSearchMobilePanel,
   useGlobalSelectionSearch,
   type GlobalSearchItem,
   type GlobalSearchLabels,
@@ -281,6 +281,9 @@ export default function SelectionPage() {
      向导搜索框的关键词（pickSub 延迟 transition 里会清 searchDraft，须 commit 后再填） */
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const pendingSearchRef = useRef<string | null>(null);
+  /* 全站搜索列表卡的来源按钮：待按产品自身参数一次性选满全部选项的预设（slug
+     commit 后的 effect 消费——pickSub 延迟 transition 里会清 specs，须 commit 后再填） */
+  const pendingSpecsPresetRef = useRef<Record<string, string> | null>(null);
   /* 全局搜索直达/列表分类按钮携带的产品所属大类（跨大类时同步 groupId）。
      undefined = 本次未携带（区别于 null = 独立分类）。
      cameFromGlobalSearchRef 标记「本向导来自全局搜索直达」，供 ✗ 清空返回搜索
@@ -298,6 +301,9 @@ export default function SelectionPage() {
      浏览器返回 pop 回 ?search= 时恢复列表（词和结果不丢） */
   const [globalListSearch, setGlobalListSearch] = useState<string | null>(null);
   const globalList = useGlobalSelectionSearch();
+  /* 全站列表「滚到底自动加载」哨兵：进入视口（含 480px 预载提前量）即拉下一页，
+     静默进行（无进度指示）；loadMore 自带并发/翻完守卫 */
+  const globalListSentinelRef = useRef<HTMLDivElement>(null);
   /* 列表条目 key（push 时记录）+ 退出时最后搜索词：pop 回列表条目 = 恢复列表 */
   const listEntryKeyRef = useRef<string>('');
   const lastListQueryRef = useRef<string | null>(null);
@@ -637,6 +643,23 @@ export default function SelectionPage() {
 
   const phase: 'group' | 'sub' | 'wizard' | 'search' =
     globalListSearch !== null ? 'search' : !groupId ? 'group' : !slug ? 'sub' : 'wizard';
+  /* 移动端「全页搜索」模式：大类/子分类页点搜索图标进入——统计条与分类网格让位，
+     搜索结果铺满内容区，底栏提供 共 N 个结果 / 查看全部 / 关闭搜索 */
+  const mobileSearchTakeover = !isDesktop && mobileSearchOpen && (phase === 'group' || phase === 'sub');
+  useEffect(() => {
+    if (phase !== 'search') return;
+    const el = globalListSentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void globalList.loadMore();
+      },
+      { rootMargin: '480px 0px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [phase, globalList.loadMore, globalList.hasMore]);
+
   const resultBatchSize = isDesktop ? 80 : 40;
   const filterSpecKey = useMemo(
     () =>
@@ -1194,11 +1217,22 @@ export default function SelectionPage() {
     },
     [pickSub],
   );
-  /* 列表卡上的分类按钮：进该分类向导（不带型号预填，从第一步开始）。
+  /* 移动端「全页搜索」模式的搜索实例：搜索行（吸顶头内）、铺满内容区的结果列表、
+     底栏（共 N 个结果 / 查看全部 / 关闭搜索）共用这一份状态。选中行走
+     handleGlobalSelect 直达向导（hook 的 handleSelect 会顺带清词收起）。 */
+  const mobileSearch = useGlobalSelectionSearch(handleGlobalSelect);
+  const closeMobileSearch = useCallback(() => {
+    mobileSearch.setValue('');
+    setMobileSearchOpen(false);
+  }, [mobileSearch.setValue]);
+  /* 列表卡上的分类按钮：按产品自身参数把全部选项一次选满，直接落在该分类向导的
+     结果页（产品型号已知，不必再一步步选选项；产品没有值的参数项自动「跳过」——
+     跳过项不参与筛选，结果仍含该产品）。产品 specs 全空时退化为从第一步开始。
      push 一个历史条目——浏览器返回可 pop 回 ?search= 列表（词和结果不丢） */
   const goToListCategory = useCallback(
     (item: GlobalSearchItem) => {
       pendingSearchRef.current = null;
+      pendingSpecsPresetRef.current = item.specs && Object.keys(item.specs).length ? { ...item.specs } : null;
       pendingGlobalGroupRef.current = item.category.groupId ?? null;
       /* push 向导条目（本事件内唯一的 navigate——同批再 replace 会把 push 覆盖掉），
          随后退列表（存词 + 清 state，不导航）：渲染时 key 已是新条目 ≠ 列表条目，
@@ -1214,15 +1248,39 @@ export default function SelectionPage() {
     if (!slug) return;
     const preset = pendingSearchRef.current;
     const groupId = pendingGlobalGroupRef.current;
+    const presetSpecs = pendingSpecsPresetRef.current;
+    if (preset === null && groupId === undefined && presetSpecs === null) return;
     pendingSearchRef.current = null;
     pendingGlobalGroupRef.current = undefined;
-    if (preset === null && groupId === undefined) return;
+    pendingSpecsPresetRef.current = null;
     if (groupId !== undefined) setGroupId((prev) => (prev === groupId ? prev : groupId));
     if (preset !== null) {
       cameFromGlobalSearchRef.current = true;
       setSearchDraft(preset);
     }
-  }, [slug, setGroupId, setSearchDraft]);
+    if (presetSpecs) {
+      const cat = cats.find((c) => c.slug === slug);
+      /* 分类还没加载完：留在 ref 里等 cats 就绪后本 effect 重跑（依赖里有 cats） */
+      if (!cat && cats.length === 0) {
+        pendingSpecsPresetRef.current = presetSpecs;
+        return;
+      }
+      const catFields = (cat?.columns ?? []).filter((col) => !col.displayOnly).map((col) => col.key) as string[];
+      const nextSpecs: Record<string, string> = {};
+      const nextSkipped = new Set<string>();
+      for (const field of catFields) {
+        const value = presetSpecs[field];
+        /* 只收字符串值（与服务端 specValue/选项计数同口径）；缺失/非字符串 → 跳过该项 */
+        if (typeof value === 'string' && value) nextSpecs[field] = value;
+        else nextSkipped.add(field);
+      }
+      /* 至少有一个实选值才落结果页：全空落结果是整分类大列表，不如回第一步 */
+      if (Object.keys(nextSpecs).length > 0) {
+        setSpecs(nextSpecs);
+        setSkipped(nextSkipped);
+      }
+    }
+  }, [slug, cats, setGroupId, setSearchDraft]);
   const goToGroupCategories = useCallback(() => {
     clearGlobalList();
     setSlug(null);
@@ -2549,17 +2607,8 @@ export default function SelectionPage() {
                 />
               );
             })}
-            {globalList.hasMore ? (
-              <button
-                onClick={() => void globalList.loadMore()}
-                disabled={globalList.loadingMore}
-                className={`w-full rounded-xl border border-outline-variant/20 bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface-variant hover:border-primary-container/40 hover:text-primary-container disabled:opacity-60 ${selectionPress}`}
-              >
-                {t('selectionPage.result.loadMore', {
-                  count: (globalList.total - globalList.items.length).toLocaleString(),
-                })}
-              </button>
-            ) : null}
+            {/* 滚到列表尾部自动加载下一页（哨兵进入视口即触发，无手动按钮/进度指示） */}
+            {globalList.hasMore ? <div ref={globalListSentinelRef} aria-hidden className="h-2" /> : null}
           </div>
         </div>
       ) : (
@@ -2572,7 +2621,7 @@ export default function SelectionPage() {
   );
 
   /* ── batch action bar ── */
-  const actionBar = inquiryCart.items.length > 0 && (
+  const actionBar = inquiryCart.items.length > 0 && !mobileSearchTakeover && (
     <div
       ref={cartActionBarRef}
       className={
@@ -2775,7 +2824,9 @@ export default function SelectionPage() {
     </div>
   );
   const mobileActionBarSpacer =
-    !isDesktop && inquiryCart.items.length > 0 ? <div aria-hidden className="h-14 shrink-0" /> : null;
+    !isDesktop && inquiryCart.items.length > 0 && !mobileSearchTakeover ? (
+      <div aria-hidden className="h-14 shrink-0" />
+    ) : null;
 
   const shellTitle = (
     <span className="inline-flex min-w-0 max-w-full items-center gap-1 md:gap-1.5">
@@ -2997,6 +3048,8 @@ export default function SelectionPage() {
     };
   }, [isDesktop, phase]);
 
+  /* 移动端搜索激活时替代统计条（产品大类/分类/型号）的摘要行：共 N 个结果 +
+     查看全部——计数在标题下一眼可见，不必把内联结果滚到底才看到 footer */
   const toolbarSummary =
     phase === 'search' ? (
       /* 全站搜索列表：工具栏左侧只放「搜索结果 · 共 N 个结果」信息；
@@ -3016,39 +3069,43 @@ export default function SelectionPage() {
         </span>
       </div>
     ) : phase === 'group' ? (
-      <div className="flex min-w-0 items-center gap-4 overflow-x-auto scrollbar-none text-xs text-on-surface-variant">
-        <span className="flex shrink-0 items-center gap-1.5">
-          <span className="text-sm font-semibold text-on-surface">{t('selectionPage.stats.productGroups')}</span>
-          <span className="rounded-full bg-primary-container/8 px-2 py-0.5 text-[10px] font-medium tabular-nums text-primary-container">
-            {categoryGroupCountText}
+      !mobileSearchTakeover ? (
+        <div className="flex min-w-0 items-center gap-4 overflow-x-auto scrollbar-none text-xs text-on-surface-variant">
+          <span className="flex shrink-0 items-center gap-1.5">
+            <span className="text-sm font-semibold text-on-surface">{t('selectionPage.stats.productGroups')}</span>
+            <span className="rounded-full bg-primary-container/8 px-2 py-0.5 text-[10px] font-medium tabular-nums text-primary-container">
+              {categoryGroupCountText}
+            </span>
           </span>
-        </span>
-        <span className="h-3 w-px shrink-0 bg-outline-variant/15" />
-        {selectionStatItems.map((item) => (
-          <span key={item.label} className="shrink-0">
-            {item.label}{' '}
+          <span className="h-3 w-px shrink-0 bg-outline-variant/15" />
+          {selectionStatItems.map((item) => (
+            <span key={item.label} className="shrink-0">
+              {item.label}{' '}
+              <strong className="ml-0.5 tabular-nums text-sm font-semibold text-on-surface">
+                {typeof item.value === 'number' ? item.value.toLocaleString() : item.value}
+              </strong>
+            </span>
+          ))}
+        </div>
+      ) : null
+    ) : phase === 'sub' && group ? (
+      !mobileSearchTakeover ? (
+        <div className="flex min-w-0 items-center gap-4 overflow-x-auto scrollbar-none text-xs text-on-surface-variant">
+          <span className="flex shrink-0 items-center gap-1.5">
+            <span className="text-sm font-semibold text-on-surface">{t('selectionPage.stats.categories')}</span>
+            <span className="rounded-full bg-primary-container/8 px-2 py-0.5 text-[10px] font-medium tabular-nums text-primary-container">
+              {group.children.length}
+            </span>
+          </span>
+          <span className="h-3 w-px shrink-0 bg-outline-variant/15" />
+          <span className="shrink-0">
+            {t('selectionPage.stats.models')}{' '}
             <strong className="ml-0.5 tabular-nums text-sm font-semibold text-on-surface">
-              {typeof item.value === 'number' ? item.value.toLocaleString() : item.value}
+              {groupProductTotal.toLocaleString()}
             </strong>
           </span>
-        ))}
-      </div>
-    ) : phase === 'sub' && group ? (
-      <div className="flex min-w-0 items-center gap-4 overflow-x-auto scrollbar-none text-xs text-on-surface-variant">
-        <span className="flex shrink-0 items-center gap-1.5">
-          <span className="text-sm font-semibold text-on-surface">{t('selectionPage.stats.categories')}</span>
-          <span className="rounded-full bg-primary-container/8 px-2 py-0.5 text-[10px] font-medium tabular-nums text-primary-container">
-            {group.children.length}
-          </span>
-        </span>
-        <span className="h-3 w-px shrink-0 bg-outline-variant/15" />
-        <span className="shrink-0">
-          {t('selectionPage.stats.models')}{' '}
-          <strong className="ml-0.5 tabular-nums text-sm font-semibold text-on-surface">
-            {groupProductTotal.toLocaleString()}
-          </strong>
-        </span>
-      </div>
+        </div>
+      ) : null
     ) : phase === 'wizard' && !search ? (
       /* 搜索激活时隐藏「已选 X/Y」与 chips（移动端 mobileSelectedSummary 同条件）：
          搜索结果视图里进度条没有参照意义 */
@@ -3241,19 +3298,11 @@ export default function SelectionPage() {
         />
         {toolbarSummary}
       </div>
-    ) : !isDesktop && (mobileSearchOpen || phase === 'wizard') ? (
+    ) : !isDesktop &&
+      mobileSearchTakeover /* 全页搜索模式：搜索行/结果/底栏同在内容区的一张卡里（GlobalSearchMobilePanel），
+         工具栏让位——吸顶块只剩标题行，面板顶的搜索框照样常驻可见 */ ? null : !isDesktop &&
+      (mobileSearchOpen || phase === 'wizard') ? (
       <div className="flex w-full flex-col items-stretch gap-2">
-        {/* 全局搜索展开行：AdminManagementPage 吸顶块内 hero → toolbar 顺序
-            使其正好钉在标题/描述正下方（点标题行搜索图标开关） */}
-        {!isDesktop && mobileSearchOpen && (phase === 'group' || phase === 'sub') ? (
-          <GlobalSearchInline
-            placeholder={t('selectionPage.globalSearch.placeholder')}
-            labels={globalSearchLabels}
-            onSelect={handleGlobalSelect}
-            onClose={() => setMobileSearchOpen(false)}
-            onViewAll={enterGlobalList}
-          />
-        ) : null}
         {selectionToolbarCore}
         {phase === 'wizard' ? mobileSelectedSummary : null}
       </div>
@@ -3349,8 +3398,10 @@ export default function SelectionPage() {
     setMobileSearchOpen(false);
   }, [phase]);
 
-  const selectionPhaseKey =
-    phase === 'group'
+  const selectionPhaseKey = mobileSearchTakeover
+    ? /* 全页搜索进出各播一次入场动画（关闭后分类网格重新滑入） */
+      'selection-mobile-search'
+    : phase === 'group'
       ? 'selection-groups'
       : phase === 'sub'
         ? `selection-sub-${groupId || 'none'}`
@@ -3389,33 +3440,53 @@ export default function SelectionPage() {
     // 分类卡提成子层，半透明卡背景就叠在自己图层的纯白 tile 上——按住/滑动的
     // 那张卡整张变纯白。入场动画期间 framer-motion 会临时建层（0.16s 后自动
     // 释放），不需要常驻层提示。
-    <motion.div key={selectionPhaseKey} {...phaseMotionProps} className="min-w-0">
-      {phase === 'group' && resumeBanner}
-      {phase === 'group' && groupContent}
-      {phase === 'sub' && subContent}
-      {phase === 'search' && globalSearchListContent}
-      {phase === 'wizard' &&
-        (wizardContent || (
-          // 移动端 px-0：面板在选型页是透明的，这层内边距会让选项卡比标题卡窄一截（左右对不齐）；
-          // 桌面保留 md:px-5 作为滚动面板的内容内边距
-          <div ref={wizardWrapRef} className="px-0 py-4 md:px-5 md:py-5">
-            {pageHeader}
-            <div className="space-y-0">
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div key={wizardTransitionKey} {...wizardTransition} className="min-w-0">
-                  {isMobileResultView ? (
-                    resultsJSX
-                  ) : (
-                    <>
-                      {stepsJSX}
-                      {resultsJSX}
-                    </>
-                  )}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-          </div>
-        ))}
+    <motion.div
+      key={selectionPhaseKey}
+      {...phaseMotionProps}
+      className={mobileSearchTakeover ? 'flex min-h-0 min-w-0 flex-1 flex-col' : 'min-w-0'}
+    >
+      {mobileSearchTakeover ? (
+        /* 全页搜索模式：搜索行 + 结果 + 底部操作条（共 N / 查看全部 / 关闭搜索）
+           同属一张卡片，钉在标题下方与页面底之间（flex 链给足高度，结果区内部
+           滚动、滚到底自动翻页；分类网格/恢复横幅让位） */
+        <GlobalSearchMobilePanel
+          s={mobileSearch}
+          labels={globalSearchLabels}
+          placeholder={t('selectionPage.globalSearch.placeholder')}
+          closeLabel={t('selectionPage.globalSearch.close')}
+          onClose={closeMobileSearch}
+          onViewAll={enterGlobalList}
+        />
+      ) : (
+        <>
+          {phase === 'group' && resumeBanner}
+          {phase === 'group' && groupContent}
+          {phase === 'sub' && subContent}
+          {phase === 'search' && globalSearchListContent}
+          {phase === 'wizard' &&
+            (wizardContent || (
+              // 移动端 px-0：面板在选型页是透明的，这层内边距会让选项卡比标题卡窄一截（左右对不齐）；
+              // 桌面保留 md:px-5 作为滚动面板的内容内边距
+              <div ref={wizardWrapRef} className="px-0 py-4 md:px-5 md:py-5">
+                {pageHeader}
+                <div className="space-y-0">
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div key={wizardTransitionKey} {...wizardTransition} className="min-w-0">
+                      {isMobileResultView ? (
+                        resultsJSX
+                      ) : (
+                        <>
+                          {stepsJSX}
+                          {resultsJSX}
+                        </>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
+              </div>
+            ))}
+        </>
+      )}
     </motion.div>
   );
 
@@ -3491,7 +3562,11 @@ export default function SelectionPage() {
            （仅阻断滚动链、不消自身回弹），且无 layer 全局 CSS 压过 Tailwind 工具类，
            故用 ! 前缀强制 overscroll-behavior: none（iOS 16+ 生效） */
         mobileMainClassName="min-h-0 !overscroll-none"
-        mobileContentClassName={`flex min-h-full flex-col gap-3 px-3 py-3 pt-0 ${hideMobileBottomNav ? 'pb-3' : 'pb-safe-nav'}`}
+        mobileContentClassName={`flex min-h-full flex-col gap-3 px-3 py-3 pt-0 ${hideMobileBottomNav ? 'pb-3' : 'pb-safe-nav'} ${
+          /* 全页搜索：内容整体封顶在视口内（面板内部滚动，页面本身不再滚动），
+             flex 链的 min-h-0 收缩才有确限高度可依 */
+          mobileSearchTakeover ? 'max-h-full' : ''
+        }`}
         hideMobileBottomNav={hideMobileBottomNav}
       >
         <AdminManagementPage
@@ -3504,12 +3579,21 @@ export default function SelectionPage() {
              滚动第一像素起标题/搜索框零位移，只有大类卡片与选项内容滚动；
              桌面端标题本就在滚动容器外，无需吸顶 */
           headerSticky={!isDesktop}
-          className="app-public-tool-page app-public-tool-page-selection !h-auto min-h-full flex flex-col gap-3"
-          contentClassName="flex flex-col"
+          className={`app-public-tool-page app-public-tool-page-selection !h-auto min-h-full flex flex-col gap-3 ${
+            /* !shrink/!min-h-0：.app-page 基础样式把 flex-shrink 钉死为 0、
+               min-h-full 又垫了底——不强制压掉它们，面板会被内容撑破 */
+            mobileSearchTakeover ? 'flex-1 !shrink !min-h-0' : ''
+          }`}
+          contentClassName={`flex flex-col ${mobileSearchTakeover ? 'min-h-0 flex-1 -mt-[1.125rem]' : ''}`}
         >
           <AdminContentPanel
             className={`flex flex-col overflow-visible ${
-              phase === 'group' || phase === 'sub' ? 'rounded-none border-0 bg-transparent' : ''
+              /* 全页搜索：回归默认卡片样式（与标题卡同款）+ 撑满剩余高度 */
+              mobileSearchTakeover
+                ? 'min-h-0 flex-1 overflow-hidden !bg-surface-container-low'
+                : phase === 'group' || phase === 'sub'
+                  ? 'rounded-none border-0 bg-transparent'
+                  : ''
             }`}
           >
             {contentBody}

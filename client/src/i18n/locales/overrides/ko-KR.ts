@@ -1082,6 +1082,7 @@ export const koKRMajorFormsTranslation: TranslationMap = {
       retry: '다시 시도',
       toggle: '검색',
       viewAll: '전체 보기',
+      close: '검색 닫기',
       total: '총 {{total}}개 결과',
     },
     inquiryCart: {
