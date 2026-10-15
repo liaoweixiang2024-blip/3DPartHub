@@ -672,6 +672,10 @@ export default function SelectionPage() {
   /* 移动端「全页搜索」模式：大类/子分类页点搜索图标进入——统计条与分类网格让位，
      搜索结果铺满内容区，底栏提供 共 N 个结果 / 查看全部 / 关闭搜索 */
   const mobileSearchTakeover = !isDesktop && mobileSearchOpen && (phase === 'group' || phase === 'sub');
+  /* 外层滚动锁：全页搜索与全站搜索列表两态，页面本体不滚动（外层容器
+     overflow-hidden），内容区各自内部滚动——键盘弹出/收起、拖动都不会
+     带动整页（含底部导航） */
+  const lockOuterScroll = mobileSearchTakeover || (!isDesktop && phase === 'search');
   useEffect(() => {
     if (phase !== 'search') return;
     const el = globalListSentinelRef.current;
@@ -861,6 +865,9 @@ export default function SelectionPage() {
   const wizardWrapRef = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  /* 全站搜索列表（移动端）的内部滚动容器：外层页面锁死（lockOuterScroll），
+     列表在面板内滚——滑返回的位置保存/恢复也走它 */
+  const listInnerScrollRef = useRef<HTMLDivElement>(null);
   const mobileMainRef = useRef<HTMLElement>(null);
   const lastUserScrollAtRef = useRef(0);
   const resultRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1267,7 +1274,7 @@ export default function SelectionPage() {
       navigate(`${location.pathname}${location.search}`, { replace: false });
       /* 离开列表前的滚动位置（向导复用同一滚动容器，先存后跳）；pop 恢复列表后
          由恢复 effect 写回，返回即落回点进去的位置 */
-      const leaveScrollContainer = scrollContainerRef.current || mobileMainRef.current;
+      const leaveScrollContainer = listInnerScrollRef.current || scrollContainerRef.current || mobileMainRef.current;
       if (leaveScrollContainer) listScrollRestoreRef.current = leaveScrollContainer.scrollTop;
       rememberListQuery();
       setGlobalListSearch(null);
@@ -3463,6 +3470,7 @@ export default function SelectionPage() {
     if (isDesktop) return;
     scrollContainerRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     mobileMainRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    listInnerScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [isDesktop, selectionPhaseKey]);
   /* pop 恢复列表后的滚动位置写回：items 在列表 hook 里未被清，渲染即有内容高度；
      双 rAF 等布局落定再写（clamp 防图片加载中高度不足过冲），只消费一次。
@@ -3471,7 +3479,7 @@ export default function SelectionPage() {
     if (globalListSearch === null || listScrollRestoreRef.current == null) return;
     const saved = listScrollRestoreRef.current;
     listScrollRestoreRef.current = null;
-    const el = scrollContainerRef.current || mobileMainRef.current;
+    const el = listInnerScrollRef.current || scrollContainerRef.current || mobileMainRef.current;
     if (!el) return;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -3507,7 +3515,7 @@ export default function SelectionPage() {
     <motion.div
       key={selectionPhaseKey}
       {...phaseMotionProps}
-      className={mobileSearchTakeover ? 'flex min-h-0 min-w-0 flex-1 flex-col' : 'min-w-0'}
+      className={lockOuterScroll ? 'flex min-h-0 min-w-0 flex-1 flex-col' : 'min-w-0'}
     >
       {mobileSearchTakeover ? (
         /* 全页搜索模式：搜索行 + 计数/操作行（共 N / 查看全部 / 关闭搜索，搜索框
@@ -3532,7 +3540,20 @@ export default function SelectionPage() {
           {phase === 'group' && resumeBanner}
           {phase === 'group' && groupContent}
           {phase === 'sub' && subContent}
-          {phase === 'search' && globalSearchListContent}
+          {phase === 'search' ? (
+            !isDesktop ? (
+              /* 全站列表（移动端）：列表在面板内滚（外层页面已锁死），
+                  overscroll-contain 断滚动链；滑返回的位置保存/恢复走此容器 */
+              <div
+                ref={listInnerScrollRef}
+                className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-hidden"
+              >
+                {globalSearchListContent}
+              </div>
+            ) : (
+              globalSearchListContent
+            )
+          ) : null}
           {phase === 'wizard' &&
             (wizardContent || (
               // 移动端 px-0：面板在选型页是透明的，这层内边距会让选项卡比标题卡窄一截（左右对不齐）；
@@ -3631,11 +3652,15 @@ export default function SelectionPage() {
            看起来不稳定。scrollbar-hidden 全局类只给了 overscroll-behavior-y: contain
            （仅阻断滚动链、不消自身回弹），且无 layer 全局 CSS 压过 Tailwind 工具类，
            故用 ! 前缀强制 overscroll-behavior: none（iOS 16+ 生效） */
-        mobileMainClassName="min-h-0 !overscroll-none"
+        mobileMainClassName={`min-h-0 !overscroll-none ${
+          /* 全页搜索/全站列表：外层滚动容器整体锁死（配合内容区内部滚动），
+             键盘弹出、拖动都不再带动整页与底部导航 */
+          lockOuterScroll ? '!overflow-hidden' : ''
+        }`}
         mobileContentClassName={`flex min-h-full flex-col gap-3 px-3 py-3 pt-0 ${hideMobileBottomNav ? 'pb-3' : 'pb-safe-nav'} ${
-          /* 全页搜索：内容整体封顶在视口内（面板内部滚动，页面本身不再滚动），
+          /* 全页搜索/全站列表：内容整体封顶在视口内（面板内部滚动，页面本身不再滚动），
              flex 链的 min-h-0 收缩才有确限高度可依 */
-          mobileSearchTakeover ? 'max-h-full' : ''
+          lockOuterScroll ? 'max-h-full' : ''
         }`}
         hideMobileBottomNav={hideMobileBottomNav}
       >
@@ -3652,7 +3677,7 @@ export default function SelectionPage() {
           className={`app-public-tool-page app-public-tool-page-selection !h-auto min-h-full flex flex-col gap-3 ${
             /* !shrink/!min-h-0：.app-page 基础样式把 flex-shrink 钉死为 0、
                min-h-full 又垫了底——不强制压掉它们，面板会被内容撑破 */
-            mobileSearchTakeover ? 'flex-1 !shrink !min-h-0' : ''
+            lockOuterScroll ? 'flex-1 !shrink !min-h-0' : ''
           }`}
           contentClassName={`flex flex-col ${
             mobileSearchTakeover
@@ -3661,7 +3686,7 @@ export default function SelectionPage() {
                    让工具卡（搜索框+计数）到首张产品卡 = 产品卡之间的 12px
                    （1.1875rem = 18px 间距 + 1px 内容卡上边框）；桌面布局不动 */
                 !isDesktop && phase === 'search'
-                ? '-mt-[1.1875rem]'
+                ? 'min-h-0 flex-1 -mt-[1.1875rem]'
                 : ''
           }`}
         >
@@ -3670,9 +3695,13 @@ export default function SelectionPage() {
               /* 全页搜索：回归默认卡片样式（与标题卡同款）+ 撑满剩余高度 */
               mobileSearchTakeover
                 ? 'min-h-0 flex-1 overflow-hidden !bg-surface-container-low'
-                : phase === 'group' || phase === 'sub'
-                  ? 'rounded-none border-0 bg-transparent'
-                  : ''
+                : /* 全站列表（移动端）：同款撑满 + 内部滚动（滚动 div 在
+                     globalSearchListContent 外层），页面本体不滚 */
+                  !isDesktop && phase === 'search'
+                  ? 'min-h-0 flex-1 overflow-hidden'
+                  : phase === 'group' || phase === 'sub'
+                    ? 'rounded-none border-0 bg-transparent'
+                    : ''
             }`}
           >
             {contentBody}
