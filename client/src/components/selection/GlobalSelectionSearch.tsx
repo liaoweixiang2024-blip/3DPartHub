@@ -42,6 +42,10 @@ export function useGlobalSelectionSearch(onSelect?: (item: GlobalSearchItem) => 
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  /* settled：本次 query 的响应已落地（含失败）。query 提交帧与 effect 置
+     loading 帧之间有一拍间隙（query 已变、loading 仍 false、items 已清），
+     没有它列表会闪一帧空态 */
+  const [settled, setSettled] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
   /* 重试计数：query 不变时重发请求；每次新词自增作废在途响应（竞态守卫） */
@@ -60,6 +64,7 @@ export function useGlobalSelectionSearch(onSelect?: (item: GlobalSearchItem) => 
     }
     setLoading(true);
     setError(false);
+    setSettled(false);
     setItems([]);
     setTotal(0);
     setPage(1);
@@ -77,6 +82,7 @@ export function useGlobalSelectionSearch(onSelect?: (item: GlobalSearchItem) => 
       .finally(() => {
         if (reqIdRef.current !== reqId) return;
         setLoading(false);
+        setSettled(true);
       });
   }, [query, retryTick]);
 
@@ -124,6 +130,7 @@ export function useGlobalSelectionSearch(onSelect?: (item: GlobalSearchItem) => 
     total,
     hasMore: items.length < total,
     loading,
+    settled,
     loadingMore,
     error,
     loadMore,
@@ -184,7 +191,7 @@ function ResultRow({
 
 /** 结果行列表（不含计数 footer——footer 由容器放在滚动区外，见各调用处注释） */
 function SearchRows({ s, labels, withHover }: { s: SearchState; labels: GlobalSearchLabels; withHover: boolean }) {
-  if (s.loading) {
+  if (s.loading || (s.query && !s.settled)) {
     return (
       <div className="flex items-center justify-center gap-2 px-3 py-6 text-xs text-on-surface-variant">
         <InlineSpinner />
@@ -342,24 +349,18 @@ export function GlobalSearchDropdown({
   );
 }
 
-/** 移动端「全页搜索」面板：搜索行 + 结果区 + 底部操作条（共 N / 查看全部 /
-    关闭搜索）同属一张卡片，整卡钉在标题下方到页面底之间（页面侧由 flex 链给足
-    高度）。结果区在面板内部滚动，搜索框常驻可见；滚到底自动加载下一页。
+/** 移动端「全页搜索」卡片：搜索行 + 结果区，钉在标题下方、底部留给页面级
+    固定操作条（共 N / 查看全部 / 关闭搜索，询价条同款，由页面渲染）。
+    结果区在卡片内部滚动，搜索框常驻可见；滚到底自动加载下一页。
     hook 实例（s）由页面持有。 */
 export function GlobalSearchMobilePanel({
   s,
   labels,
   placeholder,
-  closeLabel,
-  onClose,
-  onViewAll,
 }: {
   s: SearchState;
   labels: GlobalSearchLabels;
   placeholder: string;
-  closeLabel: string;
-  onClose: () => void;
-  onViewAll?: (query: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   /* Esc = 清词（关闭入口是底栏「关闭搜索」按钮，不绑键盘行为） */
@@ -406,34 +407,6 @@ export function GlobalSearchMobilePanel({
         ) : (
           <SearchRows s={s} labels={labels} withHover={false} />
         )}
-      </div>
-      {/* 底部操作条：卡片内压一层深一档的底色 + 上边线，与结果区拉开层次
-          （询价条同款 bg-surface-container-high） */}
-      <div className="flex shrink-0 items-center gap-1.5 rounded-b-xl border-t border-outline-variant/15 bg-surface-container-high px-3 pb-2 pt-2 text-xs text-on-surface-variant">
-        <span className="flex min-w-0 flex-1 items-center gap-1.5">
-          <span className="truncate tabular-nums">
-            {s.loading ? labels.loading : s.total > 0 ? labels.formatTotal(s.total) : labels.empty}
-          </span>
-          {s.loadingMore ? <InlineSpinner /> : null}
-        </span>
-        {onViewAll && s.query && s.total > 0 && !s.loading ? (
-          <button
-            type="button"
-            onClick={() => onViewAll(s.query)}
-            className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 font-semibold text-primary-container ${selectionPress}`}
-          >
-            <Icon name="open_in_full" size={11} />
-            {labels.viewAll}
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={onClose}
-          className={`inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 font-medium text-on-surface-variant hover:text-on-surface ${selectionPress}`}
-        >
-          <Icon name="close" size={12} />
-          {closeLabel}
-        </button>
       </div>
     </div>
   );

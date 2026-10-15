@@ -168,8 +168,9 @@ export function createSelectionPublicRouter() {
       const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size) || 20));
       const { selectionEnableMatch } = await getBusinessConfig();
 
+      // v3：payload 增加 categoryCatalogPdf（全站搜索列表也要显示画册按钮）；
       // v2：payload 增加分类 columns（旧 TTL 缓存无该字段，bump 版本一次性刷新）
-      const cacheKey = `cache:selections:search:v2:${cacheKeyPart(search)}:${page}:${pageSize}`;
+      const cacheKey = `cache:selections:search:v3:${cacheKeyPart(search)}:${page}:${pageSize}`;
       const { value: result } = await cacheGetOrSet(cacheKey, await selectionCacheTtl(), async () => {
         // 隐藏产品不出现在全局搜索；隐藏分类下的产品一并排除
         const where: Prisma.SelectionProductWhereInput = {
@@ -200,6 +201,9 @@ export function createSelectionPublicRouter() {
                   groupIcon: true,
                   // 全局搜索列表页每个产品要渲染自己分类的参数列（结果跨分类）
                   columns: true,
+                  // 画册解析用（选项级目录 + 分类自带），不进响应 payload
+                  catalogPdf: true,
+                  optionCatalogs: true,
                 },
               },
             },
@@ -211,14 +215,68 @@ export function createSelectionPublicRouter() {
           ? await buildModelMatchMap(modelNos)
           : new Map<string, { id: string; thumbnailUrl: string | null }>();
 
+        /* 画册解析（与 filter 路由同规则，但结果跨分类——每个产品按自己分类解析）：
+           选项级 optionCatalogs 命中 → 分类自带 catalogPdf → 按接头形态共享兜底 */
+        let sharedPdfMapLoaded: Record<string, string> | null | undefined;
+        const loadSharedPdfMap = async () => {
+          if (sharedPdfMapLoaded !== undefined) return sharedPdfMapLoaded;
+          const sharedCategories = await prisma.selectionCategory.findMany({
+            where: { catalogShared: true, catalogPdf: { not: null } },
+            select: { id: true, catalogPdf: true },
+          });
+          if (sharedCategories.length === 0) {
+            sharedPdfMapLoaded = null;
+            return null;
+          }
+          const catPdfById = new Map(sharedCategories.map((c) => [c.id, c.catalogPdf!]));
+          const sharedProducts = await prisma.selectionProduct.findMany({
+            where: { categoryId: { in: sharedCategories.map((c) => c.id) } },
+            select: { categoryId: true, specs: true },
+          });
+          const map: Record<string, string> = {};
+          for (const p of sharedProducts) {
+            const specs = specsRecord(p.specs);
+            const jointType = typeof specs['接头形态'] === 'string' ? specs['接头形态'] : null;
+            const pdf = catPdfById.get(p.categoryId);
+            if (jointType && pdf) map[jointType] = pdf;
+          }
+          sharedPdfMapLoaded = map;
+          return map;
+        };
+
+        const catalogByProductId = new Map<string, string | null>();
+        for (const p of items) {
+          const specs = specsRecord(p.specs);
+          const optionCatalogs = (p.category.optionCatalogs || {}) as Record<string, Record<string, string>>;
+          let matchedCatalog: string | null = null;
+          for (const [field, valueMap] of Object.entries(optionCatalogs)) {
+            const specVal = typeof specs[field] === 'string' ? specs[field] : null;
+            if (specVal && valueMap[specVal]) {
+              matchedCatalog = valueMap[specVal];
+              break;
+            }
+          }
+          if (!matchedCatalog && p.category.catalogPdf) matchedCatalog = p.category.catalogPdf;
+          if (!matchedCatalog) {
+            const jointType = typeof specs['接头形态'] === 'string' ? specs['接头形态'] : '';
+            const sharedMap = await loadSharedPdfMap();
+            if (sharedMap && jointType && sharedMap[jointType]) matchedCatalog = sharedMap[jointType];
+          }
+          catalogByProductId.set(p.id, matchedCatalog);
+        }
+
         return {
           total,
           page,
           pageSize,
-          items: items.map((p) => ({
-            ...selectionProductPayload(p, modelMap),
-            category: p.category,
-          })),
+          items: items.map((p) => {
+            // 画册解析用的两个字段不进响应（保持 payload 精简）
+            const { catalogPdf: _catPdf, optionCatalogs: _optCatalogs, ...categoryPublic } = p.category;
+            return {
+              ...selectionProductPayload({ ...p, categoryCatalogPdf: catalogByProductId.get(p.id) || null }, modelMap),
+              category: categoryPublic,
+            };
+          }),
         };
       });
 

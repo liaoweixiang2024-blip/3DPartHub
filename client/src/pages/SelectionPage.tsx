@@ -277,6 +277,9 @@ export default function SelectionPage() {
     inputProps: searchDraftInputProps,
   } = useImeSafeSearchInput({ initialValue: wizardRestore?.searchDraft ?? '' });
   const search = useDebouncedValue(searchDraft.trim(), 250);
+  /* 向导搜索框聚焦中（移动端=软键盘弹出）：聚焦即隐藏「已选 X 项」条——
+     键盘把输入框顶到键盘上方时，吸顶头里的已选条会跟着跳到输入法上面 */
+  const [wizardSearchFocused, setWizardSearchFocused] = useState(false);
   /* 全局型号搜索（大类/子分类阶段）：移动端标题下展开行开关 + 选中后待预填进
      向导搜索框的关键词（pickSub 延迟 transition 里会清 searchDraft，须 commit 后再填） */
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -290,6 +293,10 @@ export default function SelectionPage() {
      回路判定；桌面返回后聚焦搜索框的信号 */
   const pendingGlobalGroupRef = useRef<string | null | undefined>(undefined);
   const cameFromGlobalSearchRef = useRef(false);
+  /* 发起全局搜索直达时所在的大类（null=选型首页）：跨大类直达会跟随产品改
+     groupId（面包屑挂对大类），✗ 清空返回时要用这份原始值还原——返回的应是
+     发起搜索的页面，而不是产品所属大类 */
+  const globalSearchOriginRef = useRef<string | null>(null);
   /* 「清空即返回搜索」回到大类页时要自动展开搜索行，但 [phase] 收起 effect
      会跟着 phase 变化把它关掉——该 ref 豁免紧接着的一次收起 */
   const skipNextMobileSearchCollapseRef = useRef(false);
@@ -1210,12 +1217,13 @@ export default function SelectionPage() {
      搜索直达」，供向导搜索框 ✗ 的「清空即返回搜索」回路使用（连续搜索闭环）。 */
   const handleGlobalSelect = useCallback(
     (item: GlobalSearchItem) => {
+      globalSearchOriginRef.current = groupId ?? null;
       pendingSearchRef.current = item.modelNo?.trim() || item.name.trim() || null;
       pendingGlobalGroupRef.current = item.category.groupId ?? null;
       setMobileSearchOpen(false);
       pickSub(item.category.slug);
     },
-    [pickSub],
+    [groupId, pickSub],
   );
   /* 移动端「全页搜索」模式的搜索实例：搜索行（吸顶头内）、铺满内容区的结果列表、
      底栏（共 N 个结果 / 查看全部 / 关闭搜索）共用这一份状态。选中行走
@@ -1304,6 +1312,10 @@ export default function SelectionPage() {
     ) {
       cameFromGlobalSearchRef.current = false;
       skipNextMobileSearchCollapseRef.current = true;
+      /* 还原到发起搜索时的大类/首页（跨大类直达时 groupId 已被改为产品大类，
+         不还原的话标题面包屑会停在产品的大类上） */
+      setGroupId(globalSearchOriginRef.current);
+      globalSearchOriginRef.current = null;
       goToGroupCategories();
       setMobileSearchOpen(true);
       setGlobalSearchFocusSignal((n) => n + 1);
@@ -1314,6 +1326,7 @@ export default function SelectionPage() {
     goToGroupCategories,
     manualDrafts,
     setGlobalSearchFocusSignal,
+    setGroupId,
     setSearchDraft,
     skipped.size,
     slug,
@@ -2567,7 +2580,9 @@ export default function SelectionPage() {
   const globalSearchListContent = (
     /* 标题/计数/返回已上提工具栏左侧（toolbarSummary），列表区直接从状态/卡片开始 */
     <div className="px-0 md:px-6 py-4 md:py-6">
-      {globalList.loading ? (
+      {/* 防抖等待期 + query 提交帧间隙（词已变、响应未落地）都算加载：
+          否则会先闪一帧「没有匹配的产品」再转圈出列表 */}
+      {globalList.loading || (globalList.draftValue && !globalList.settled) ? (
         <SelectionInlineLoading label={t('selectionPage.globalSearch.loading')} />
       ) : globalList.error ? (
         <div className="flex flex-col items-center gap-2 py-12 text-sm text-on-surface-variant">
@@ -2612,8 +2627,9 @@ export default function SelectionPage() {
           </div>
         </div>
       ) : (
-        <div className="py-12 text-center">
-          <Icon name="search_off" size={36} className="mx-auto mb-2 text-on-surface-variant/20" />
+        /* 空态在可视区域内上下居中（min-h 撑起，不再贴顶偏上） */
+        <div className="flex min-h-[28vh] flex-col items-center justify-center py-8 text-center md:min-h-[30vh]">
+          <Icon name="search_off" size={36} className="mb-2 text-on-surface-variant/20" />
           <p className="text-sm text-on-surface-variant">{t('selectionPage.globalSearch.emptyList')}</p>
         </div>
       )}
@@ -2828,6 +2844,52 @@ export default function SelectionPage() {
       <div aria-hidden className="h-14 shrink-0" />
     ) : null;
 
+  /* 全页搜索底部操作条：询价条同款页面级固定条（同 bottom 计算：底部导航/
+     安全区/软键盘让位）。计数占左侧（翻页小转圈出现只在计数区截断，右侧按钮
+     纹丝不动）；「查看全部 / 关闭搜索」幽灵样式按钮居右 */
+  const mobileSearchBottomBar = mobileSearchTakeover ? (
+    <div
+      className="fixed inset-x-0 z-[70] flex items-center gap-1.5 border-t border-outline-variant/12 bg-surface-container-high px-3 py-1 shadow-[0_-6px_18px_rgba(15,23,42,0.12)]"
+      style={{
+        bottom: `calc(${hideMobileBottomNav ? '0px' : '3.5rem'} + env(safe-area-inset-bottom, 0px) + var(--visual-viewport-bottom, 0px))`,
+      }}
+    >
+      <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-on-surface-variant">
+        <span className="truncate tabular-nums">
+          {mobileSearch.loading
+            ? t('selectionPage.globalSearch.loading')
+            : mobileSearch.total > 0
+              ? t('selectionPage.globalSearch.total', { total: mobileSearch.total.toLocaleString() })
+              : t('selectionPage.globalSearch.emptyList')}
+        </span>
+        {mobileSearch.loadingMore ? (
+          <Icon name="refresh" size={13} className="animate-spin text-current motion-reduce:animate-none" />
+        ) : null}
+      </span>
+      {mobileSearch.query && mobileSearch.total > 0 && !mobileSearch.loading ? (
+        /* 「查看全部」：无按钮底色，保留主题色文字作为主操作提示 */
+        <button
+          type="button"
+          onClick={() => enterGlobalList(mobileSearch.query)}
+          className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-semibold text-primary-container ${selectionPress}`}
+        >
+          <Icon name="open_in_full" size={11} />
+          {t('selectionPage.globalSearch.viewAll')}
+        </button>
+      ) : null}
+      {/* 「关闭搜索」：幽灵样式（无底色/描边） */}
+      <button
+        type="button"
+        onClick={closeMobileSearch}
+        className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-medium text-on-surface-variant hover:text-on-surface ${selectionPress}`}
+      >
+        <Icon name="close" size={13} />
+        {t('selectionPage.globalSearch.close')}
+      </button>
+    </div>
+  ) : null;
+  const mobileSearchBarSpacer = mobileSearchTakeover ? <div aria-hidden className="h-10 shrink-0" /> : null;
+
   const shellTitle = (
     <span className="inline-flex min-w-0 max-w-full items-center gap-1 md:gap-1.5">
       {isDesktop ? (
@@ -2945,7 +3007,7 @@ export default function SelectionPage() {
             : t('selectionPage.intro.completed', { count: filteredTotal.toLocaleString() });
 
   const mobileSelectedSummary =
-    !isDesktop && phase === 'wizard' && specKeys.length > 0 && !search ? (
+    !isDesktop && phase === 'wizard' && specKeys.length > 0 && !search && !wizardSearchFocused ? (
       <div className="flex min-w-0 items-stretch overflow-x-auto border-t border-outline-variant/10 pt-1.5 scrollbar-none">
         {specKeys.map((k, index) => {
           const autoSelected = autoSelectedFields.has(k);
@@ -3237,7 +3299,11 @@ export default function SelectionPage() {
         ) : null}
         {phase === 'wizard' && liveCat ? (
           <SearchField
-            inputProps={searchDraftInputProps}
+            inputProps={{
+              ...searchDraftInputProps,
+              onFocus: () => setWizardSearchFocused(true),
+              onBlur: () => setWizardSearchFocused(false),
+            }}
             value={searchDraftInputValue}
             onClear={handleWizardSearchClear}
             placeholder={t('selectionPage.searchPlaceholder')}
@@ -3312,9 +3378,8 @@ export default function SelectionPage() {
 
   /* ── 移动端冻结头右侧操作（与 PC 工具栏对齐）──
      PC 端「生成分类/大类链接」「重新选型」在工具栏里，子分类页/向导页都有；
-     移动端工具栏宽度有限，统一收到标题右侧图标位。向导页=分类链接+重新选型、
-     子分类页=分类链接+重新选型、大类落地页=大类链接（与 PC 一致，人在首页
-     重新选型无意义，PC 该阶段也不渲染）。
+     移动端工具栏宽度有限，统一收到标题右侧图标位。向导页/子分类页=分类链接+
+     重新选型、大类落地页=大类链接（与 PC 一致，人在首页重新选型无意义）。
      大类/子分类阶段另有全局型号搜索：点搜索图标在标题正下方展开一行（非弹窗），
      向导阶段不出现（用向导自己的分类内搜索）。 */
   const mobileHeaderSearchButton = (phase === 'group' || phase === 'sub') && (
@@ -3453,9 +3518,6 @@ export default function SelectionPage() {
           s={mobileSearch}
           labels={globalSearchLabels}
           placeholder={t('selectionPage.globalSearch.placeholder')}
-          closeLabel={t('selectionPage.globalSearch.close')}
-          onClose={closeMobileSearch}
-          onViewAll={enterGlobalList}
         />
       ) : (
         <>
@@ -3598,7 +3660,9 @@ export default function SelectionPage() {
           >
             {contentBody}
             {mobileActionBarSpacer}
+            {mobileSearchBarSpacer}
             {actionBar}
+            {mobileSearchBottomBar}
           </AdminContentPanel>
         </AdminManagementPage>
 
