@@ -4,6 +4,7 @@
  * - SelectionImportModal  上传 zip → 预览对比 → 确认导入（slug 覆盖更新/新建，产品按型号合并不删）
  */
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   analyzeSelectionTransfer,
   commitSelectionTransfer,
@@ -56,6 +57,7 @@ export function SelectionExportModal({
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
+  const { t } = useTranslation();
   useEscapeToClose(open, !exporting, onClose);
 
   if (!open) return null;
@@ -79,11 +81,14 @@ export function SelectionExportModal({
     setExporting(true);
     try {
       const blob = await exportSelectionCategories(ids);
-      await downloadBlob(blob, `选型导出-${ids.length}个分类-${new Date().toISOString().slice(0, 10)}.zip`);
-      toast(`已导出 ${ids.length} 个分类（含设置、产品与图片）`, 'success');
+      await downloadBlob(
+        blob,
+        t('selectionAdmin.exportFilename', { count: ids.length, date: new Date().toISOString().slice(0, 10) }),
+      );
+      toast(t('selectionAdmin.exportDoneToast', { count: ids.length }), 'success');
       onClose();
     } catch (err) {
-      toast(err instanceof Error ? err.message : '导出失败', 'error');
+      toast(err instanceof Error ? err.message : t('selectionAdmin.exportFailed'), 'error');
     } finally {
       setExporting(false);
     }
@@ -93,11 +98,8 @@ export function SelectionExportModal({
     <div className={MODAL_OVERLAY_CLASS}>
       <div className={MODAL_PANEL_CLASS} onClick={(e) => e.stopPropagation()}>
         <div className="shrink-0 space-y-1">
-          <h2 className="text-base font-bold text-on-surface">导出选型数据包</h2>
-          <p className="text-xs text-on-surface-variant">
-            打包所选分类的完整数据：参数列设置、选项图片/画册配置、全部产品（含子零件清单）和图片/PDF 文件。导出的 zip
-            可在另一台站点「导入数据包」一键还原。
-          </p>
+          <h2 className="text-base font-bold text-on-surface">{t('selectionAdmin.transferExportTitle')}</h2>
+          <p className="text-xs text-on-surface-variant">{t('selectionAdmin.transferExportDesc')}</p>
         </div>
 
         <label
@@ -111,7 +113,9 @@ export function SelectionExportModal({
             onChange={toggleAll}
             className="h-4 w-4 rounded accent-primary-container"
           />
-          <span className="text-sm font-medium text-on-surface">全选（{categories.length} 个分类）</span>
+          <span className="text-sm font-medium text-on-surface">
+            {t('selectionAdmin.selectAllCategories', { count: categories.length })}
+          </span>
         </label>
 
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5">
@@ -133,7 +137,9 @@ export function SelectionExportModal({
                   {cat.groupName}
                 </span>
               )}
-              <span className="shrink-0 text-xs text-on-surface-variant/60">{cat.productCount ?? 0} 型号</span>
+              <span className="shrink-0 text-xs text-on-surface-variant/60">
+                {t('selectionAdmin.nModelsFull', { count: cat.productCount ?? 0 })}
+              </span>
             </label>
           ))}
         </div>
@@ -143,14 +149,16 @@ export function SelectionExportModal({
             onClick={onClose}
             className="rounded-lg bg-surface-container-high/40 px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-high sm:py-2"
           >
-            关闭
+            {t('common.close')}
           </button>
           <button
             onClick={handleExport}
             disabled={selectedIds.size === 0 || exporting}
             className="rounded-lg bg-primary-container px-4 py-2.5 text-sm font-bold text-on-primary hover:opacity-90 disabled:opacity-50 sm:py-2"
           >
-            {exporting ? '打包中...' : `导出 ${selectedIds.size} 个分类`}
+            {exporting
+              ? t('selectionAdmin.packing')
+              : t('selectionAdmin.exportNCategories', { count: selectedIds.size })}
           </button>
         </div>
       </div>
@@ -182,6 +190,7 @@ export function SelectionImportModal({
   const [fileName, setFileName] = useState('');
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const { t } = useTranslation();
 
   const reset = () => {
     setPhase('pick');
@@ -205,7 +214,7 @@ export function SelectionImportModal({
   const handleFile = async (file: File) => {
     if (busy) return;
     if (!file.name.toLowerCase().endsWith('.zip')) {
-      toast('请选择「导出数据包」产出的 .zip 文件', 'error');
+      toast(t('selectionAdmin.zipRequired'), 'error');
       return;
     }
     setBusy(true);
@@ -215,7 +224,7 @@ export function SelectionImportModal({
       setPreview(data);
       setPhase('preview');
     } catch (err) {
-      toast(err instanceof Error ? err.message : '解析数据包失败', 'error');
+      toast(err instanceof Error ? err.message : t('selectionAdmin.packageParseFailed'), 'error');
       setFileName('');
     } finally {
       setBusy(false);
@@ -230,15 +239,21 @@ export function SelectionImportModal({
       setResult(data);
       setPhase('done');
       onImported();
-      const catPart = `${data.categories.created} 新建 / ${data.categories.updated} 更新`;
-      const prodPart = `${data.products.created} 新增 / ${data.products.updated} 更新`;
+      const catPart = t('selectionAdmin.catPart', {
+        created: data.categories.created,
+        updated: data.categories.updated,
+      });
+      const prodPart = t('selectionAdmin.prodPart', {
+        created: data.products.created,
+        updated: data.products.updated,
+      });
       if (data.failed.length > 0) {
-        toast(`导入完成（${data.failed.length} 个分类失败，详见弹窗）`, 'info');
+        toast(t('selectionAdmin.importDoneWithFailures', { count: data.failed.length }), 'info');
       } else {
-        toast(`导入完成：分类 ${catPart}，产品 ${prodPart}`, 'success');
+        toast(t('selectionAdmin.importDoneToast', { cats: catPart, products: prodPart }), 'success');
       }
     } catch (err) {
-      toast(err instanceof Error ? err.message : '导入失败', 'error');
+      toast(err instanceof Error ? err.message : t('selectionAdmin.importFailed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -248,11 +263,11 @@ export function SelectionImportModal({
     <div className={MODAL_OVERLAY_CLASS}>
       <div className={MODAL_PANEL_CLASS} onClick={(e) => e.stopPropagation()}>
         <div className="shrink-0 space-y-1">
-          <h2 className="text-base font-bold text-on-surface">导入选型数据包</h2>
+          <h2 className="text-base font-bold text-on-surface">{t('selectionAdmin.transferImportTitle')}</h2>
           <p className="text-xs text-on-surface-variant">
-            {phase === 'pick' && '选择「导出数据包」产出的 zip（含分类设置、产品和图片）。'}
-            {phase === 'preview' && '导入前请确认清单：已存在的分类将被覆盖更新，产品按型号合并。'}
-            {phase === 'done' && '导入完成。'}
+            {phase === 'pick' && t('selectionAdmin.importPickDesc')}
+            {phase === 'preview' && t('selectionAdmin.importPreviewDesc')}
+            {phase === 'done' && t('selectionAdmin.importDoneDesc')}
           </p>
         </div>
 
@@ -275,8 +290,12 @@ export function SelectionImportModal({
               }}
             >
               <Icon name="inventory_2" size={28} className="mb-2 text-on-surface-variant/40" />
-              <span className="text-sm text-on-surface-variant">{busy ? '解析中...' : '点击选择或拖拽导入数据包'}</span>
-              <span className="mt-1 text-[10px] text-on-surface-variant/50">.zip，最大 {maxPackageMb}MB</span>
+              <span className="text-sm text-on-surface-variant">
+                {busy ? t('selectionAdmin.analyzing') : t('selectionAdmin.pickPackage')}
+              </span>
+              <span className="mt-1 text-[10px] text-on-surface-variant/50">
+                {t('selectionAdmin.packageLimits', { size: maxPackageMb })}
+              </span>
               <input
                 name="transfer-import-file"
                 type="file"
@@ -301,7 +320,7 @@ export function SelectionImportModal({
                   onClick={reset}
                   className="ml-auto shrink-0 text-xs text-primary-container hover:underline"
                 >
-                  重新选择
+                  {t('selectionAdmin.reselect')}
                 </button>
               </div>
               <div className="overflow-hidden rounded-lg border border-outline-variant/10">
@@ -316,20 +335,24 @@ export function SelectionImportModal({
                         c.exists ? 'bg-amber-500/10 text-amber-600' : 'bg-green-500/10 text-green-600'
                       }`}
                     >
-                      {c.exists ? `覆盖更新（已有 ${c.current_product_count} 型号）` : '新建'}
+                      {c.exists
+                        ? t('selectionAdmin.overwriteUpdate', { count: c.current_product_count })
+                        : t('selectionAdmin.createNew')}
                     </span>
                     <span className="w-14 shrink-0 text-right text-xs text-on-surface-variant/60">
-                      {c.product_count} 型号
+                      {t('selectionAdmin.nModelsFull', { count: c.product_count })}
                     </span>
                   </div>
                 ))}
               </div>
               <div className="rounded-lg bg-surface-container-high/40 px-3 py-2 text-[11px] leading-5 text-on-surface-variant">
-                资产文件：共 {preview.assets.total} 个
+                {t('selectionAdmin.assetsTotal', { count: preview.assets.total })}
                 {preview.assets.missing > 0 && (
-                  <span className="text-amber-600">（{preview.assets.missing} 个缺失，对应图片将无法显示）</span>
+                  <span className="text-amber-600">
+                    {t('selectionAdmin.assetsMissing', { count: preview.assets.missing })}
+                  </span>
                 )}
-                。同名分类的设置将被覆盖，产品按型号合并；服务器上多出的型号会保留，不会被删除。
+                {t('selectionAdmin.importMergeHint')}
               </div>
             </>
           )}
@@ -343,24 +366,34 @@ export function SelectionImportModal({
                   className={result.failed.length > 0 ? 'text-amber-500' : 'text-green-500'}
                 />
                 <span className="font-bold text-on-surface">
-                  {result.failed.length > 0 ? `导入完成，${result.failed.length} 个分类失败` : '导入成功'}
+                  {result.failed.length > 0
+                    ? t('selectionAdmin.donePartial', { count: result.failed.length })
+                    : t('selectionAdmin.importSuccessLabel')}
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="rounded-lg bg-surface-container-high/40 px-3 py-2">
-                  <p className="text-on-surface-variant">分类</p>
+                  <p className="text-on-surface-variant">{t('selectionAdmin.catLabel')}</p>
                   <p className="font-bold text-on-surface">
-                    新建 {result.categories.created} · 更新 {result.categories.updated}
+                    {t('selectionAdmin.catStatLine', {
+                      created: result.categories.created,
+                      updated: result.categories.updated,
+                    })}
                   </p>
                 </div>
                 <div className="rounded-lg bg-surface-container-high/40 px-3 py-2">
-                  <p className="text-on-surface-variant">产品</p>
+                  <p className="text-on-surface-variant">{t('selectionAdmin.prodLabel')}</p>
                   <p className="font-bold text-on-surface">
-                    新增 {result.products.created} · 更新 {result.products.updated}
+                    {t('selectionAdmin.prodStatLine', {
+                      created: result.products.created,
+                      updated: result.products.updated,
+                    })}
                   </p>
                 </div>
               </div>
-              <p className="text-xs text-on-surface-variant">资产文件已还原 {result.assets.restored} 个。</p>
+              <p className="text-xs text-on-surface-variant">
+                {t('selectionAdmin.assetsRestored', { count: result.assets.restored })}
+              </p>
               {result.failed.length > 0 && (
                 <div className="space-y-1 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
                   {result.failed.map((f, i) => (
@@ -380,7 +413,7 @@ export function SelectionImportModal({
             disabled={busy}
             className="rounded-lg bg-surface-container-high/40 px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-high disabled:opacity-50 sm:py-2"
           >
-            {phase === 'preview' ? '取消' : phase === 'done' ? '完成' : '关闭'}
+            {phase === 'preview' ? t('common.cancel') : phase === 'done' ? t('selectionAdmin.done') : t('common.close')}
           </button>
           {phase === 'preview' && (
             <button
@@ -388,7 +421,9 @@ export function SelectionImportModal({
               disabled={busy}
               className="rounded-lg bg-primary-container px-4 py-2.5 text-sm font-bold text-on-primary hover:opacity-90 disabled:opacity-50 sm:py-2"
             >
-              {busy ? '导入中...' : `确认导入 ${preview?.categories.length ?? 0} 个分类`}
+              {busy
+                ? t('selectionAdmin.importing')
+                : t('selectionAdmin.confirmImportN', { count: preview?.categories.length ?? 0 })}
             </button>
           )}
         </div>

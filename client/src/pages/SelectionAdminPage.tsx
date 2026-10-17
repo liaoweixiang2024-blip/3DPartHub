@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import type { SheetData } from 'write-excel-file/browser';
 import {
@@ -131,6 +132,7 @@ const ProductTableRow = memo(function ProductTableRow({
   onCancelDelete,
   onToggleSelected,
 }: { p: SelectionProduct; columns: ColumnDef[]; isDeleting: boolean; selected: boolean } & ProductRowHandlers) {
+  const { t } = useTranslation();
   return (
     <AdminTableBodyRow className={p.hidden ? 'opacity-55' : undefined}>
       <AdminTableCell className="w-10 px-3 py-2.5">
@@ -140,7 +142,7 @@ const ProductTableRow = memo(function ProductTableRow({
           checked={selected}
           onChange={() => onToggleSelected(p.id)}
           className="h-4 w-4 accent-primary-container"
-          aria-label={`选择 ${p.modelNo || p.name}`}
+          aria-label={t('selectionAdmin.selectProductAria', { name: p.modelNo || p.name })}
         />
       </AdminTableCell>
       <AdminTableCell
@@ -160,7 +162,7 @@ const ProductTableRow = memo(function ProductTableRow({
             onClick={() => onToggleHidden(p)}
             className={p.hidden ? SELECTION_ICON_BUTTON_ACTIVE : SELECTION_ICON_BUTTON_EDIT}
             data-tooltip-ignore
-            aria-label={p.hidden ? '恢复产品参与选型' : '隐藏产品（不参与选型）'}
+            aria-label={p.hidden ? t('selectionAdmin.restoreProduct') : t('selectionAdmin.hideProduct')}
           >
             <Icon name={p.hidden ? 'visibility_off' : 'visibility'} size={13} />
           </button>
@@ -168,7 +170,7 @@ const ProductTableRow = memo(function ProductTableRow({
             onClick={() => onEdit(p)}
             className={SELECTION_ICON_BUTTON_EDIT}
             data-tooltip-ignore
-            aria-label="编辑产品"
+            aria-label={t('selectionAdmin.editProduct')}
           >
             <Icon name="edit" size={13} />
           </button>
@@ -178,10 +180,10 @@ const ProductTableRow = memo(function ProductTableRow({
                 onClick={() => onConfirmDelete(p.id)}
                 className="px-1.5 py-0.5 text-[10px] bg-error text-on-error-container rounded"
               >
-                确认
+                {t('common.confirm')}
               </button>
               <button onClick={onCancelDelete} className="px-1.5 py-0.5 text-[10px] text-on-surface-variant">
-                取消
+                {t('common.cancel')}
               </button>
             </>
           ) : (
@@ -189,7 +191,7 @@ const ProductTableRow = memo(function ProductTableRow({
               onClick={() => onRequestDelete(p.id)}
               className={SELECTION_ICON_BUTTON_DELETE}
               data-tooltip-ignore
-              aria-label="删除产品"
+              aria-label={t('selectionAdmin.deleteProduct')}
             >
               <Icon name="delete" size={13} />
             </button>
@@ -212,9 +214,11 @@ const ProductMobileCard = memo(function ProductMobileCard({
   onCancelDelete,
   onToggleSelected,
 }: { p: SelectionProduct; columns: ColumnDef[]; isDeleting: boolean; selected: boolean } & ProductRowHandlers) {
+  const { t } = useTranslation();
   const specs = (p.specs as Record<string, string>) || {};
   const primaryColumn = columns.find((col) => col.displayOnly) || columns[0];
-  const title = p.modelNo || (primaryColumn ? specs[primaryColumn.key] : '') || p.name || '未命名产品';
+  const title =
+    p.modelNo || (primaryColumn ? specs[primaryColumn.key] : '') || p.name || t('selectionAdmin.unnamedProduct');
   const cleanName = cleanProductName(p.name, p.modelNo);
   const subtitle = cleanName && cleanName !== title ? cleanName : '';
   const displayColumns = columns.filter((col) => col.key !== primaryColumn?.key).slice(0, 6);
@@ -232,7 +236,7 @@ const ProductMobileCard = memo(function ProductMobileCard({
           checked={selected}
           onChange={() => onToggleSelected(p.id)}
           className="mt-1 h-4 w-4 shrink-0 accent-primary-container"
-          aria-label={`选择 ${p.modelNo || p.name}`}
+          aria-label={t('selectionAdmin.selectProductAria', { name: p.modelNo || p.name })}
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5 text-sm font-bold leading-snug text-on-surface break-words">
@@ -240,7 +244,7 @@ const ProductMobileCard = memo(function ProductMobileCard({
             {p.hidden ? (
               <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-surface-container-high px-1.5 py-0.5 text-[9px] font-medium text-on-surface-variant/70">
                 <Icon name="visibility_off" size={10} />
-                隐藏
+                {t('selectionAdmin.hiddenBadge')}
               </span>
             ) : null}
           </div>
@@ -253,7 +257,7 @@ const ProductMobileCard = memo(function ProductMobileCard({
             onClick={() => onToggleHidden(p)}
             className={p.hidden ? SELECTION_ICON_BUTTON_ACTIVE : SELECTION_ICON_BUTTON_EDIT}
             data-tooltip-ignore
-            aria-label={p.hidden ? '恢复产品参与选型' : '隐藏产品（不参与选型）'}
+            aria-label={p.hidden ? t('selectionAdmin.restoreProduct') : t('selectionAdmin.hideProduct')}
           >
             <Icon name={p.hidden ? 'visibility_off' : 'visibility'} size={14} />
           </button>
@@ -261,7 +265,7 @@ const ProductMobileCard = memo(function ProductMobileCard({
             onClick={() => onEdit(p)}
             className={SELECTION_ICON_BUTTON_EDIT}
             data-tooltip-ignore
-            aria-label="编辑产品"
+            aria-label={t('selectionAdmin.editProduct')}
           >
             <Icon name="edit" size={14} />
           </button>
@@ -271,13 +275,13 @@ const ProductMobileCard = memo(function ProductMobileCard({
                 onClick={() => onConfirmDelete(p.id)}
                 className="h-8 px-2 text-[10px] font-bold bg-error text-on-error-container rounded"
               >
-                确认
+                {t('common.confirm')}
               </button>
               <button
                 onClick={onCancelDelete}
                 className="h-8 px-2 text-[10px] text-on-surface-variant bg-surface-container-high rounded"
               >
-                取消
+                {t('common.cancel')}
               </button>
             </>
           ) : (
@@ -285,7 +289,7 @@ const ProductMobileCard = memo(function ProductMobileCard({
               onClick={() => onRequestDelete(p.id)}
               className={SELECTION_ICON_BUTTON_DELETE}
               data-tooltip-ignore
-              aria-label="删除产品"
+              aria-label={t('selectionAdmin.deleteProduct')}
             >
               <Icon name="delete" size={14} />
             </button>
@@ -310,6 +314,7 @@ const ProductMobileCard = memo(function ProductMobileCard({
 });
 
 function Content() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const businessConfig = useMemo(() => getBusinessConfig(), []);
   const { uploadPolicy, pageSizePolicy } = businessConfig;
@@ -610,9 +615,9 @@ function Content() {
           items.map((item) => (item.id === manageGroupCatsId ? { ...item, image: url, imageFit } : item)),
         );
         patchGroupCategoryCache(manageGroupCatsId, { groupImage: url || null, groupImageFit: imageFit });
-        toast('分组封面已粘贴上传', 'success');
+        toast(t('selectionAdmin.groupCoverPasted'), 'success');
       } catch (err) {
-        toast(getApiErrorMessage(err, '上传失败'), 'error');
+        toast(getApiErrorMessage(err, t('selectionAdmin.uploadFailed')), 'error');
       }
     },
     [groupItems, manageGroupCatsId, patchGroupCategoryCache, toast],
@@ -728,21 +733,21 @@ function Content() {
       const payload = { ...basePayload, optionOrder };
       if (editCat) {
         await updateCategory(editCat.id, payload);
-        toast('分类已更新', 'success');
+        toast(t('selectionAdmin.categoryUpdated'), 'success');
       } else {
         await createCategory(payload);
-        toast('分类已创建', 'success');
+        toast(t('selectionAdmin.categoryCreated'), 'success');
       }
       setShowCatModal(false);
       mutateCats();
     } catch (err: unknown) {
-      toast(getApiErrorMessage(err, '操作失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.opFailed')), 'error');
     }
   }
   async function handleDeleteCat(id: string, force = false) {
     try {
       await deleteCategory(id, { force });
-      toast('分类已删除', 'success');
+      toast(t('selectionAdmin.categoryDeleted'), 'success');
       setDeleteCatId(null);
       setForceDeleteCat(null);
       if (selectedCatId === id) setSelectedCatId('');
@@ -762,7 +767,7 @@ function Content() {
         setDeleteCatId(null);
         return;
       }
-      toast(getApiErrorMessage(err, '删除失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.deleteFailed')), 'error');
     }
   }
 
@@ -772,9 +777,14 @@ function Content() {
     try {
       await updateCategory(cat.id, { hidden: next });
       mutateCats();
-      toast(next ? `「${cat.name}」已隐藏（公开选型页不显示）` : `「${cat.name}」已恢复显示`, 'success');
+      toast(
+        next
+          ? t('selectionAdmin.categoryHiddenToast', { name: cat.name })
+          : t('selectionAdmin.categoryShownToast', { name: cat.name }),
+        'success',
+      );
     } catch (err: unknown) {
-      toast(getApiErrorMessage(err, '操作失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.opFailed')), 'error');
     }
   }
 
@@ -786,14 +796,16 @@ function Content() {
         await updateProduct(p.id, { hidden: next });
         mutateProds();
         toast(
-          next ? `「${p.modelNo || p.name}」已隐藏（不参与选型）` : `「${p.modelNo || p.name}」已恢复参与选型`,
+          next
+            ? t('selectionAdmin.productHiddenToast', { name: p.modelNo || p.name })
+            : t('selectionAdmin.productShownToast', { name: p.modelNo || p.name }),
           'success',
         );
       } catch (err: unknown) {
-        toast(getApiErrorMessage(err, '操作失败'), 'error');
+        toast(getApiErrorMessage(err, t('selectionAdmin.opFailed')), 'error');
       }
     },
-    [mutateProds, toast],
+    [mutateProds, t, toast],
   );
 
   // ---- Product handlers ----
@@ -807,16 +819,16 @@ function Content() {
   const selectableGenerateColumns = generatableProductColumns(generateColumns);
   const generateTemplateExample = selectableGenerateColumns.length
     ? `[${selectableGenerateColumns[0].key}]`
-    : '[字段A]-[字段B]-[字段C]';
+    : t('selectionAdmin.templateExampleFallback');
   const generateExcludeExample = selectableGenerateColumns.length
     ? (() => {
         const [first, second, third] = selectableGenerateColumns;
-        const firstKey = first?.key || '字段A';
-        const secondKey = second?.key || '字段B';
+        const firstKey = first?.key || t('selectionAdmin.fieldA');
+        const secondKey = second?.key || t('selectionAdmin.fieldB');
         const thirdKey = third?.key || secondKey;
-        return `例：${firstKey}=不允许值 && ${secondKey}=*\n例：${firstKey}=A && ${thirdKey}=B|C`;
+        return t('selectionAdmin.excludeExample', { first: firstKey, second: secondKey, third: thirdKey });
       })()
-    : '例：字段A=不允许值 && 字段B=*\n例：字段A=A && 字段C=B|C';
+    : t('selectionAdmin.excludeExampleFallback');
   const filteredGeneratePreview = useMemo(() => {
     const q = generatePreviewSearch.trim().toLowerCase();
     if (!q) return generatePreview;
@@ -844,7 +856,7 @@ function Content() {
 
   function openNewProd() {
     if (!selectedCatId) {
-      toast('请先选择分类', 'error');
+      toast(t('selectionAdmin.pleaseSelectCategory'), 'error');
       return;
     }
     editProdIdRef.current = null;
@@ -898,29 +910,29 @@ function Content() {
       };
       if (editProd) {
         await updateProduct(editProd.id, payload);
-        toast('产品已更新', 'success');
+        toast(t('selectionAdmin.productUpdated'), 'success');
       } else {
         await createProduct({ categoryId: selectedCatId, ...payload });
-        toast('产品已创建', 'success');
+        toast(t('selectionAdmin.productCreated'), 'success');
       }
       setShowProdModal(false);
       mutateProds();
     } catch (err: unknown) {
-      toast(getApiErrorMessage(err, '操作失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.opFailed')), 'error');
     }
   }
   const handleDeleteProd = useCallback(
     async (id: string) => {
       try {
         await deleteProduct(id);
-        toast('产品已删除', 'success');
+        toast(t('selectionAdmin.productDeleted'), 'success');
         setDeleteProdId(null);
         mutateProds();
       } catch (err: unknown) {
-        toast(getApiErrorMessage(err, '删除失败'), 'error');
+        toast(getApiErrorMessage(err, t('selectionAdmin.deleteFailed')), 'error');
       }
     },
-    [mutateProds, toast],
+    [mutateProds, t, toast],
   );
   const cancelDeleteProd = useCallback(() => setDeleteProdId(null), []);
 
@@ -940,11 +952,16 @@ function Content() {
     setBatchBusy(true);
     try {
       const { updated } = await batchUpdateSelectionProductsHidden(ids, hidden);
-      toast(hidden ? `已隐藏 ${updated} 个产品` : `已恢复 ${updated} 个产品参与选型`, 'success');
+      toast(
+        hidden
+          ? t('selectionAdmin.batchHiddenToast', { count: updated })
+          : t('selectionAdmin.batchShownToast', { count: updated }),
+        'success',
+      );
       setSelectedProdIds(new Set());
       mutateProds();
     } catch (err: unknown) {
-      toast(getApiErrorMessage(err, '批量操作失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.batchOpFailed')), 'error');
     } finally {
       setBatchBusy(false);
     }
@@ -954,7 +971,7 @@ function Content() {
     if (!valueProductsView || batchFieldBusy) return;
     const value = batchFieldValue.trim();
     if (!value) {
-      toast('请填写要设置的值', 'error');
+      toast(t('selectionAdmin.fillValueFirst'), 'error');
       return;
     }
     // 与 productsByOptionValue 同语义（specs[field] === value 的全部产品），但该 memo 定义在本函数之后，
@@ -967,7 +984,7 @@ function Content() {
     const matchedIds = new Set(matched.map((p) => p.id));
     const targetIds = [...valueProductsSelected].filter((id) => matchedIds.has(id));
     if (!targetIds.length) {
-      toast('请先勾选要修改的产品', 'error');
+      toast(t('selectionAdmin.selectProductsFirst'), 'error');
       return;
     }
     setBatchFieldBusy(true);
@@ -975,14 +992,14 @@ function Content() {
       const { updated } = await batchUpdateSelectionProductField(targetIds, batchFieldKey, value);
       const fieldLabel =
         batchFieldKey === 'name'
-          ? '名称'
+          ? t('selectionAdmin.colName')
           : activeCat?.columns.find((c) => c.key === batchFieldKey)?.label || batchFieldKey;
-      toast(`已将 ${updated} 个产品的${fieldLabel}统一设置为「${value}」`, 'success');
+      toast(t('selectionAdmin.batchFieldApplied', { count: updated, field: fieldLabel, value }), 'success');
       setBatchFieldEditOpen(false);
       setBatchFieldValue('');
       mutateProds();
     } catch (err: unknown) {
-      toast(getApiErrorMessage(err, '批量修改失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.batchEditFailed')), 'error');
     } finally {
       setBatchFieldBusy(false);
     }
@@ -1013,13 +1030,13 @@ function Content() {
     const modelNo = valueProductsDraft.modelNo.trim();
     const name = valueProductsDraft.name.trim();
     if (!modelNo && !name) {
-      toast('请至少填写型号或名称', 'error');
+      toast(t('selectionAdmin.modelOrNameRequired'), 'error');
       return;
     }
     // 型号在分类内是产品身份（批量导入按 categoryId+modelNo upsert）：
     // 草稿默认复制首行数据，未改动直接确认等于复制出同型号产品 → 拦截
     if (modelNo && products.some((p) => (p.modelNo || '').trim() === modelNo)) {
-      toast(`型号「${modelNo}」已存在，请修改型号后再新增`, 'error');
+      toast(t('selectionAdmin.modelExists', { model: modelNo }), 'error');
       return;
     }
     // 新行必须属于当前选项值（当前字段锁定为该值，其余参数可改）
@@ -1040,11 +1057,11 @@ function Content() {
         components: valueProductsDraft.components,
         sortOrder: valueProductsDraft.sortOrder,
       });
-      toast(`已新增产品「${name || modelNo}」`, 'success');
+      toast(t('selectionAdmin.productCreatedToast', { name: name || modelNo }), 'success');
       setValueProductsDraft(null);
       mutateProds();
     } catch (err: unknown) {
-      toast(getApiErrorMessage(err, '新增产品失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.createProductFailed')), 'error');
     } finally {
       setValueProductsBusy(false);
     }
@@ -1066,12 +1083,12 @@ function Content() {
     const modelNo = valueProductsEdit.draft.modelNo.trim();
     const name = valueProductsEdit.draft.name.trim();
     if (!modelNo && !name) {
-      toast('请至少填写型号或名称', 'error');
+      toast(t('selectionAdmin.modelOrNameRequired'), 'error');
       return;
     }
     // 改型号撞上分类内其他产品 → 拦截（型号是产品身份，同型号会造成批量导入 upsert 冲突）
     if (modelNo && products.some((p) => (p.modelNo || '').trim() === modelNo && p.id !== valueProductsEdit.id)) {
-      toast(`型号「${modelNo}」已被其他产品使用，请换一个型号`, 'error');
+      toast(t('selectionAdmin.modelTaken', { model: modelNo }), 'error');
       return;
     }
     // PUT 的 specs 是整体替换：带上草稿里的全部参数列，清空的列即清除该参数
@@ -1085,11 +1102,11 @@ function Content() {
     setValueProductsBusy(true);
     try {
       await updateProduct(valueProductsEdit.id, { name: name || modelNo, modelNo: modelNo || undefined, specs });
-      toast('产品已更新', 'success');
+      toast(t('selectionAdmin.productUpdated'), 'success');
       setValueProductsEdit(null);
       mutateProds();
     } catch (err: unknown) {
-      toast(getApiErrorMessage(err, '保存失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.saveFailed')), 'error');
     } finally {
       setValueProductsBusy(false);
     }
@@ -1111,12 +1128,12 @@ function Content() {
     setValueProductsBusy(true);
     try {
       const { deleted } = await batchDeleteSelectionProducts(ids);
-      toast(`已删除 ${deleted} 个产品`, 'success');
+      toast(t('selectionAdmin.productsDeleted', { count: deleted }), 'success');
       setValueDeleteConfirmOpen(false);
       setValueProductsSelected(new Set());
       mutateProds();
     } catch (err: unknown) {
-      toast(getApiErrorMessage(err, '批量删除失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.batchDeleteFailed')), 'error');
     } finally {
       setValueProductsBusy(false);
     }
@@ -1127,12 +1144,12 @@ function Content() {
     setBatchBusy(true);
     try {
       const { deleted } = await batchDeleteSelectionProducts(ids);
-      toast(`已删除 ${deleted} 个产品`, 'success');
+      toast(t('selectionAdmin.productsDeleted', { count: deleted }), 'success');
       setBatchDeleteConfirmOpen(false);
       setSelectedProdIds(new Set());
       mutateProds();
     } catch (err: unknown) {
-      toast(getApiErrorMessage(err, '批量删除失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.batchDeleteFailed')), 'error');
     } finally {
       setBatchBusy(false);
     }
@@ -1150,7 +1167,7 @@ function Content() {
     const files = Array.from(fileList);
     const validFiles = files.filter((file) => productAssetKind(file));
     if (!validFiles.length) {
-      toast('只支持上传图片或 PDF 文件', 'error');
+      toast(t('selectionAdmin.onlyImageOrPdf'), 'error');
       return;
     }
 
@@ -1171,10 +1188,13 @@ function Content() {
         if (kind === 'image') imageCount += 1;
         if (kind === 'pdf') pdfCount += 1;
       }
-      const parts = [imageCount ? `${imageCount} 张图片` : '', pdfCount ? `${pdfCount} 个 PDF` : ''].filter(Boolean);
-      toast(`${parts.join('、')}已上传`, 'success');
+      const parts = [
+        imageCount ? t('selectionAdmin.nImages', { count: imageCount }) : '',
+        pdfCount ? t('selectionAdmin.nPdfs', { count: pdfCount }) : '',
+      ].filter(Boolean);
+      toast(t('selectionAdmin.assetsUploaded', { parts: parts.join('、') }), 'success');
     } catch (err) {
-      toast(getApiErrorMessage(err, '上传失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.uploadFailed')), 'error');
     } finally {
       setProductAssetUploading(false);
       setProductAssetDragging(false);
@@ -1199,17 +1219,17 @@ function Content() {
       if (/\.(pdf)(\?.*)?$/i.test(text)) {
         e.preventDefault();
         setProdForm((prev) => ({ ...prev, pdfUrl: text }));
-        toast('PDF 链接已粘贴', 'success');
+        toast(t('selectionAdmin.pdfLinkPasted'), 'success');
       } else if (/\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(text)) {
         e.preventDefault();
-        toast('正在下载图片...', 'info');
+        toast(t('selectionAdmin.downloadingImage'), 'info');
         try {
           const { url } = await uploadOptionImageFromUrl(text);
           setProdForm((prev) => ({ ...prev, image: url }));
-          toast('图片已下载并保存', 'success');
+          toast(t('selectionAdmin.imageDownloadedSaved'), 'success');
         } catch {
           setProdForm((prev) => ({ ...prev, image: text }));
-          toast('图片链接已粘贴，远程保存失败', 'error');
+          toast(t('selectionAdmin.imageLinkPasteFallback'), 'error');
         }
       }
     }
@@ -1219,7 +1239,10 @@ function Content() {
     setBatchImporting(true);
     try {
       const { created, updated } = await batchImportProducts(selectedCatId, batchParsed);
-      const msg = updated > 0 ? `导入完成：新增 ${created} 个，更新 ${updated} 个` : `成功导入 ${created} 个产品`;
+      const msg =
+        updated > 0
+          ? t('selectionAdmin.importDoneCreated', { created, updated })
+          : t('selectionAdmin.importSuccess', { count: created });
       toast(msg, 'success');
       setShowBatchModal(false);
       setBatchParsed(null);
@@ -1227,7 +1250,7 @@ function Content() {
       mutateProds();
       mutateCats();
     } catch (err: unknown) {
-      toast(getApiErrorMessage(err, '导入失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.importFailed')), 'error');
     } finally {
       setBatchImporting(false);
     }
@@ -1236,7 +1259,7 @@ function Content() {
   /* 子零件导入：读取 .xlsx / .csv 表格 → 制表符文本，交给 parseKitComponentLines（表头驱动解析） */
   async function handleKitImportFile(file: File) {
     try {
-      if (file.size > 5 * 1024 * 1024) throw new Error('文件不能超过 5MB');
+      if (file.size > 5 * 1024 * 1024) throw new Error(t('selectionAdmin.kitFileTooLarge', { size: 5 }));
       const lowerName = file.name.toLowerCase();
       let rows: unknown[][];
       if (lowerName.endsWith('.csv')) {
@@ -1245,17 +1268,17 @@ function Content() {
         const { readSheet } = await import('read-excel-file/browser');
         rows = (await readSheet(file)) as unknown[][];
       } else {
-        throw new Error('仅支持 .xlsx / .csv 文件');
+        throw new Error(t('selectionAdmin.onlyXlsxCsv'));
       }
       const lines = rows
         .map((row) => row.map((cell) => normalizeImportCell(cell)))
         .filter((cells) => cells.some(Boolean))
         .map((cells) => cells.join('\t'));
-      if (lines.length === 0) throw new Error('文件中没有数据');
+      if (lines.length === 0) throw new Error(t('selectionAdmin.noDataInFile'));
       setKitImportText(lines.join('\n'));
-      toast(`已读取 ${file.name}，请核对下方解析结果`, 'success');
+      toast(t('selectionAdmin.fileParsedToast', { name: file.name }), 'success');
     } catch (err) {
-      toast(err instanceof Error ? err.message : '文件解析失败，请确认是有效的 .xlsx / .csv 文件', 'error');
+      toast(err instanceof Error ? err.message : t('selectionAdmin.kitParseFailed'), 'error');
     }
   }
 
@@ -1272,7 +1295,7 @@ function Content() {
       [{ value: 'PC4-0.5' }, { value: '' }, { value: 'KAC-002' }, { value: 4 }],
     ];
     await writeXlsxFile(rows, { sheet: '子零件导入模板' }).toFile('kit_components_import_template.xlsx');
-    toast('已下载子零件导入模板', 'success');
+    toast(t('selectionAdmin.kitTemplateDownloaded'), 'success');
   }
 
   function handleExcelFile(file: File) {
@@ -1282,7 +1305,7 @@ function Content() {
       try {
         const rows = await readProductImportRows(file, uploadPolicy);
         if (rows.length === 0) {
-          setBatchErrors(['文件中没有数据']);
+          setBatchErrors([t('selectionAdmin.noDataInFile')]);
           return;
         }
 
@@ -1320,13 +1343,16 @@ function Content() {
 
           if (modelNo) specs['型号'] = modelNo;
           const name = cleanProductName(
-            rawName || modelNo || Object.values(specs).find(Boolean) || `产品 ${i + 1}`,
+            rawName ||
+              modelNo ||
+              Object.values(specs).find(Boolean) ||
+              t('selectionAdmin.fallbackName', { index: i + 1 }),
             modelNo,
           );
           if (!modelNo) {
-            errors.push(`第 ${i + 2} 行：缺少型号编号，导入后无法按型号自动更新`);
+            errors.push(t('selectionAdmin.rowMissingModel', { row: i + 2 }));
           } else if (seenModelNos.has(modelNo)) {
-            errors.push(`第 ${i + 2} 行：型号编号 ${modelNo} 在文件中重复，将以后面的数据为准`);
+            errors.push(t('selectionAdmin.rowDuplicateModel', { row: i + 2, model: modelNo }));
           }
           if (modelNo) seenModelNos.add(modelNo);
 
@@ -1348,7 +1374,7 @@ function Content() {
             try {
               product.components = JSON.parse(compStr);
             } catch {
-              errors.push(`第 ${i + 2} 行：组件 JSON 解析失败`);
+              errors.push(t('selectionAdmin.rowBadJson', { row: i + 2 }));
             }
           }
 
@@ -1358,43 +1384,43 @@ function Content() {
         if (errors.length > 0) setBatchErrors(errors);
         setBatchParsed(parsed);
       } catch (err) {
-        setBatchErrors([err instanceof Error ? err.message : '文件解析失败，请确认是有效的 .xlsx / .csv 文件']);
+        setBatchErrors([err instanceof Error ? err.message : t('selectionAdmin.kitParseFailed')]);
       }
     })();
   }
 
   async function downloadProductImportTemplate() {
     if (!activeCat) {
-      toast('请先选择分类', 'error');
+      toast(t('selectionAdmin.pleaseSelectCategory'), 'error');
       return;
     }
     const { default: writeXlsxFile } = await import('write-excel-file/browser');
     const headers = productImportHeaders(productColumns);
     const rows: SheetData = [headers.map((header) => ({ value: header, fontWeight: 'bold' as const }))];
     await writeXlsxFile(rows, { sheet: '产品导入模板' }).toFile(`${activeCat.slug || 'products'}_import_template.xlsx`);
-    toast('已下载导入模板', 'success');
+    toast(t('selectionAdmin.templateDownloaded'), 'success');
   }
 
   async function exportCurrentProducts() {
     if (!activeCat) {
-      toast('请先选择分类', 'error');
+      toast(t('selectionAdmin.pleaseSelectCategory'), 'error');
       return;
     }
     if (!products.length) {
-      toast('没有可导出的产品', 'error');
+      toast(t('selectionAdmin.noExportableProducts'), 'error');
       return;
     }
     // 列表数据不含子零件清单（体积优化），导出需要「组件(JSON)」列，单独拉一次全量
     let exportItems = products;
     try {
-      toast('正在准备导出数据（含子零件清单）...', 'info');
+      toast(t('selectionAdmin.preparingExport'), 'info');
       const full = await getSelectionProducts(activeCat.slug, 1, 5000, '', {
         includeHidden: true,
         includeComponents: true,
       });
       if (full.items.length) exportItems = full.items;
     } catch {
-      toast('拉取完整数据失败，子零件清单列将为空', 'error');
+      toast(t('selectionAdmin.fullFetchFailed'), 'error');
     }
     const { default: writeXlsxFile } = await import('write-excel-file/browser');
     const cols = productColumns;
@@ -1418,7 +1444,7 @@ function Content() {
       rows.push(headers.map((header) => baseRow[header] ?? ''));
     });
     await writeXlsxFile(rows, { sheet: '产品' }).toFile(`${activeCat.slug || 'products'}_products.xlsx`);
-    toast(`已导出 ${exportItems.length} 个产品`, 'success');
+    toast(t('selectionAdmin.exportedProducts', { count: exportItems.length }), 'success');
   }
 
   // ---- Option Image handlers ----
@@ -1536,12 +1562,12 @@ function Content() {
 
   function openGenerateProducts() {
     if (!activeCat) {
-      toast('请先选择分类', 'error');
+      toast(t('selectionAdmin.pleaseSelectCategory'), 'error');
       return;
     }
     const selectableColumns = selectableProductColumns;
     if (!selectableColumns.length) {
-      toast('当前分类没有可组合生成的选择列', 'error');
+      toast(t('selectionAdmin.noSelectableColumns'), 'error');
       return;
     }
     resetGenerateFormForCategory(activeCat, products);
@@ -1551,11 +1577,11 @@ function Content() {
   function refreshGeneratePreview() {
     const selectableColumns = selectableGenerateColumns;
     const errors: string[] = [];
-    if (!generateCat) errors.push('请先选择分类');
-    if (!selectableColumns.length) errors.push('当前分类没有可组合生成的选择列');
+    if (!generateCat) errors.push(t('selectionAdmin.pleaseSelectCategory'));
+    if (!selectableColumns.length) errors.push(t('selectionAdmin.noSelectableColumns'));
     selectableColumns.forEach((col) => {
       if (parseGenerateEntries(generateOptionTexts[col.key] || '').length === 0) {
-        errors.push(`${col.label || col.key} 没有填写可选值`);
+        errors.push(t('selectionAdmin.columnMissingOptions', { field: col.label || col.key }));
       }
     });
 
@@ -1570,8 +1596,8 @@ function Content() {
           limit: 10000,
         });
 
-    if (preview.length >= 10000) errors.push('组合超过 10000 条，已截断；建议减少选项或增加排除规则');
-    if (!preview.length && errors.length === 0) errors.push('排除规则过滤掉了全部组合');
+    if (preview.length >= 10000) errors.push(t('selectionAdmin.combosTruncated'));
+    if (!preview.length && errors.length === 0) errors.push(t('selectionAdmin.allExcluded'));
     setGeneratePreview(preview);
     setGeneratePreviewPage(1);
     setGenerateErrors(errors);
@@ -1583,20 +1609,23 @@ function Content() {
       return;
     }
     if (!selectedCatId) {
-      toast('请先选择分类', 'error');
+      toast(t('selectionAdmin.pleaseSelectCategory'), 'error');
       return;
     }
     setGenerateImporting(true);
     try {
       const { created, updated } = await batchImportProducts(selectedCatId, generatePreview);
-      const msg = updated > 0 ? `生成导入完成：新增 ${created} 个，更新 ${updated} 个` : `已生成导入 ${created} 个产品`;
+      const msg =
+        updated > 0
+          ? t('selectionAdmin.generateImportDone', { created, updated })
+          : t('selectionAdmin.generateImportSuccess', { count: created });
       toast(msg, 'success');
       setShowGenerateModal(false);
       setGeneratePreview([]);
       mutateProds();
       mutateCats();
     } catch (err) {
-      toast(getApiErrorMessage(err, '生成导入失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.generateImportFailed')), 'error');
     } finally {
       setGenerateImporting(false);
     }
@@ -1609,10 +1638,10 @@ function Content() {
       const updated = { ...optImages, [field]: { ...(optImages[field] || {}), [val]: url } };
       await updateCategory(activeCat!.id, { optionImages: updated });
       mutateCats();
-      toast('图片已上传', 'success');
+      toast(t('selectionAdmin.imageUploaded'), 'success');
     } catch (err) {
       // 带服务端原因（如「图片不能超过 5MB」），失败不改动现有数据
-      toast(getApiErrorMessage(err, '上传失败'), 'error');
+      toast(getApiErrorMessage(err, t('selectionAdmin.uploadFailed')), 'error');
     } finally {
       setUploadingVal(null);
     }
@@ -1652,9 +1681,9 @@ function Content() {
       e.preventDefault();
       try {
         await uploadOptCatalog(optImgField, targetVal, pdfFile);
-        if (zone === 'image') toast('PDF 已上传到画册资料（画册区才收 PDF）', 'info');
+        if (zone === 'image') toast(t('selectionAdmin.pdfUploadedToCatalog'), 'info');
       } catch (err) {
-        toast(getApiErrorMessage(err, '上传 PDF 失败'), 'error');
+        toast(getApiErrorMessage(err, t('selectionAdmin.uploadPdfFailed')), 'error');
       }
       return;
     }
@@ -1665,7 +1694,7 @@ function Content() {
         try {
           await uploadOptCatalog(optImgField, targetVal, imageFile);
         } catch (err) {
-          toast(getApiErrorMessage(err, '上传画册失败'), 'error');
+          toast(getApiErrorMessage(err, t('selectionAdmin.uploadCatalogFailed')), 'error');
         }
         return;
       }
@@ -1681,7 +1710,7 @@ function Content() {
           try {
             await uploadOptCatalog(optImgField, targetVal, file);
           } catch (err) {
-            toast(getApiErrorMessage(err, '上传画册失败'), 'error');
+            toast(getApiErrorMessage(err, t('selectionAdmin.uploadCatalogFailed')), 'error');
           }
           return;
         }
@@ -1701,13 +1730,13 @@ function Content() {
           };
           await updateCategory(activeCat!.id, { optionCatalogs: updated });
           mutateCats();
-          toast('画册链接已保存', 'success');
+          toast(t('selectionAdmin.catalogLinkSaved'), 'success');
         } catch {
-          toast('保存失败', 'error');
+          toast(t('selectionAdmin.saveFailed'), 'error');
         }
         return;
       }
-      toast('正在下载图片...', 'info');
+      toast(t('selectionAdmin.downloadingImage'), 'info');
       try {
         const { url } = await uploadOptionImageFromUrl(text);
         const updated = {
@@ -1716,9 +1745,9 @@ function Content() {
         };
         await updateCategory(activeCat!.id, { optionImages: updated });
         mutateCats();
-        toast('图片已下载并保存', 'success');
+        toast(t('selectionAdmin.imageDownloadedSaved'), 'success');
       } catch {
-        toast('下载图片失败，请检查链接是否有效', 'error');
+        toast(t('selectionAdmin.downloadImageCheckUrl'), 'error');
       }
     }
   }
@@ -1737,7 +1766,7 @@ function Content() {
     }
     await updateCategory(activeCat!.id, { optionImages: updated });
     mutateCats();
-    toast('图片已移除', 'success');
+    toast(t('selectionAdmin.imageRemoved'), 'success');
   }
 
   async function uploadOptCatalog(field: string, val: string, file: File) {
@@ -1747,7 +1776,7 @@ function Content() {
     const updated = { ...optCatalogs, [field]: { ...(optCatalogs[field] || {}), [val]: url } };
     await updateCategory(activeCat.id, { optionCatalogs: updated });
     mutateCats();
-    toast('画册已上传', 'success');
+    toast(t('selectionAdmin.catalogUploaded'), 'success');
   }
 
   async function removeOptCatalog(field: string, val: string) {
@@ -1758,7 +1787,7 @@ function Content() {
     }
     await updateCategory(activeCat!.id, { optionCatalogs: updated });
     mutateCats();
-    toast('画册已移除', 'success');
+    toast(t('selectionAdmin.catalogRemoved'), 'success');
   }
 
   const totalCats = categories.length;
@@ -1807,17 +1836,17 @@ function Content() {
 
   return (
     <AdminManagementPage
-      title="选型管理"
-      description="管理选型分类、产品、参数列定义和批量导入数据"
+      title={t('selectionAdmin.pageTitle')}
+      description={t('selectionAdmin.pageDescription')}
       actions={
         <div className="hidden items-center gap-2 md:flex">
           <button onClick={openNewProd} disabled={noProductCat} className={SELECTION_TOOLBAR_BUTTON_PRIMARY}>
-            <SelectionToolbarButtonContent icon="add">新建产品</SelectionToolbarButtonContent>
+            <SelectionToolbarButtonContent icon="add">{t('selectionAdmin.newProduct')}</SelectionToolbarButtonContent>
           </button>
           <ToolbarMoreMenu
             items={[
               {
-                label: '批量导入',
+                label: t('selectionAdmin.batchImport'),
                 icon: 'upload',
                 disabled: noProductCat,
                 action: () => {
@@ -1826,12 +1855,26 @@ function Content() {
                   setShowBatchModal(true);
                 },
               },
-              { label: '批量生成', icon: 'auto_awesome', disabled: noProductCat, action: openGenerateProducts },
-              { label: '导出', icon: 'download', disabled: noProductCat, action: exportCurrentProducts },
-              { label: '导出数据包', icon: 'inventory_2', action: () => setShowTransferExport(true) },
-              { label: '导入数据包', icon: 'archive', action: () => setShowTransferImport(true) },
               {
-                label: '选项设置',
+                label: t('selectionAdmin.batchGenerate'),
+                icon: 'auto_awesome',
+                disabled: noProductCat,
+                action: openGenerateProducts,
+              },
+              {
+                label: t('selectionAdmin.exportProducts'),
+                icon: 'download',
+                disabled: noProductCat,
+                action: exportCurrentProducts,
+              },
+              {
+                label: t('selectionAdmin.exportPackage'),
+                icon: 'inventory_2',
+                action: () => setShowTransferExport(true),
+              },
+              { label: t('selectionAdmin.importPackage'), icon: 'archive', action: () => setShowTransferImport(true) },
+              {
+                label: t('selectionAdmin.optionSettings'),
                 icon: 'settings',
                 disabled: noProductCat,
                 action: () => {
@@ -1841,10 +1884,10 @@ function Content() {
                   setShowOptImgModal(true);
                 },
               },
-              { label: '新建分类', icon: 'add', action: openNewCat },
-              { label: '分组管理', icon: 'folder', action: openGroupManager },
+              { label: t('selectionAdmin.newCategory'), icon: 'add', action: openNewCat },
+              { label: t('selectionAdmin.groupManagement'), icon: 'folder', action: openGroupManager },
               {
-                label: '排序',
+                label: t('selectionAdmin.sortMenu'),
                 icon: 'view_list',
                 action: () => {
                   setCatSortItems(categories.map((c) => ({ id: c.id, name: c.name })));
@@ -1860,20 +1903,25 @@ function Content() {
           <div className="min-w-0 flex-1">
             <ResponsiveSectionTabs
               tabs={[
-                { value: 'categories', label: '分类管理', count: totalCats, icon: 'category' },
-                { value: 'products', label: '产品管理', count: totalProducts, icon: 'inventory_2' },
+                { value: 'categories', label: t('selectionAdmin.tabCategories'), count: totalCats, icon: 'category' },
+                {
+                  value: 'products',
+                  label: t('selectionAdmin.tabProducts'),
+                  count: totalProducts,
+                  icon: 'inventory_2',
+                },
               ]}
               value={tab}
               onChange={(next) => {
                 setTab(next as Tab);
                 setCatFilter('all');
               }}
-              mobileTitle="选型管理"
+              mobileTitle={t('selectionAdmin.pageTitle')}
             />
           </div>
           <div className="grid min-w-0 grid-cols-4 items-center gap-1.5 overflow-visible md:hidden">
             <button onClick={openNewProd} disabled={noProductCat} className={SELECTION_TOOLBAR_BUTTON_PRIMARY}>
-              <SelectionToolbarButtonContent icon="add">新建产品</SelectionToolbarButtonContent>
+              <SelectionToolbarButtonContent icon="add">{t('selectionAdmin.newProduct')}</SelectionToolbarButtonContent>
             </button>
             <button
               onClick={() => {
@@ -1884,21 +1932,27 @@ function Content() {
               disabled={noProductCat}
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
-              <SelectionToolbarButtonContent icon="upload">批量导入</SelectionToolbarButtonContent>
+              <SelectionToolbarButtonContent icon="upload">
+                {t('selectionAdmin.batchImport')}
+              </SelectionToolbarButtonContent>
             </button>
             <button
               onClick={openGenerateProducts}
               disabled={noProductCat}
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
-              <SelectionToolbarButtonContent icon="auto_awesome">批量生成</SelectionToolbarButtonContent>
+              <SelectionToolbarButtonContent icon="auto_awesome">
+                {t('selectionAdmin.batchGenerate')}
+              </SelectionToolbarButtonContent>
             </button>
             <button
               disabled={noProductCat}
               onClick={exportCurrentProducts}
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
-              <SelectionToolbarButtonContent icon="download">导出</SelectionToolbarButtonContent>
+              <SelectionToolbarButtonContent icon="download">
+                {t('selectionAdmin.exportProducts')}
+              </SelectionToolbarButtonContent>
             </button>
             <button
               onClick={() => {
@@ -1910,13 +1964,19 @@ function Content() {
               disabled={noProductCat}
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
-              <SelectionToolbarButtonContent icon="settings">选项设置</SelectionToolbarButtonContent>
+              <SelectionToolbarButtonContent icon="settings">
+                {t('selectionAdmin.optionSettings')}
+              </SelectionToolbarButtonContent>
             </button>
             <button onClick={openNewCat} className={SELECTION_TOOLBAR_BUTTON_SECONDARY}>
-              <SelectionToolbarButtonContent icon="add">新建分类</SelectionToolbarButtonContent>
+              <SelectionToolbarButtonContent icon="add">
+                {t('selectionAdmin.newCategory')}
+              </SelectionToolbarButtonContent>
             </button>
             <button onClick={openGroupManager} className={SELECTION_TOOLBAR_BUTTON_SECONDARY}>
-              <SelectionToolbarButtonContent icon="folder">分组管理</SelectionToolbarButtonContent>
+              <SelectionToolbarButtonContent icon="folder">
+                {t('selectionAdmin.groupManagement')}
+              </SelectionToolbarButtonContent>
             </button>
             <button
               onClick={() => {
@@ -1925,20 +1985,30 @@ function Content() {
               }}
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
-              <SelectionToolbarButtonContent icon="view_list">排序</SelectionToolbarButtonContent>
+              <SelectionToolbarButtonContent icon="view_list">
+                {t('selectionAdmin.sortMenu')}
+              </SelectionToolbarButtonContent>
             </button>
             <button onClick={() => setShowTransferExport(true)} className={SELECTION_TOOLBAR_BUTTON_SECONDARY}>
-              <SelectionToolbarButtonContent icon="inventory_2">导出数据包</SelectionToolbarButtonContent>
+              <SelectionToolbarButtonContent icon="inventory_2">
+                {t('selectionAdmin.exportPackage')}
+              </SelectionToolbarButtonContent>
             </button>
             <button onClick={() => setShowTransferImport(true)} className={SELECTION_TOOLBAR_BUTTON_SECONDARY}>
-              <SelectionToolbarButtonContent icon="archive">导入数据包</SelectionToolbarButtonContent>
+              <SelectionToolbarButtonContent icon="archive">
+                {t('selectionAdmin.importPackage')}
+              </SelectionToolbarButtonContent>
             </button>
           </div>
           <SearchField
             inputProps={tab === 'categories' ? catSearchInputProps : prodSearchInputProps}
             value={tab === 'categories' ? catSearchInputValue : prodSearchInputValue}
             onClear={() => (tab === 'categories' ? setCatSearch('') : setProdSearch(''))}
-            placeholder={tab === 'categories' ? '搜索分类名称、slug 或分组' : '搜索产品名称、型号、参数值'}
+            placeholder={
+              tab === 'categories'
+                ? t('selectionAdmin.searchCategoryPlaceholder')
+                : t('selectionAdmin.searchProductPlaceholder')
+            }
             className="md:w-72 md:shrink-0"
           />
         </div>
@@ -1950,12 +2020,12 @@ function Content() {
           {catFilter === 'empty' && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
               <Icon name="warning" size={14} className="text-amber-500 shrink-0" />
-              <span className="text-xs text-on-surface">仅显示空分类（无产品的分类）</span>
+              <span className="text-xs text-on-surface">{t('selectionAdmin.emptyFilterNotice')}</span>
               <button
                 onClick={() => setCatFilter('all')}
                 className="text-xs text-primary-container hover:underline ml-auto shrink-0"
               >
-                显示全部
+                {t('selectionAdmin.showAll')}
               </button>
             </div>
           )}
@@ -1966,19 +2036,23 @@ function Content() {
                 <div className="text-center py-12 text-on-surface-variant">
                   <Icon name="inventory_2" size={40} className="mx-auto mb-2 opacity-30" />
                   <p className="text-sm">
-                    {catSearch ? '没有匹配的分类' : catFilter === 'empty' ? '没有空分类' : '暂无分类'}
+                    {catSearch
+                      ? t('selectionAdmin.noMatchCategory')
+                      : catFilter === 'empty'
+                        ? t('selectionAdmin.noEmptyCategory')
+                        : t('selectionAdmin.noCategories')}
                   </p>
                 </div>
               );
             return (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low">
                 <AdminGridHeader columns={SELECTION_CATEGORY_GRID_COLUMNS} className="gap-3 px-4">
-                  <span>分类名称</span>
-                  <span>分组</span>
-                  <span className="text-center">参数列</span>
-                  <span className="text-center">产品数</span>
-                  <span>排序</span>
-                  <span className="text-right">操作</span>
+                  <span>{t('selectionAdmin.colCategoryName')}</span>
+                  <span>{t('selectionAdmin.colGroup')}</span>
+                  <span className="text-center">{t('selectionAdmin.colParamColumns')}</span>
+                  <span className="text-center">{t('selectionAdmin.colProductCount')}</span>
+                  <span>{t('selectionAdmin.colSort')}</span>
+                  <span className="text-right">{t('selectionAdmin.colActions')}</span>
                 </AdminGridHeader>
                 {/* 仅列表自身滚动（桌面 flex 占满剩余高度；移动端随页面滚动，无内嵌滚动） */}
                 <div className="selection-scrollbarless md:min-h-0 md:flex-1 md:overflow-y-auto">
@@ -1998,7 +2072,7 @@ function Content() {
                               {cat.hidden ? (
                                 <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-surface-container-high px-1.5 py-0.5 text-[9px] font-medium text-on-surface-variant/70">
                                   <Icon name="visibility_off" size={10} />
-                                  隐藏
+                                  {t('selectionAdmin.hiddenBadge')}
                                 </span>
                               ) : null}
                             </span>
@@ -2009,14 +2083,16 @@ function Content() {
                           <span className="hidden text-[10px] text-on-surface-variant sm:inline">/{cat.slug}</span>
                         </div>
                         <div className="mt-2 ml-9 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-on-surface-variant/70 md:hidden">
-                          <span>{cat.groupName || '未分组'}</span>
-                          <span>{(cat.columns as ColumnDef[]).length} 个参数列</span>
-                          <span>{cat.productCount ?? 0} 个产品</span>
-                          <span>排序 {cat.sortOrder}</span>
+                          <span>{cat.groupName || t('selectionAdmin.ungrouped')}</span>
+                          <span>
+                            {t('selectionAdmin.nParamColumns', { count: (cat.columns as ColumnDef[]).length })}
+                          </span>
+                          <span>{t('selectionAdmin.nProducts', { count: cat.productCount ?? 0 })}</span>
+                          <span>{t('selectionAdmin.sortOrderLabel', { order: cat.sortOrder })}</span>
                         </div>
                       </div>
                       <span className={`hidden min-w-0 md:block ${ADMIN_ROW_META_CLASS}`}>
-                        {cat.groupName || '未分组'}
+                        {cat.groupName || t('selectionAdmin.ungrouped')}
                       </span>
                       <span className="hidden text-center text-xs tabular-nums text-on-surface md:block">
                         {(cat.columns as ColumnDef[]).length}
@@ -2032,7 +2108,9 @@ function Content() {
                           onClick={() => void toggleCatHidden(cat)}
                           className={cat.hidden ? SELECTION_ICON_BUTTON_ACTIVE : SELECTION_ICON_BUTTON_EDIT}
                           data-tooltip-ignore
-                          aria-label={cat.hidden ? '恢复分类显示' : '隐藏分类'}
+                          aria-label={
+                            cat.hidden ? t('selectionAdmin.restoreCategory') : t('selectionAdmin.hideCategory')
+                          }
                         >
                           <Icon name={cat.hidden ? 'visibility_off' : 'visibility'} size={14} />
                         </button>
@@ -2040,7 +2118,7 @@ function Content() {
                           onClick={() => openEditCat(cat)}
                           className={SELECTION_ICON_BUTTON_EDIT}
                           data-tooltip-ignore
-                          aria-label="编辑分类"
+                          aria-label={t('selectionAdmin.editCategory')}
                         >
                           <Icon name="edit" size={14} />
                         </button>
@@ -2050,13 +2128,13 @@ function Content() {
                               onClick={() => handleDeleteCat(cat.id)}
                               className="h-8 px-2 text-xs font-medium text-error hover:underline md:text-[10px]"
                             >
-                              确认删除
+                              {t('selectionAdmin.confirmDelete')}
                             </button>
                             <button
                               onClick={() => setDeleteCatId(null)}
                               className="h-8 px-2 text-xs text-on-surface-variant hover:text-on-surface md:text-[10px]"
                             >
-                              取消
+                              {t('common.cancel')}
                             </button>
                           </>
                         ) : (
@@ -2064,7 +2142,7 @@ function Content() {
                             onClick={() => setDeleteCatId(cat.id)}
                             className={SELECTION_ICON_BUTTON_DELETE}
                             data-tooltip-ignore
-                            aria-label="删除分类"
+                            aria-label={t('selectionAdmin.deleteCategory')}
                           >
                             <Icon name="delete" size={14} />
                           </button>
@@ -2104,12 +2182,15 @@ function Content() {
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-bold text-on-surface">
-                        {activeCat?.name || '选择分类...'}
+                        {activeCat?.name || t('selectionAdmin.selectCategoryPrompt')}
                       </span>
                       <span className="mt-0.5 block truncate text-[10px] text-on-surface-variant">
                         {activeCat
-                          ? `/${activeCat.slug} · ${activeCat.productCount ?? products.length} 个产品`
-                          : '选择后维护产品、图片、PDF 和选项设置'}
+                          ? t('selectionAdmin.selectedCategoryMeta', {
+                              slug: activeCat.slug,
+                              count: activeCat.productCount ?? products.length,
+                            })
+                          : t('selectionAdmin.selectCategoryHint')}
                       </span>
                     </span>
                     <Icon
@@ -2125,7 +2206,7 @@ function Content() {
                           inputProps={{ ...productCatQueryInputProps, autoFocus: true }}
                           value={productCatQuery}
                           onClear={() => setProductCatQuery('')}
-                          placeholder="搜索分类名称、slug 或分组"
+                          placeholder={t('selectionAdmin.searchCategoryPlaceholder')}
                         />
                       </div>
                       <div className="max-h-72 overflow-y-auto p-1.5">
@@ -2170,7 +2251,9 @@ function Content() {
                             );
                           })
                         ) : (
-                          <div className="px-3 py-8 text-center text-xs text-on-surface-variant">没有匹配的分类</div>
+                          <div className="px-3 py-8 text-center text-xs text-on-surface-variant">
+                            {t('selectionAdmin.noMatchCategory')}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -2181,12 +2264,12 @@ function Content() {
             {activeCat ? (
               <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-on-surface-variant">
                 <span>/{activeCat.slug}</span>
-                <span>{activeCat.productCount ?? products.length} 个产品</span>
-                <span>{productColumns.length} 个参数列</span>
+                <span>{t('selectionAdmin.nProducts', { count: activeCat.productCount ?? products.length })}</span>
+                <span>{t('selectionAdmin.nParamColumns', { count: productColumns.length })}</span>
                 {activeCat.groupName && <span>{activeCat.groupName}</span>}
               </div>
             ) : (
-              <p className="mt-2 text-[11px] text-on-surface-variant">选择分类后维护产品、图片、PDF 和选项设置。</p>
+              <p className="mt-2 text-[11px] text-on-surface-variant">{t('selectionAdmin.selectCategoryHintFull')}</p>
             )}
           </div>
 
@@ -2219,20 +2302,24 @@ function Content() {
               ) : products.length === 0 ? (
                 <div className="text-center py-12 text-on-surface-variant">
                   <Icon name="inventory_2" size={40} className="mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">暂无产品</p>
+                  <p className="text-sm">{t('selectionAdmin.noProducts')}</p>
                 </div>
               ) : (
                 <>
                   {prodSearch && (
                     <p className="text-xs text-on-surface-variant">
-                      搜索 "<span className="text-on-surface font-medium">{prodSearch}</span>" 匹配{' '}
-                      {filteredProducts.length} / {products.length} 个产品
+                      {t('selectionAdmin.searchMatch', {
+                        query: prodSearch,
+                        matched: filteredProducts.length,
+                        total: products.length,
+                      })}{' '}
+                      <span className="text-on-surface font-medium">{prodSearch}</span>
                     </p>
                   )}
                   {selectedProdIds.size > 0 && (
                     <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-primary-container/25 bg-primary-container/5 px-3 py-2">
                       <span className="text-xs font-medium text-on-surface">
-                        已选 <span className="tabular-nums">{selectedProdIds.size}</span> 项
+                        {t('selectionAdmin.selectedCount', { count: selectedProdIds.size })}
                       </span>
                       <span className="mx-0.5 h-4 w-px bg-outline-variant/25" />
                       <button
@@ -2242,7 +2329,7 @@ function Content() {
                         className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-40"
                       >
                         <Icon name="visibility_off" size={13} />
-                        批量隐藏
+                        {t('selectionAdmin.batchHide')}
                       </button>
                       <button
                         type="button"
@@ -2251,7 +2338,7 @@ function Content() {
                         className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-40"
                       >
                         <Icon name="visibility" size={13} />
-                        批量显示
+                        {t('selectionAdmin.batchShow')}
                       </button>
                       <button
                         type="button"
@@ -2260,7 +2347,7 @@ function Content() {
                         className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-error transition-colors hover:bg-error/10 disabled:opacity-40"
                       >
                         <Icon name="delete" size={13} />
-                        批量删除
+                        {t('selectionAdmin.batchDelete')}
                       </button>
                       <span className="flex-1" />
                       <button
@@ -2269,14 +2356,14 @@ function Content() {
                         onClick={clearProdSelection}
                         className="rounded-lg px-2 py-1 text-xs text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-40"
                       >
-                        取消选择
+                        {t('selectionAdmin.clearSelection')}
                       </button>
                     </div>
                   )}
                   {filteredProducts.length === 0 ? (
                     <div className="text-center py-12 text-on-surface-variant">
                       <Icon name="search_off" size={40} className="mx-auto mb-2 opacity-30" />
-                      <p className="text-sm">未找到匹配的产品</p>
+                      <p className="text-sm">{t('selectionAdmin.noMatchProducts')}</p>
                     </div>
                   ) : (
                     <>
@@ -2334,17 +2421,21 @@ function Content() {
                                     )
                                   }
                                   className="h-4 w-4 accent-primary-container"
-                                  aria-label="全选当前筛选结果"
+                                  aria-label={t('selectionAdmin.selectAllResults')}
                                 />
                               </AdminTableHeadCell>
-                              <AdminTableHeadCell className="whitespace-nowrap px-3">名称</AdminTableHeadCell>
+                              <AdminTableHeadCell className="whitespace-nowrap px-3">
+                                {t('selectionAdmin.colName')}
+                              </AdminTableHeadCell>
                               {productColumns.map((col) => (
                                 <AdminTableHeadCell key={col.key} className="whitespace-nowrap px-3">
                                   {col.label}
                                   {col.unit ? ` (${col.unit})` : ''}
                                 </AdminTableHeadCell>
                               ))}
-                              <AdminTableHeadCell className="px-3 text-right">操作</AdminTableHeadCell>
+                              <AdminTableHeadCell className="px-3 text-right">
+                                {t('selectionAdmin.colActions')}
+                              </AdminTableHeadCell>
                             </AdminTableHeadRow>
                           </thead>
                           <tbody>
@@ -2383,7 +2474,7 @@ function Content() {
           {!selectedCatId && (
             <div className="text-center py-12 text-on-surface-variant">
               <Icon name="touch_app" size={40} className="mx-auto mb-2 opacity-30" />
-              <p className="text-sm">请先选择一个分类</p>
+              <p className="text-sm">{t('selectionAdmin.pleaseSelectCategory')}</p>
             </div>
           )}
         </div>
@@ -2403,9 +2494,9 @@ function Content() {
                   try {
                     const { url } = await uploadOptionImage(file);
                     setCatForm((prev) => ({ ...prev, image: url }));
-                    toast('图片已粘贴上传', 'success');
+                    toast(t('selectionAdmin.imagePasted'), 'success');
                   } catch {
-                    toast('上传失败', 'error');
+                    toast(t('selectionAdmin.uploadFailed'), 'error');
                   }
                 }
                 return;
@@ -2415,13 +2506,13 @@ function Content() {
             const text = e.clipboardData.getData('text/plain')?.trim();
             if (text && /^https?:\/\/.+/i.test(text)) {
               e.preventDefault();
-              toast('正在下载图片...', 'info');
+              toast(t('selectionAdmin.downloadingImage'), 'info');
               try {
                 const { url } = await uploadOptionImageFromUrl(text);
                 setCatForm((prev) => ({ ...prev, image: url }));
-                toast('图片已下载并保存', 'success');
+                toast(t('selectionAdmin.imageDownloadedSaved'), 'success');
               } catch {
-                toast('下载图片失败', 'error');
+                toast(t('selectionAdmin.downloadImageFailed'), 'error');
               }
             }
           }}
@@ -2431,12 +2522,14 @@ function Content() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 pb-3 sm:mb-4 sm:border-b-0 sm:pb-0">
-              <h2 className="text-base font-bold text-on-surface">{editCat ? '编辑分类' : '新建分类'}</h2>
+              <h2 className="text-base font-bold text-on-surface">
+                {editCat ? t('selectionAdmin.editCategory') : t('selectionAdmin.newCategory')}
+              </h2>
               <button
                 onClick={() => setShowCatModal(false)}
                 className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface sm:hidden"
                 data-tooltip-ignore
-                aria-label="关闭"
+                aria-label={t('common.close')}
               >
                 <Icon name="close" size={18} />
               </button>
@@ -2444,7 +2537,9 @@ function Content() {
             <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-0.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">名称 *</label>
+                  <label className="text-xs text-on-surface-variant mb-1 block">
+                    {t('selectionAdmin.labelNameRequired')}
+                  </label>
                   <input
                     name="name"
                     value={catForm.name}
@@ -2453,7 +2548,7 @@ function Content() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">标识 (slug) *</label>
+                  <label className="text-xs text-on-surface-variant mb-1 block">{t('selectionAdmin.labelSlug')}</label>
                   <input
                     name="slug"
                     value={catForm.slug}
@@ -2465,7 +2560,9 @@ function Content() {
                 </div>
               </div>
               <div>
-                <label className="text-xs text-on-surface-variant mb-1 block">描述</label>
+                <label className="text-xs text-on-surface-variant mb-1 block">
+                  {t('selectionAdmin.labelDescription')}
+                </label>
                 <input
                   name="description"
                   value={catForm.description}
@@ -2474,20 +2571,20 @@ function Content() {
                 />
               </div>
               <div>
-                <label className="text-xs text-on-surface-variant mb-1 block">套件清单标题</label>
+                <label className="text-xs text-on-surface-variant mb-1 block">
+                  {t('selectionAdmin.labelKitListTitle')}
+                </label>
                 <input
                   name="kit-list-title"
                   value={catForm.kitListTitle}
                   onChange={(e) => setCatForm({ ...catForm, kitListTitle: e.target.value })}
-                  placeholder="默认：子零件清单，例如：组装清单 / BOM清单"
+                  placeholder={t('selectionAdmin.kitListTitlePlaceholder')}
                   className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
                 />
-                <p className="mt-1 text-[10px] text-on-surface-variant">
-                  用于选型结果、分享页、复制清单和下载清单；产品参数里的“清单标题”可单独覆盖。
-                </p>
+                <p className="mt-1 text-[10px] text-on-surface-variant">{t('selectionAdmin.kitListTitleHint')}</p>
               </div>
               <div>
-                <label className="text-xs text-on-surface-variant mb-1 block">所属分组（可选）</label>
+                <label className="text-xs text-on-surface-variant mb-1 block">{t('selectionAdmin.labelGroup')}</label>
                 <select
                   name="select"
                   value={(() => {
@@ -2505,7 +2602,7 @@ function Content() {
                           groupImage: null,
                           groupImageFit: null,
                         });
-                      toast('已移除分组', 'success');
+                      toast(t('selectionAdmin.groupRemoved'), 'success');
                       mutateCats();
                     } else {
                       const src = categories.find((c) => c.groupId === gid);
@@ -2517,13 +2614,13 @@ function Content() {
                           groupImage: src?.groupImage || null,
                           groupImageFit: src?.groupImageFit === 'contain' ? 'contain' : 'cover',
                         });
-                      toast('已设置分组', 'success');
+                      toast(t('selectionAdmin.groupSet'), 'success');
                       mutateCats();
                     }
                   }}
                   className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
                 >
-                  <option value="">不分组</option>
+                  <option value="">{t('selectionAdmin.noGroup')}</option>
                   {(() => {
                     const groupMap = new Map<string, string>();
                     for (const c of categories) {
@@ -2539,23 +2636,27 @@ function Content() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">图标名称</label>
+                  <label className="text-xs text-on-surface-variant mb-1 block">
+                    {t('selectionAdmin.labelIconName')}
+                  </label>
                   <input
                     name="icon"
                     value={catForm.icon}
                     onChange={(e) => setCatForm({ ...catForm, icon: e.target.value })}
-                    placeholder="如: tune"
+                    placeholder={t('selectionAdmin.iconPlaceholder')}
                     className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">封面图</label>
+                  <label className="text-xs text-on-surface-variant mb-1 block">
+                    {t('selectionAdmin.labelCoverImage')}
+                  </label>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                     <input
                       name="image"
                       value={catForm.image}
                       onChange={(e) => setCatForm({ ...catForm, image: e.target.value })}
-                      placeholder="URL 或上传"
+                      placeholder={t('selectionAdmin.urlOrUpload')}
                       className="w-full sm:flex-1 bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
                     />
                     <label className="shrink-0">
@@ -2571,22 +2672,22 @@ function Content() {
                               const { url } = await uploadOptionImage(f);
                               setCatForm((prev) => ({ ...prev, image: url }));
                             } catch {
-                              toast('上传失败', 'error');
+                              toast(t('selectionAdmin.uploadFailed'), 'error');
                             }
                           }
                           e.target.value = '';
                         }}
                       />
                       <span className="px-2.5 py-2 text-xs text-primary-container hover:underline cursor-pointer border border-outline-variant/20 rounded">
-                        上传
+                        {t('selectionAdmin.upload')}
                       </span>
                     </label>
                   </div>
                   <p className="mt-1 text-[10px] leading-relaxed text-on-surface-variant">
-                    用于前台选型大类/子类列表，推荐 1600×800 或 1200×600，比例 2:1，主体居中并保留少量边距。
+                    {t('selectionAdmin.coverHint1')}
                   </p>
                   <p className="mt-0.5 text-[10px] leading-relaxed text-on-surface-variant">
-                    支持截图后 Ctrl+V 粘贴上传；过小图片会在前台大图区域显得模糊。
+                    {t('selectionAdmin.coverHint2')}
                   </p>
                   {catForm.image && (
                     <div className="mt-2 w-20 h-14 rounded overflow-hidden bg-surface-container-lowest border border-outline-variant/10">
@@ -2602,14 +2703,14 @@ function Content() {
                 onClick={() => setShowCatModal(false)}
                 className="px-4 py-2.5 sm:py-2 text-sm text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg sm:rounded"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={saveCat}
                 disabled={!catForm.name || !catForm.slug}
                 className="px-4 py-2.5 sm:py-2 text-sm font-bold bg-primary-container text-on-primary rounded-lg sm:rounded hover:opacity-90 disabled:opacity-50"
               >
-                保存
+                {t('common.save')}
               </button>
             </div>
           </div>
@@ -2627,11 +2728,15 @@ function Content() {
             className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] flex min-h-0 flex-col bg-surface-container-low rounded-2xl border border-outline-variant/20 p-4 space-y-4 shadow-2xl sm:relative sm:inset-auto sm:w-full sm:max-w-lg sm:max-h-[90dvh] sm:p-5 sm:rounded-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-base font-bold text-on-surface shrink-0">{editProd ? '编辑产品' : '新建产品'}</h2>
+            <h2 className="text-base font-bold text-on-surface shrink-0">
+              {editProd ? t('selectionAdmin.editProduct') : t('selectionAdmin.newProduct')}
+            </h2>
             <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-0.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">名称 *</label>
+                  <label className="text-xs text-on-surface-variant mb-1 block">
+                    {t('selectionAdmin.labelNameRequired')}
+                  </label>
                   <input
                     name="name"
                     value={prodForm.name}
@@ -2640,7 +2745,9 @@ function Content() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">型号编号</label>
+                  <label className="text-xs text-on-surface-variant mb-1 block">
+                    {t('selectionAdmin.labelModelNo')}
+                  </label>
                   <input
                     name="model-no"
                     value={prodForm.modelNo}
@@ -2651,7 +2758,9 @@ function Content() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">产品图片 URL</label>
+                  <label className="text-xs text-on-surface-variant mb-1 block">
+                    {t('selectionAdmin.labelImageUrl')}
+                  </label>
                   <input
                     name="image"
                     value={prodForm.image}
@@ -2661,7 +2770,9 @@ function Content() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">PDF 规格书 URL</label>
+                  <label className="text-xs text-on-surface-variant mb-1 block">
+                    {t('selectionAdmin.labelPdfUrl')}
+                  </label>
                   <input
                     name="pdf-url"
                     value={prodForm.pdfUrl}
@@ -2724,21 +2835,21 @@ function Content() {
                     />
                   </button>
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-on-surface">拖拽图片或 PDF 到这里</p>
+                    <p className="text-sm font-bold text-on-surface">{t('selectionAdmin.dragAssetHere')}</p>
                     <p className="mt-1 text-xs leading-relaxed text-on-surface-variant">
-                      也可以点击选择文件，或直接截图后 Ctrl+V 粘贴。图片会填入产品图片，PDF 会填入规格书链接。
+                      {t('selectionAdmin.assetHint')}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
                       {prodForm.image && (
                         <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-surface-container-lowest px-2 py-1 text-on-surface-variant">
                           <Icon name="image" size={13} />
-                          <span className="truncate">图片已设置</span>
+                          <span className="truncate">{t('selectionAdmin.imageSet')}</span>
                         </span>
                       )}
                       {prodForm.pdfUrl && (
                         <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-surface-container-lowest px-2 py-1 text-on-surface-variant">
                           <Icon name="picture_as_pdf" size={13} />
-                          <span className="truncate">PDF 已设置</span>
+                          <span className="truncate">{t('selectionAdmin.pdfSet')}</span>
                         </span>
                       )}
                     </div>
@@ -2766,7 +2877,7 @@ function Content() {
                       rel="noreferrer"
                       onClick={(event) => {
                         event.preventDefault();
-                        openDocumentUrl(prodForm.pdfUrl, { title: 'PDF 规格书' });
+                        openDocumentUrl(prodForm.pdfUrl, { title: t('selectionAdmin.pdfSpecTitle') });
                       }}
                       className="flex items-center gap-2 rounded-lg border border-outline-variant/10 bg-surface-container-lowest p-3 text-xs text-on-surface-variant hover:text-on-surface"
                     >
@@ -2797,8 +2908,8 @@ function Content() {
               <div className="border-t border-outline-variant/10 pt-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-on-surface">套件（含子零件）</p>
-                    <p className="text-xs text-on-surface-variant">开启后可添加子零件清单</p>
+                    <p className="text-sm text-on-surface">{t('selectionAdmin.kitToggle')}</p>
+                    <p className="text-xs text-on-surface-variant">{t('selectionAdmin.kitToggleHint')}</p>
                   </div>
                   <button
                     type="button"
@@ -2814,7 +2925,9 @@ function Content() {
                 {prodForm.isKit && (
                   <div className="mt-3 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-on-surface-variant">子零件清单</span>
+                      <span className="text-xs font-bold text-on-surface-variant">
+                        {t('selectionAdmin.componentList')}
+                      </span>
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
@@ -2824,7 +2937,7 @@ function Content() {
                           }}
                           className="text-xs text-primary-container hover:underline"
                         >
-                          批量导入
+                          {t('selectionAdmin.batchImport')}
                         </button>
                         <button
                           type="button"
@@ -2836,7 +2949,7 @@ function Content() {
                           }
                           className="text-xs text-primary-container hover:underline"
                         >
-                          + 添加子零件
+                          {t('selectionAdmin.addComponent')}
                         </button>
                       </div>
                     </div>
@@ -2852,7 +2965,7 @@ function Content() {
                                 next[i] = { ...next[i], name: e.target.value };
                                 setProdForm({ ...prodForm, components: next });
                               }}
-                              placeholder="零件名"
+                              placeholder={t('selectionAdmin.compNamePlaceholder')}
                               className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
                             />
                             <input
@@ -2863,7 +2976,7 @@ function Content() {
                                 next[i] = { ...next[i], modelNo: e.target.value };
                                 setProdForm({ ...prodForm, components: next });
                               }}
-                              placeholder="型号"
+                              placeholder={t('selectionAdmin.colModel')}
                               className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
                             />
                             <input
@@ -2876,7 +2989,7 @@ function Content() {
                                 next[i] = { ...next[i], qty: Math.max(1, parseInt(e.target.value) || 1) };
                                 setProdForm({ ...prodForm, components: next });
                               }}
-                              placeholder="数量"
+                              placeholder={t('selectionAdmin.compQtyPlaceholder')}
                               className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
                             />
                           </div>
@@ -2927,14 +3040,14 @@ function Content() {
                 onClick={() => setShowProdModal(false)}
                 className="px-4 py-2.5 sm:py-2 text-sm text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg sm:rounded"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={saveProd}
                 disabled={!prodForm.name}
                 className="px-4 py-2.5 sm:py-2 text-sm font-bold bg-primary-container text-on-primary rounded-lg sm:rounded hover:opacity-90 disabled:opacity-50"
               >
-                保存
+                {t('common.save')}
               </button>
             </div>
           </div>
@@ -2952,14 +3065,14 @@ function Content() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="shrink-0">
-              <h2 className="text-base font-bold text-on-surface">批量导入子零件</h2>
+              <h2 className="text-base font-bold text-on-surface">{t('selectionAdmin.kitImportTitle')}</h2>
               <p className="mt-1 text-xs text-on-surface-variant leading-relaxed">
-                每行一条，列之间用制表符（Excel 直接粘贴）、逗号或连续空格分隔，也可直接导入 .xlsx / .csv 表格文件。
+                {t('selectionAdmin.kitImportDescLine1')}
                 <br />
-                <span className="font-bold text-on-surface">推荐带表头：</span>首行写列名（名称、型号、数量 +
-                任意附加列如「编码」），列序任意、列数不限，附加列会显示在子零件清单和导出里。
+                <span className="font-bold text-on-surface">{t('selectionAdmin.kitImportDescHeaderTitle')}</span>
+                {t('selectionAdmin.kitImportDescHeader')}
                 <br />
-                不带表头则按位置解析：「零件名 型号 数量」，或「型号 数量」，或仅「型号」（数量默认 1）。
+                {t('selectionAdmin.kitImportDescNoHeader')}
               </p>
             </div>
             <div className="shrink-0 flex flex-wrap items-center gap-2">
@@ -2969,11 +3082,11 @@ function Content() {
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg"
               >
                 <Icon name="download" size={13} />
-                下载模板（.xlsx）
+                {t('selectionAdmin.downloadTemplateXlsx')}
               </button>
               <label className="inline-flex cursor-pointer items-center gap-1 px-2.5 py-1.5 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg">
                 <Icon name="upload_file" size={13} />
-                导入表格文件
+                {t('selectionAdmin.importSpreadsheet')}
                 <input
                   type="file"
                   accept=".xlsx,.csv"
@@ -3001,7 +3114,9 @@ function Content() {
                 <div className="shrink-0 text-xs space-y-1">
                   {items.length > 0 && (
                     <p className="text-on-surface-variant">
-                      解析到 <span className="font-bold text-on-surface">{items.length}</span> 条子零件
+                      {t('selectionAdmin.parsedComponentsPrefix')}
+                      <span className="font-bold text-on-surface">{items.length}</span>
+                      {t('selectionAdmin.parsedComponentsSuffix')}
                       {items.length <= 5 ? (
                         <span className="text-on-surface-variant/70">
                           （{items.map((c) => `${c.modelNo || c.name}×${c.qty}`).join('、')}）
@@ -3011,7 +3126,7 @@ function Content() {
                   )}
                   {badLines.length > 0 && (
                     <p className="text-error/80">
-                      第 {badLines.join('、')} 行格式无法识别（数量需为正整数），这些行将被跳过
+                      {t('selectionAdmin.badLinesWarning', { lines: badLines.join('、') })}
                     </p>
                   )}
                 </div>
@@ -3023,7 +3138,7 @@ function Content() {
                 onClick={() => setKitImportOpen(false)}
                 className="px-4 py-2 text-sm text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg"
               >
-                取消
+                {t('common.cancel')}
               </button>
               {prodForm.components.length > 0 && (
                 <button
@@ -3035,7 +3150,7 @@ function Content() {
                   }}
                   className="px-4 py-2 text-sm text-on-surface-variant bg-surface-container-high hover:bg-surface-container-high/80 rounded-lg disabled:opacity-50"
                 >
-                  替换现有清单
+                  {t('selectionAdmin.replaceList')}
                 </button>
               )}
               <button
@@ -3050,7 +3165,7 @@ function Content() {
                 }}
                 className="px-4 py-2 text-sm font-bold bg-primary-container text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50"
               >
-                追加导入
+                {t('selectionAdmin.appendImport')}
               </button>
             </div>
           </div>
@@ -3069,7 +3184,9 @@ function Content() {
           >
             <div className="flex items-start justify-between gap-3 shrink-0 pb-2 border-b border-outline-variant/10 sm:pb-0 sm:border-b-0">
               <div className="min-w-0">
-                <h2 className="text-base font-bold text-on-surface leading-snug">选项设置</h2>
+                <h2 className="text-base font-bold text-on-surface leading-snug">
+                  {t('selectionAdmin.optionSettings')}
+                </h2>
                 <p className="mt-0.5 text-xs text-on-surface-variant truncate">{activeCat.name}</p>
               </div>
               <button
@@ -3080,7 +3197,7 @@ function Content() {
               </button>
             </div>
             <p className="hidden sm:block text-xs leading-relaxed text-on-surface-variant shrink-0">
-              拖拽调整顺序，点击图片上传/更换，点击编辑图标修改名称。
+              {t('selectionAdmin.optionSettingsHint')}
             </p>
 
             {/* Field selector + view toggle；搜索框独占下一行，输入搜索词后不再被计数徽章挤窄 */}
@@ -3098,7 +3215,12 @@ function Content() {
                     }`}
                   >
                     <span className={`truncate ${optImgField ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>
-                      {optImgField ? `${optImgField}（${fieldOptions[optImgField]?.length ?? 0} 个选项）` : '选择字段…'}
+                      {optImgField
+                        ? t('selectionAdmin.fieldWithOptions', {
+                            field: optImgField,
+                            count: fieldOptions[optImgField]?.length ?? 0,
+                          })
+                        : t('selectionAdmin.selectField')}
                     </span>
                     <Icon
                       name="expand_more"
@@ -3120,9 +3242,9 @@ function Content() {
                             : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                         }`}
                       >
-                        <span>选择字段…</span>
+                        <span>{t('selectionAdmin.selectField')}</span>
                         <span className="text-[10px] text-on-surface-variant/60">
-                          {Object.keys(fieldOptions).length} 个字段
+                          {t('selectionAdmin.nFields', { count: Object.keys(fieldOptions).length })}
                         </span>
                       </button>
                       {filteredOptionFields.map((f) => (
@@ -3141,7 +3263,7 @@ function Content() {
                         >
                           <span className="truncate">{f}</span>
                           <span className="shrink-0 text-[10px] tabular-nums text-on-surface-variant/60">
-                            {fieldOptions[f].length} 项
+                            {t('selectionAdmin.nItems', { count: fieldOptions[f].length })}
                           </span>
                         </button>
                       ))}
@@ -3154,13 +3276,13 @@ function Content() {
                       onClick={() => setOptViewMode('grid')}
                       className={`px-3 py-2 text-xs flex items-center justify-center gap-1 transition-colors ${optViewMode === 'grid' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'}`}
                     >
-                      <Icon name="grid_view" size={14} /> 卡片
+                      <Icon name="grid_view" size={14} /> {t('selectionAdmin.viewCards')}
                     </button>
                     <button
                       onClick={() => setOptViewMode('list')}
                       className={`px-3 py-2 text-xs flex items-center justify-center gap-1 transition-colors ${optViewMode === 'list' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'}`}
                     >
-                      <Icon name="view_list" size={14} /> 列表
+                      <Icon name="view_list" size={14} /> {t('selectionAdmin.viewList')}
                     </button>
                   </div>
                 )}
@@ -3172,7 +3294,7 @@ function Content() {
                     }}
                     className="w-full sm:w-auto px-3 py-2 text-xs font-medium bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 rounded-md hover:bg-surface-container-high hover:text-on-surface transition-colors shrink-0"
                   >
-                    <Icon name="sort" size={13} className="mr-0.5" /> 一键排序
+                    <Icon name="sort" size={13} className="mr-0.5" /> {t('selectionAdmin.smartSort')}
                   </button>
                 )}
               </div>
@@ -3182,12 +3304,15 @@ function Content() {
                     inputProps={optSettingsSearchInputProps}
                     value={optSettingsSearchInputValue}
                     onClear={() => setOptSettingsSearch('')}
-                    placeholder="搜索选项、型号或产品名..."
+                    placeholder={t('selectionAdmin.searchOptionsPlaceholder')}
                     className="w-full sm:flex-1"
                   />
                   {optSettingsSearch && (
                     <span className="shrink-0 text-[11px] text-on-surface-variant">
-                      {`${filteredOrderItems.length}/${orderItems.length} 个选项`}
+                      {t('selectionAdmin.filteredOptionsCount', {
+                        shown: filteredOrderItems.length,
+                        total: orderItems.length,
+                      })}
                     </span>
                   )}
                 </div>
@@ -3200,9 +3325,9 @@ function Content() {
                 <div className="min-h-full grid place-items-center rounded-xl border border-dashed border-outline-variant/20 bg-surface-container-lowest/60 px-4 py-8 text-center">
                   <div className="space-y-2">
                     <Icon name="tune" size={28} className="mx-auto text-on-surface-variant/40" />
-                    <p className="text-sm font-medium text-on-surface">请选择要设置的字段</p>
+                    <p className="text-sm font-medium text-on-surface">{t('selectionAdmin.pickFieldPrompt')}</p>
                     <p className="text-xs leading-relaxed text-on-surface-variant">
-                      选择字段后可调整选项顺序、修改名称或上传图片。
+                      {t('selectionAdmin.pickFieldHint')}
                     </p>
                   </div>
                 </div>
@@ -3210,9 +3335,9 @@ function Content() {
                 <div className="min-h-full grid place-items-center rounded-xl border border-dashed border-outline-variant/20 bg-surface-container-lowest/60 px-4 py-8 text-center">
                   <div className="space-y-2">
                     <Icon name="search_off" size={28} className="mx-auto text-on-surface-variant/40" />
-                    <p className="text-sm font-medium text-on-surface">没有匹配的选项</p>
+                    <p className="text-sm font-medium text-on-surface">{t('selectionAdmin.noMatchOptions')}</p>
                     <p className="text-xs leading-relaxed text-on-surface-variant">
-                      换个关键词，或清空搜索查看全部选项。
+                      {t('selectionAdmin.noMatchOptionsHint')}
                     </p>
                   </div>
                 </div>
@@ -3250,12 +3375,12 @@ function Content() {
                           </span>
                           <button
                             onClick={() => setValueProductsView({ field: optImgField, value: val })}
-                            title="查看该选项值对应的产品"
+                            title={t('selectionAdmin.viewValueProducts')}
                             className={`shrink-0 rounded-full bg-surface-container-high px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors hover:bg-primary-container/15 hover:text-primary-container ${
                               valueProductCount === 0 ? 'text-on-surface-variant/50' : 'text-on-surface-variant'
                             }`}
                           >
-                            {valueProductCount} 型
+                            {t('selectionAdmin.nModels', { count: valueProductCount })}
                           </button>
                           <button
                             onClick={() => {
@@ -3291,7 +3416,7 @@ function Content() {
                           )}
                         </button>
                         <span className="block text-center text-[10px] text-primary-container">
-                          {imgUrl ? '点击或粘贴更换' : '点击或粘贴上传'}
+                          {imgUrl ? t('selectionAdmin.clickOrPasteReplace') : t('selectionAdmin.clickOrPasteUpload')}
                         </span>
                       </div>
                     );
@@ -3330,12 +3455,12 @@ function Content() {
                         <span className="text-sm font-medium text-on-surface flex-1 min-w-0 break-words">{val}</span>
                         <button
                           onClick={() => setValueProductsView({ field: optImgField, value: val })}
-                          title="查看该选项值对应的产品"
+                          title={t('selectionAdmin.viewValueProducts')}
                           className={`shrink-0 rounded-full bg-surface-container-high px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors hover:bg-primary-container/15 hover:text-primary-container ${
                             valueProductCount === 0 ? 'text-on-surface-variant/50' : 'text-on-surface-variant'
                           }`}
                         >
-                          {valueProductCount} 型
+                          {t('selectionAdmin.nModels', { count: valueProductCount })}
                         </button>
                         {optImages[optImgField]?.[val] && (
                           <SafeImage
@@ -3375,12 +3500,12 @@ function Content() {
                 onClick={() => setShowOptImgModal(false)}
                 className="px-3 py-2.5 sm:py-2 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg sm:rounded"
               >
-                关闭
+                {t('common.close')}
               </button>
               <button
                 onClick={async () => {
                   if (!optImgField || orderItems.length === 0) {
-                    toast('请先选择要设置的字段', 'error');
+                    toast(t('selectionAdmin.pickFieldFirst'), 'error');
                     return;
                   }
                   try {
@@ -3388,17 +3513,17 @@ function Content() {
                     await updateCategory(activeCat.id, {
                       optionOrder: { ...currentOrder, [optImgField]: orderItems },
                     });
-                    toast('设置已保存', 'success');
+                    toast(t('selectionAdmin.settingsSaved'), 'success');
                     mutateCats();
                   } catch (err) {
                     if (import.meta.env.DEV) console.error('保存设置失败:', err);
-                    toast('保存失败', 'error');
+                    toast(t('selectionAdmin.saveFailed'), 'error');
                   }
                 }}
                 disabled={!optImgField || orderItems.length === 0}
                 className="px-3 py-2.5 sm:py-2 text-xs font-bold bg-primary-container text-on-primary rounded-lg sm:rounded hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                保存设置
+                {t('selectionAdmin.saveSettings')}
               </button>
             </div>
           </div>
@@ -3411,9 +3536,12 @@ function Content() {
         onConfirm={() => {
           if (forceDeleteCat) void handleDeleteCat(forceDeleteCat.id, true);
         }}
-        title="强制删除分类"
-        description={`分类「${forceDeleteCat?.name || ''}」下还有 ${forceDeleteCat?.count ?? 0} 个产品，删除将连带清空这些产品，且不可恢复。确定要继续吗？`}
-        confirmLabel="确认强制删除"
+        title={t('selectionAdmin.forceDeleteTitle')}
+        description={t('selectionAdmin.forceDeleteDesc', {
+          name: forceDeleteCat?.name || '',
+          count: forceDeleteCat?.count ?? 0,
+        })}
+        confirmLabel={t('selectionAdmin.forceDeleteConfirm')}
       />
 
       {/* 批量删除产品确认 */}
@@ -3423,9 +3551,9 @@ function Content() {
           if (!batchBusy) setBatchDeleteConfirmOpen(false);
         }}
         onConfirm={() => void handleBatchDeleteProducts()}
-        title="批量删除产品"
-        description={`确定删除已选的 ${selectedProdIds.size} 个产品吗？删除后不可恢复。`}
-        confirmLabel={batchBusy ? '删除中...' : '确认删除'}
+        title={t('selectionAdmin.batchDeleteTitle')}
+        description={t('selectionAdmin.batchDeleteDesc', { count: selectedProdIds.size })}
+        confirmLabel={batchBusy ? t('selectionAdmin.deleting') : t('selectionAdmin.confirmDelete')}
         confirmDisabled={batchBusy}
       />
 
@@ -3436,9 +3564,9 @@ function Content() {
           if (!valueProductsBusy) setValueDeleteConfirmOpen(false);
         }}
         onConfirm={() => void handleValueProductsDelete()}
-        title="删除所选产品"
-        description={`确定删除已选的 ${valueProductsSelected.size} 个产品吗？删除后不可恢复。`}
-        confirmLabel={valueProductsBusy ? '删除中...' : '确认删除'}
+        title={t('selectionAdmin.deleteSelectedTitle')}
+        description={t('selectionAdmin.batchDeleteDesc', { count: valueProductsSelected.size })}
+        confirmLabel={valueProductsBusy ? t('selectionAdmin.deleting') : t('selectionAdmin.confirmDelete')}
         confirmDisabled={valueProductsBusy}
       />
 
@@ -3456,7 +3584,7 @@ function Content() {
                 try {
                   await uploadOptCatalog(optImgField, editOptVal, file);
                 } catch (err) {
-                  toast(getApiErrorMessage(err, '上传 PDF 失败'), 'error');
+                  toast(getApiErrorMessage(err, t('selectionAdmin.uploadPdfFailed')), 'error');
                 }
                 return;
               }
@@ -3465,7 +3593,7 @@ function Content() {
                 return;
               }
             }
-            toast('不支持的文件类型，请拖入图片或 PDF', 'error');
+            toast(t('selectionAdmin.unsupportedFileType'), 'error');
           };
           return (
             <div
@@ -3489,7 +3617,9 @@ function Content() {
               >
                 <div className="flex items-start justify-between gap-3 shrink-0">
                   <div className="min-w-0">
-                    <h3 className="text-sm font-bold leading-snug text-on-surface">选项值设置</h3>
+                    <h3 className="text-sm font-bold leading-snug text-on-surface">
+                      {t('selectionAdmin.optionValueSettings')}
+                    </h3>
                     <p className="mt-1 text-xs leading-snug text-on-surface-variant break-words">{editOptVal}</p>
                   </div>
                   <button
@@ -3511,8 +3641,12 @@ function Content() {
                           <section className="flex flex-col gap-1.5">
                             <div className="flex items-center gap-1.5">
                               <Icon name="photo_library" size={14} className="shrink-0 text-primary-container" />
-                              <span className="text-xs font-bold text-on-surface">选项图片</span>
-                              <span className="truncate text-[10px] text-on-surface-variant">推荐 1200×900 · 4:3</span>
+                              <span className="text-xs font-bold text-on-surface">
+                                {t('selectionAdmin.optionImage')}
+                              </span>
+                              <span className="truncate text-[10px] text-on-surface-variant">
+                                {t('selectionAdmin.optionImageHint')}
+                              </span>
                             </div>
                             <label
                               onMouseEnter={() => setOptPasteZone('image')}
@@ -3549,13 +3683,13 @@ function Content() {
                                     fallbackIcon="add_photo_alternate"
                                   />
                                   <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/45 py-1 text-center text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
-                                    点击更换图片
+                                    {t('selectionAdmin.clickReplaceImage')}
                                   </span>
                                 </>
                               ) : (
                                 <div className="flex flex-col items-center gap-2 text-on-surface-variant/40 transition-colors group-hover:text-on-surface-variant/70">
                                   <Icon name="add_photo_alternate" size={30} />
-                                  <span className="text-xs">点击或粘贴上传图片</span>
+                                  <span className="text-xs">{t('selectionAdmin.clickPasteUploadImage')}</span>
                                 </div>
                               )}
                             </label>
@@ -3567,7 +3701,7 @@ function Content() {
                                   }}
                                   className="rounded px-1.5 py-0.5 text-xs text-error/70 transition-colors hover:bg-error/10 hover:text-error"
                                 >
-                                  移除图片
+                                  {t('selectionAdmin.removeImage')}
                                 </button>
                               </div>
                             )}
@@ -3577,23 +3711,30 @@ function Content() {
                           <section className="flex flex-col gap-1.5">
                             <div className="flex items-center gap-1.5">
                               <Icon name="menu_book" size={14} className="shrink-0 text-primary-container" />
-                              <span className="shrink-0 text-xs font-bold text-on-surface">画册资料</span>
-                              <span className="truncate text-[10px] text-on-surface-variant">图片或 PDF</span>
+                              <span className="shrink-0 text-xs font-bold text-on-surface">
+                                {t('selectionAdmin.catalogSection')}
+                              </span>
+                              <span className="truncate text-[10px] text-on-surface-variant">
+                                {t('selectionAdmin.imageOrPdf')}
+                              </span>
                               <span className="flex-1" />
                               <button
                                 type="button"
                                 role="switch"
                                 aria-checked={activeCat?.catalogShared ?? false}
-                                aria-label="选型结果页显示画册"
+                                aria-label={t('selectionAdmin.catalogSharedLabel')}
                                 onClick={async () => {
                                   if (!activeCat) return;
                                   const next = !(activeCat.catalogShared ?? false);
                                   try {
                                     await updateCategory(activeCat.id, { catalogShared: next });
                                     mutateCats();
-                                    toast(next ? '已开启画册显示' : '已关闭画册显示', 'success');
+                                    toast(
+                                      next ? t('selectionAdmin.catalogShareOn') : t('selectionAdmin.catalogShareOff'),
+                                      'success',
+                                    );
                                   } catch {
-                                    toast('保存失败', 'error');
+                                    toast(t('selectionAdmin.saveFailed'), 'error');
                                   }
                                 }}
                                 className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors ${activeCat?.catalogShared ? 'bg-primary-container' : 'bg-outline/30'}`}
@@ -3630,10 +3771,10 @@ function Content() {
                                   try {
                                     await uploadOptCatalog(optImgField, editOptVal, f);
                                   } catch (err) {
-                                    toast(getApiErrorMessage(err, '上传失败'), 'error');
+                                    toast(getApiErrorMessage(err, t('selectionAdmin.uploadFailed')), 'error');
                                   }
                                 } else {
-                                  toast('画册只支持图片或 PDF 文件', 'error');
+                                  toast(t('selectionAdmin.catalogOnlyImagePdf'), 'error');
                                 }
                               }}
                               className={`group relative flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed bg-surface-container-lowest transition-colors ${
@@ -3653,7 +3794,7 @@ function Content() {
                                     try {
                                       await uploadOptCatalog(optImgField, editOptVal, f);
                                     } catch (err) {
-                                      toast(getApiErrorMessage(err, '上传失败'), 'error');
+                                      toast(getApiErrorMessage(err, t('selectionAdmin.uploadFailed')), 'error');
                                     }
                                   }
                                   e.target.value = '';
@@ -3668,33 +3809,33 @@ function Content() {
                                       className="shrink-0 text-primary-container"
                                     />
                                     <span className="flex-1 truncate text-xs text-on-surface-variant">
-                                      {catalogUrl.split('/').pop()?.split('?')[0] || '已上传'}
+                                      {catalogUrl.split('/').pop()?.split('?')[0] || t('selectionAdmin.uploaded')}
                                     </span>
                                   </div>
                                   <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/45 py-1 text-center text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
-                                    点击更换画册
+                                    {t('selectionAdmin.clickReplaceCatalog')}
                                   </span>
                                 </>
                               ) : (
                                 <div className="flex flex-col items-center gap-1 text-on-surface-variant/60 transition-colors group-hover:text-on-surface-variant">
                                   <Icon name="upload_file" size={22} />
-                                  <span className="text-xs font-medium">点击 / 拖拽 上传，或停在此区按 Cmd+V</span>
-                                  <span className="text-[10px]">图片或 PDF · 命中该选项值的产品会在选型结果页显示</span>
+                                  <span className="text-xs font-medium">{t('selectionAdmin.catalogUploadHint')}</span>
+                                  <span className="text-[10px]">{t('selectionAdmin.catalogUploadSub')}</span>
                                 </div>
                               )}
                             </label>
                             <div className="flex items-center justify-between gap-2">
                               <p className="min-w-0 truncate text-[10px] text-on-surface-variant">
                                 {activeCat?.catalogShared
-                                  ? '已开启：选型结果页显示画册'
-                                  : '已关闭：选型结果页不显示画册'}
+                                  ? t('selectionAdmin.catalogShareOnHint')
+                                  : t('selectionAdmin.catalogShareOffHint')}
                               </p>
                               {catalogUrl && (
                                 <button
                                   onClick={() => removeOptCatalog(optImgField, editOptVal)}
                                   className="shrink-0 rounded px-1.5 py-0.5 text-xs text-error/70 transition-colors hover:bg-error/10 hover:text-error"
                                 >
-                                  移除画册
+                                  {t('selectionAdmin.removeCatalog')}
                                 </button>
                               )}
                             </div>
@@ -3702,7 +3843,7 @@ function Content() {
                         </div>
                       </div>
                       <p className="shrink-0 text-center text-[10px] leading-snug text-on-surface-variant/70">
-                        鼠标停在哪个上传区，Cmd+V 就传哪个区；拖文件进弹窗：图片 → 选项图片，PDF → 画册资料
+                        {t('selectionAdmin.pasteZoneHint')}
                       </p>
                     </>
                   );
@@ -3775,13 +3916,13 @@ function Content() {
                           {valueProductsView.value}
                         </span>
                         <span className="shrink-0 rounded-full bg-primary-container/15 px-2 py-0.5 text-[11px] font-medium tabular-nums text-primary-container">
-                          {matched.length} 型号
+                          {t('selectionAdmin.nModelsFull', { count: matched.length })}
                         </span>
                       </div>
                       <p className="mt-0.5 truncate text-xs text-on-surface-variant">
-                        使用该选项值的全部产品及其参数
-                        {matched.length > MAX_ROWS && ` · 仅显示前 ${MAX_ROWS} 行`}
-                        {matched.length === 0 && ' · 暂无产品使用该选项值'}
+                        {t('selectionAdmin.valueProductsSubtitle')}
+                        {matched.length > MAX_ROWS && t('selectionAdmin.onlyFirstRows', { count: MAX_ROWS })}
+                        {matched.length === 0 && t('selectionAdmin.noProductsUseValue')}
                       </p>
                     </div>
                     <button
@@ -3809,12 +3950,16 @@ function Content() {
                               }
                               disabled={rows.length === 0}
                               className="h-4 w-4 accent-primary-container"
-                              aria-label="全选该选项值的产品"
-                              title={`全选/清选列表中的 ${rows.length} 个产品（仅当前显示的行）`}
+                              aria-label={t('selectionAdmin.selectAllValueProducts')}
+                              title={t('selectionAdmin.selectAllValueProductsTitle', { count: rows.length })}
                             />
                           </AdminTableHeadCell>
-                          <AdminTableHeadCell className="whitespace-nowrap">型号</AdminTableHeadCell>
-                          <AdminTableHeadCell className="whitespace-nowrap">名称</AdminTableHeadCell>
+                          <AdminTableHeadCell className="whitespace-nowrap">
+                            {t('selectionAdmin.colModel')}
+                          </AdminTableHeadCell>
+                          <AdminTableHeadCell className="whitespace-nowrap">
+                            {t('selectionAdmin.colName')}
+                          </AdminTableHeadCell>
                           {paramCols.map((col) => (
                             <AdminTableHeadCell
                               key={col.key}
@@ -3826,7 +3971,7 @@ function Content() {
                           ))}
                           {/* 操作列 sticky 右侧固定：宽表横向滚动时 ✓/✗/编辑按钮始终可见 */}
                           <AdminTableHeadCell className="sticky right-0 w-24 border-l border-outline-variant/12">
-                            <div className="text-center">操作</div>
+                            <div className="text-center">{t('selectionAdmin.colActions')}</div>
                           </AdminTableHeadCell>
                         </AdminTableHeadRow>
                       </thead>
@@ -3846,7 +3991,7 @@ function Content() {
                                 }
                                 onKeyDown={onDraftKey}
                                 autoFocus
-                                placeholder="型号"
+                                placeholder={t('selectionAdmin.colModel')}
                                 className={`${draftInputClass} w-24 sm:w-28`}
                               />
                             </AdminTableCell>
@@ -3856,7 +4001,7 @@ function Content() {
                                 value={valueProductsDraft.name}
                                 onChange={(e) => setValueProductsDraft((d) => (d ? { ...d, name: e.target.value } : d))}
                                 onKeyDown={onDraftKey}
-                                placeholder="名称"
+                                placeholder={t('selectionAdmin.colName')}
                                 className={`${draftInputClass} w-32 sm:w-40`}
                               />
                             </AdminTableCell>
@@ -3876,7 +4021,7 @@ function Content() {
                                   className={`${draftInputClass} w-20 sm:w-24 disabled:opacity-70`}
                                   title={
                                     col.key === valueProductsView.field
-                                      ? `当前选项值锁定为「${valueProductsView.value}」`
+                                      ? t('selectionAdmin.valueLockedTitle', { value: valueProductsView.value })
                                       : col.label
                                   }
                                 />
@@ -3887,8 +4032,8 @@ function Content() {
                                 <button
                                   onClick={() => void handleValueProductCreate()}
                                   disabled={valueProductsBusy}
-                                  title="确认新增（回车）"
-                                  aria-label="确认新增"
+                                  title={t('selectionAdmin.confirmCreateTitle')}
+                                  aria-label={t('selectionAdmin.confirmCreate')}
                                   className="grid h-7 w-7 place-items-center rounded-md bg-primary-container text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
                                 >
                                   <Icon name={valueProductsBusy ? 'hourglass_empty' : 'check'} size={14} />
@@ -3896,8 +4041,8 @@ function Content() {
                                 <button
                                   onClick={() => setValueProductsDraft(null)}
                                   disabled={valueProductsBusy}
-                                  title="取消（Esc）"
-                                  aria-label="取消新增"
+                                  title={t('selectionAdmin.cancelEscTitle')}
+                                  aria-label={t('selectionAdmin.cancelCreate')}
                                   className="grid h-7 w-7 place-items-center rounded-md border border-outline-variant/20 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-50"
                                 >
                                   <Icon name="close" size={14} />
@@ -3928,7 +4073,7 @@ function Content() {
                                     })
                                   }
                                   className="h-4 w-4 accent-primary-container"
-                                  aria-label={`选择 ${p.modelNo || p.name}`}
+                                  aria-label={t('selectionAdmin.selectProductAria', { name: p.modelNo || p.name })}
                                 />
                               </AdminTableCell>
                               {editing ? (
@@ -3944,7 +4089,7 @@ function Content() {
                                       }
                                       onKeyDown={onEditKey}
                                       autoFocus
-                                      placeholder="型号"
+                                      placeholder={t('selectionAdmin.colModel')}
                                       className={`${draftInputClass} w-24 sm:w-28`}
                                     />
                                   </AdminTableCell>
@@ -3958,7 +4103,7 @@ function Content() {
                                         )
                                       }
                                       onKeyDown={onEditKey}
-                                      placeholder="名称"
+                                      placeholder={t('selectionAdmin.colName')}
                                       className={`${draftInputClass} w-32 sm:w-40`}
                                     />
                                   </AdminTableCell>
@@ -3985,7 +4130,7 @@ function Content() {
                                         className={`${draftInputClass} w-20 sm:w-24`}
                                         title={
                                           col.key === valueProductsView.field
-                                            ? '修改后该产品会移动到对应的选项值下'
+                                            ? t('selectionAdmin.editSpecMoveHint')
                                             : col.label
                                         }
                                       />
@@ -4025,8 +4170,8 @@ function Content() {
                                       <button
                                         onClick={() => void handleValueProductSave()}
                                         disabled={valueProductsBusy}
-                                        title="确认修改（回车）"
-                                        aria-label="保存修改"
+                                        title={t('selectionAdmin.confirmSaveTitle')}
+                                        aria-label={t('selectionAdmin.saveChanges')}
                                         className="grid h-7 w-7 place-items-center rounded-md bg-primary-container text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
                                       >
                                         <Icon name={valueProductsBusy ? 'hourglass_empty' : 'check'} size={14} />
@@ -4034,8 +4179,8 @@ function Content() {
                                       <button
                                         onClick={() => setValueProductsEdit(null)}
                                         disabled={valueProductsBusy}
-                                        title="取消（Esc）"
-                                        aria-label="取消编辑"
+                                        title={t('selectionAdmin.cancelEscTitle')}
+                                        aria-label={t('selectionAdmin.cancelEdit')}
                                         className="grid h-7 w-7 place-items-center rounded-md border border-outline-variant/20 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-50"
                                       >
                                         <Icon name="close" size={14} />
@@ -4044,8 +4189,8 @@ function Content() {
                                   ) : (
                                     <button
                                       onClick={() => startValueProductsEdit(p)}
-                                      title="编辑该产品（型号/名称/参数）"
-                                      aria-label="编辑产品"
+                                      title={t('selectionAdmin.editProductFull')}
+                                      aria-label={t('selectionAdmin.editProduct')}
                                       className={SELECTION_ICON_BUTTON_EDIT}
                                     >
                                       <Icon name="edit" size={14} />
@@ -4064,14 +4209,14 @@ function Content() {
                   <div className="flex shrink-0 flex-nowrap items-center gap-1.5 border-t border-outline-variant/10 bg-surface-container-low px-3 py-2 sm:gap-2 sm:px-5">
                     <p className="min-w-0 flex-1 truncate text-[11px] text-on-surface-variant">
                       {valueProductsDraft
-                        ? '新增行默认带首行数据，修改后点 ✓ 或回车确认；Esc 取消。'
+                        ? t('selectionAdmin.draftHint')
                         : valueProductsEdit
-                          ? '编辑行：修改型号/名称/参数后点 ✓ 或回车保存；Esc 取消。'
+                          ? t('selectionAdmin.editHint')
                           : batchFieldEditOpen
-                            ? `填值后 ✓ 应用到已勾选的 ${selectedInView.length} 个产品；Esc 或点「批量修改」收起。`
+                            ? t('selectionAdmin.batchFieldHint', { count: selectedInView.length })
                             : selectedInView.length > 0
-                              ? `已选 ${selectedInView.length} 个产品：批量删除、批量修改都只作用于勾选行。`
-                              : '先勾选行，再批量删除或批量修改（只作用于勾选行）；行尾 ✎ 编辑单个产品；新增默认带首行数据。'}
+                              ? t('selectionAdmin.selectedHint', { count: selectedInView.length })
+                              : t('selectionAdmin.idleHint')}
                     </p>
                     {batchFieldEditOpen && (
                       <>
@@ -4088,7 +4233,7 @@ function Content() {
                           >
                             <span className="truncate text-on-surface">
                               {batchFieldKey === 'name'
-                                ? '名称'
+                                ? t('selectionAdmin.colName')
                                 : activeCat.columns.find((c) => c.key === batchFieldKey)?.label || batchFieldKey}
                             </span>
                             <Icon
@@ -4111,8 +4256,10 @@ function Content() {
                                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                                 }`}
                               >
-                                <span>名称</span>
-                                <span className="text-[10px] text-on-surface-variant/60">基础字段</span>
+                                <span>{t('selectionAdmin.colName')}</span>
+                                <span className="text-[10px] text-on-surface-variant/60">
+                                  {t('selectionAdmin.baseField')}
+                                </span>
                               </button>
                               {activeCat.columns
                                 .filter((c) => c.key !== '型号')
@@ -4150,18 +4297,18 @@ function Content() {
                             }
                           }}
                           autoFocus
-                          placeholder="统一设置的值"
+                          placeholder={t('selectionAdmin.batchValuePlaceholder')}
                           className="h-8 w-52 shrink-0 rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-2.5 text-xs text-on-surface outline-none transition-colors hover:border-outline-variant/40 focus:border-primary-container sm:w-72 sm:text-sm"
                         />
                         <button
                           type="button"
                           disabled={batchFieldBusy || !batchFieldValue.trim() || selectedInView.length === 0}
                           onClick={() => void handleBatchFieldUpdate()}
-                          aria-label="应用批量修改"
+                          aria-label={t('selectionAdmin.applyBatchEdit')}
                           title={
                             selectedInView.length > 0
-                              ? `只应用到已勾选的 ${selectedInView.length} 个产品，操作不可撤销`
-                              : '请先勾选要修改的产品'
+                              ? t('selectionAdmin.applyBatchEditTitle', { count: selectedInView.length })
+                              : t('selectionAdmin.selectProductsFirst')
                           }
                           className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-outline-variant/20 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:opacity-40"
                         >
@@ -4183,7 +4330,7 @@ function Content() {
                           }`}
                         >
                           <Icon name={valueProductsDraft ? 'close' : 'add'} size={13} />
-                          {valueProductsDraft ? '取消新增' : '新增产品'}
+                          {valueProductsDraft ? t('selectionAdmin.cancelCreate') : t('selectionAdmin.newProduct')}
                         </button>
                         <button
                           type="button"
@@ -4192,7 +4339,8 @@ function Content() {
                           className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-outline-variant/20 px-2.5 text-xs font-medium text-on-surface-variant transition-colors hover:border-error/40 hover:bg-surface-container-high hover:text-error disabled:opacity-40 disabled:hover:border-outline-variant/20 disabled:hover:bg-transparent disabled:hover:text-on-surface-variant"
                         >
                           <Icon name="delete" size={13} />
-                          删除所选{selectedInView.length > 0 ? ` (${selectedInView.length})` : ''}
+                          {t('selectionAdmin.deleteSelected')}
+                          {selectedInView.length > 0 ? ` (${selectedInView.length})` : ''}
                         </button>
                       </>
                     )}
@@ -4214,7 +4362,7 @@ function Content() {
                       }`}
                     >
                       <Icon name={batchFieldEditOpen ? 'close' : 'edit'} size={13} />
-                      批量修改
+                      {t('selectionAdmin.batchEdit')}
                     </button>
                   </div>
                 </motion.div>
@@ -4234,7 +4382,7 @@ function Content() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-on-surface">修改选项值</h3>
+              <h3 className="text-sm font-bold text-on-surface">{t('selectionAdmin.renameTitle')}</h3>
               <button
                 onClick={() => setRenameOldVal('')}
                 className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
@@ -4243,13 +4391,13 @@ function Content() {
               </button>
             </div>
             <div>
-              <label className="text-xs text-on-surface-variant mb-1 block">当前值</label>
+              <label className="text-xs text-on-surface-variant mb-1 block">{t('selectionAdmin.currentValue')}</label>
               <p className="text-sm text-on-surface font-medium bg-surface-container-lowest px-3 py-2 rounded border border-outline-variant/10 break-words">
                 {renameOldVal}
               </p>
             </div>
             <div>
-              <label className="text-xs text-on-surface-variant mb-1 block">改为</label>
+              <label className="text-xs text-on-surface-variant mb-1 block">{t('selectionAdmin.changeTo')}</label>
               <input
                 name="rename-new-val"
                 value={renameNewVal}
@@ -4263,7 +4411,7 @@ function Content() {
                 onClick={() => setRenameOldVal('')}
                 className="px-3 py-2 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={async () => {
@@ -4272,7 +4420,10 @@ function Content() {
                   try {
                     const newVal = renameNewVal.trim();
                     const { updated } = await renameOptionValue(activeCat.id, renameField, renameOldVal, newVal);
-                    toast(`"${renameOldVal}" → "${newVal}"，已替换 ${updated} 个产品`, 'success');
+                    toast(
+                      t('selectionAdmin.renameToast', { old: renameOldVal, new: newVal, count: updated }),
+                      'success',
+                    );
                     // Update local orderItems to reflect the rename immediately
                     setOrderItems((prev) => prev.map((v) => (v === renameOldVal ? newVal : v)));
                     mutateCats();
@@ -4280,7 +4431,7 @@ function Content() {
                     setRenameOldVal('');
                     setRenameNewVal('');
                   } catch {
-                    toast('替换失败', 'error');
+                    toast(t('selectionAdmin.replaceFailed'), 'error');
                   } finally {
                     setRenaming(false);
                   }
@@ -4288,7 +4439,7 @@ function Content() {
                 disabled={renaming || !renameNewVal.trim() || renameNewVal === renameOldVal}
                 className="px-3 py-2 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 disabled:opacity-50"
               >
-                {renaming ? '替换中...' : '确认替换'}
+                {renaming ? t('selectionAdmin.replacing') : t('selectionAdmin.replaceConfirm')}
               </button>
             </div>
           </div>
@@ -4395,7 +4546,7 @@ function Content() {
                 };
                 const saveManagedGroupSettings = async () => {
                   if (!g?.name.trim()) {
-                    toast('请输入分组名称', 'error');
+                    toast(t('selectionAdmin.groupNameRequired'), 'error');
                     return;
                   }
                   try {
@@ -4411,9 +4562,9 @@ function Content() {
                       groupImage: g.image || null,
                       groupImageFit: g.imageFit,
                     });
-                    toast('分组设置已保存', 'success');
+                    toast(t('selectionAdmin.groupSettingsSaved'), 'success');
                   } catch (err) {
-                    toast(getApiErrorMessage(err, '分组设置保存失败'), 'error');
+                    toast(getApiErrorMessage(err, t('selectionAdmin.groupSettingsSaveFailed')), 'error');
                   }
                 };
                 const saveManagedGroupImage = async (
@@ -4433,7 +4584,7 @@ function Content() {
                     });
                     return true;
                   } catch (err) {
-                    toast(getApiErrorMessage(err, '封面设置保存失败'), 'error');
+                    toast(getApiErrorMessage(err, t('selectionAdmin.coverSaveFailed')), 'error');
                     return false;
                   }
                 };
@@ -4444,15 +4595,15 @@ function Content() {
                     return false;
                   }
                   try {
-                    toast('正在下载图片...', 'info');
+                    toast(t('selectionAdmin.downloadingImage'), 'info');
                     const { url } = await uploadOptionImageFromUrl(targetUrl);
                     if (await saveManagedGroupImage(url, g?.imageFit || 'cover')) {
                       updateManagedGroup({ image: url });
-                      toast('图片已下载并保存', 'success');
+                      toast(t('selectionAdmin.imageDownloadedSaved'), 'success');
                     }
                     return true;
                   } catch {
-                    toast('下载图片失败', 'error');
+                    toast(t('selectionAdmin.downloadImageFailed'), 'error');
                     return true;
                   }
                 };
@@ -4461,10 +4612,10 @@ function Content() {
                     const { url } = await uploadOptionImage(file);
                     if (await saveManagedGroupImage(url, g?.imageFit || 'cover')) {
                       updateManagedGroup({ image: url });
-                      toast('分组封面已上传', 'success');
+                      toast(t('selectionAdmin.groupCoverUploaded'), 'success');
                     }
                   } catch (err) {
-                    toast(getApiErrorMessage(err, '上传失败'), 'error');
+                    toast(getApiErrorMessage(err, t('selectionAdmin.uploadFailed')), 'error');
                   }
                 };
                 const importManagedGroupCover = async () => {
@@ -4517,28 +4668,32 @@ function Content() {
                       >
                         <Icon name="arrow_back" size={18} />
                       </button>
-                      <h2 className="text-base font-bold text-on-surface">{g?.name} — 分类管理</h2>
+                      <h2 className="text-base font-bold text-on-surface">
+                        {g?.name} — {t('selectionAdmin.tabCategories')}
+                      </h2>
                     </div>
 
                     <div className="flex-1 overflow-y-auto min-h-0 space-y-3">
                       <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 space-y-3">
                         <div>
-                          <p className="text-xs font-bold text-on-surface">分组设置</p>
-                          <p className="text-[10px] text-on-surface-variant mt-0.5">修改当前分组的名称和图标</p>
+                          <p className="text-xs font-bold text-on-surface">{t('selectionAdmin.groupSettingsTitle')}</p>
+                          <p className="text-[10px] text-on-surface-variant mt-0.5">
+                            {t('selectionAdmin.groupSettingsHint')}
+                          </p>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] gap-2">
                           <input
                             name="g"
                             value={g?.icon || ''}
                             onChange={(e) => updateManagedGroup({ icon: e.target.value })}
-                            placeholder="图标"
+                            placeholder={t('selectionAdmin.iconPlaceholderShort')}
                             className="w-full bg-surface-container-low text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
                           />
                           <input
                             name="g"
                             value={g?.name || ''}
                             onChange={(e) => updateManagedGroup({ name: e.target.value })}
-                            placeholder="分组名称"
+                            placeholder={t('selectionAdmin.groupNamePlaceholder')}
                             className="w-full bg-surface-container-low text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
                           />
                         </div>
@@ -4548,7 +4703,7 @@ function Content() {
                             disabled={!g?.name.trim()}
                             className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 disabled:opacity-50"
                           >
-                            保存设置
+                            {t('selectionAdmin.saveSettings')}
                           </button>
                         </div>
                       </div>
@@ -4558,15 +4713,15 @@ function Content() {
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div>
-                            <p className="text-xs font-bold text-on-surface">分组封面</p>
+                            <p className="text-xs font-bold text-on-surface">{t('selectionAdmin.groupCoverTitle')}</p>
                             <p className="text-[10px] text-on-surface-variant mt-0.5">
-                              推荐 1600×800 或 1200×600，比例 2:1，和前台分类大图一致
+                              {t('selectionAdmin.coverRecommend')}
                             </p>
                           </div>
                           <div className="flex rounded-lg bg-surface-container-high p-0.5 text-[11px]">
                             {[
-                              { value: 'cover', label: '铺满裁切' },
-                              { value: 'contain', label: '完整显示' },
+                              { value: 'cover', label: t('selectionAdmin.fitCover') },
+                              { value: 'contain', label: t('selectionAdmin.fitContain') },
                             ].map((mode) => (
                               <button
                                 key={mode.value}
@@ -4603,11 +4758,11 @@ function Content() {
                           )}
                         </div>
                         <div className="grid grid-cols-1 gap-1.5 rounded-lg bg-surface-container-high/50 px-2.5 py-2 text-[10px] leading-relaxed text-on-surface-variant sm:grid-cols-2">
-                          <span>上传：支持截图粘贴、远程图片地址或本地图片；推荐 2:1 横图</span>
-                          <span>显示：产品影棚图建议“铺满裁切”，带边缘信息建议“完整显示”</span>
+                          <span>{t('selectionAdmin.coverUploadHint')}</span>
+                          <span>{t('selectionAdmin.coverDisplayHint')}</span>
                         </div>
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-[10px] text-on-surface-variant">图片主体尽量居中，四周保留 8% 安全边距</p>
+                          <p className="text-[10px] text-on-surface-variant">{t('selectionAdmin.coverSafeHint')}</p>
                           <input
                             name="file"
                             ref={groupCoverInputRef}
@@ -4627,28 +4782,30 @@ function Content() {
                                   const saved = await saveManagedGroupImage('', g?.imageFit || 'cover');
                                   if (saved) {
                                     updateManagedGroup({ image: '' });
-                                    toast('分组封面已删除', 'success');
+                                    toast(t('selectionAdmin.groupCoverDeleted'), 'success');
                                   }
                                 }}
                                 className="px-3 py-1.5 text-xs font-medium border border-outline-variant/30 text-error/70 hover:text-error rounded hover:border-error/30 shrink-0"
                               >
-                                删除封面
+                                {t('selectionAdmin.deleteCover')}
                               </button>
                             )}
                             <button
                               onClick={importManagedGroupCover}
                               className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 shrink-0"
                             >
-                              上传封面
+                              {t('selectionAdmin.uploadCover')}
                             </button>
                           </div>
                         </div>
                       </div>
                       <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wide">
-                        当前分组内（{catsInGroup.length}）
+                        {t('selectionAdmin.catsInGroup', { count: catsInGroup.length })}
                       </p>
                       {catsInGroup.length === 0 && (
-                        <p className="text-xs text-on-surface-variant py-2 text-center">暂无分类</p>
+                        <p className="text-xs text-on-surface-variant py-2 text-center">
+                          {t('selectionAdmin.noCategories')}
+                        </p>
                       )}
                       {catsInGroup.map((c) => (
                         <div
@@ -4683,17 +4840,17 @@ function Content() {
                                     ),
                                   );
                                   setRemoveGroupCatId(null);
-                                  toast(`"${c.name}" 已移出分组`, 'success');
+                                  toast(t('selectionAdmin.removedFromGroup', { name: c.name }), 'success');
                                 }}
                                 className="rounded bg-error/10 px-2 py-1 text-[11px] font-bold text-error"
                               >
-                                确认
+                                {t('common.confirm')}
                               </button>
                               <button
                                 onClick={() => setRemoveGroupCatId(null)}
                                 className="rounded px-2 py-1 text-[11px] text-on-surface-variant hover:bg-surface-container-high"
                               >
-                                取消
+                                {t('common.cancel')}
                               </button>
                             </div>
                           ) : (
@@ -4701,8 +4858,8 @@ function Content() {
                               onClick={() => setRemoveGroupCatId(c.id)}
                               className="text-error/60 hover:text-error shrink-0"
                               data-tooltip-ignore
-                              aria-label="移出分组"
-                              title="移出分组"
+                              aria-label={t('selectionAdmin.removeFromGroup')}
+                              title={t('selectionAdmin.removeFromGroup')}
                             >
                               <Icon name="close" size={14} />
                             </button>
@@ -4713,7 +4870,7 @@ function Content() {
                       {otherCats.length > 0 && (
                         <>
                           <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wide pt-2">
-                            其他分类（点击添加到本组）
+                            {t('selectionAdmin.otherCats')}
                           </p>
                           {otherCats.map((c) => {
                             const srcGroup = c.groupId ? groupItems.find((gi) => gi.id === c.groupId) : null;
@@ -4746,7 +4903,7 @@ function Content() {
                                       return item;
                                     }),
                                   );
-                                  toast(`"${c.name}" 已移入本组`, 'success');
+                                  toast(t('selectionAdmin.movedToGroup', { name: c.name }), 'success');
                                 }}
                                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-outline-variant/30 bg-surface-container-lowest hover:border-primary-container/40 hover:bg-primary-container/5 w-full text-left transition-colors"
                               >
@@ -4754,10 +4911,12 @@ function Content() {
                                 <span className="text-sm text-on-surface-variant flex-1 truncate">{c.name}</span>
                                 {srcGroup ? (
                                   <span className="text-[10px] text-on-surface-variant/60 shrink-0">
-                                    来自: {srcGroup.name}
+                                    {t('selectionAdmin.fromGroup', { name: srcGroup.name })}
                                   </span>
                                 ) : (
-                                  <span className="text-[10px] text-on-surface-variant/60 shrink-0">未分组</span>
+                                  <span className="text-[10px] text-on-surface-variant/60 shrink-0">
+                                    {t('selectionAdmin.ungrouped')}
+                                  </span>
                                 )}
                               </button>
                             );
@@ -4774,7 +4933,7 @@ function Content() {
                         }}
                         className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded"
                       >
-                        返回
+                        {t('selectionAdmin.back')}
                       </button>
                     </div>
                   </>
@@ -4784,7 +4943,7 @@ function Content() {
               <>
                 {/* --- Main view: group list --- */}
                 <div className="flex items-center justify-between shrink-0">
-                  <h2 className="text-base font-bold text-on-surface">分组管理</h2>
+                  <h2 className="text-base font-bold text-on-surface">{t('selectionAdmin.groupManagement')}</h2>
                   <button
                     onClick={() => {
                       setShowGroupModal(false);
@@ -4804,14 +4963,14 @@ function Content() {
                       name="icon"
                       value={groupForm.icon}
                       onChange={(e) => setGroupForm({ ...groupForm, icon: e.target.value })}
-                      placeholder="图标"
+                      placeholder={t('selectionAdmin.iconPlaceholderShort')}
                       className="w-20 bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
                     />
                     <input
                       name="name"
                       value={groupForm.name}
                       onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
-                      placeholder="分组名称"
+                      placeholder={t('selectionAdmin.groupNamePlaceholder')}
                       className="flex-1 bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
                     />
                     <button
@@ -4829,25 +4988,23 @@ function Content() {
                             catCount: 0,
                           },
                         ]);
-                        toast('分组已创建');
+                        toast(t('selectionAdmin.groupCreated'));
                         setGroupForm({ name: '', icon: 'category', image: '', imageFit: 'cover' });
                         mutateCats();
                       }}
                       disabled={!groupForm.name.trim()}
                       className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 disabled:opacity-50 shrink-0"
                     >
-                      创建
+                      {t('selectionAdmin.create')}
                     </button>
                   </div>
-                  <p className="text-[10px] text-on-surface-variant">
-                    名称、图标、封面和分类归属都在进入分组后的“管理分类”里调整。
-                  </p>
+                  <p className="text-[10px] text-on-surface-variant">{t('selectionAdmin.groupCreateHint')}</p>
                 </div>
 
                 {/* Group list */}
                 <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
                   {groupItems.length === 0 && (
-                    <p className="text-center py-8 text-on-surface-variant text-sm">暂无分组</p>
+                    <p className="text-center py-8 text-on-surface-variant text-sm">{t('selectionAdmin.noGroups')}</p>
                   )}
                   {groupItems.map((g, i) => (
                     <div
@@ -4884,7 +5041,9 @@ function Content() {
                         <Icon name={g.icon} size={16} className="text-primary-container shrink-0" />
                       )}
                       <span className="text-sm font-medium text-on-surface flex-1">{g.name}</span>
-                      <span className="text-[10px] text-on-surface-variant">{g.catCount} 个分类</span>
+                      <span className="text-[10px] text-on-surface-variant">
+                        {t('selectionAdmin.nCategories', { count: g.catCount })}
+                      </span>
                       <button
                         onClick={() => setManageGroupCatsId(g.id)}
                         className="text-primary-container hover:bg-primary-container/10 rounded p-1"
@@ -4914,17 +5073,17 @@ function Content() {
                               });
                               setGroupItems(groupItems.filter((gi) => gi.id !== g.id));
                               setDeleteGroupId(null);
-                              toast('分组已删除', 'success');
+                              toast(t('selectionAdmin.groupDeleted'), 'success');
                             }}
                             className="rounded bg-error/10 px-2 py-1 text-[11px] font-bold text-error"
                           >
-                            确认
+                            {t('common.confirm')}
                           </button>
                           <button
                             onClick={() => setDeleteGroupId(null)}
                             className="rounded px-2 py-1 text-[11px] text-on-surface-variant hover:bg-surface-container-high"
                           >
-                            取消
+                            {t('common.cancel')}
                           </button>
                         </div>
                       ) : (
@@ -4932,7 +5091,7 @@ function Content() {
                           onClick={() => setDeleteGroupId(g.id)}
                           className={SELECTION_ICON_BUTTON_DELETE}
                           data-tooltip-ignore
-                          aria-label="删除分组"
+                          aria-label={t('selectionAdmin.deleteGroup')}
                         >
                           <Icon name="delete" size={13} />
                         </button>
@@ -4951,7 +5110,7 @@ function Content() {
                     }}
                     className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded"
                   >
-                    关闭
+                    {t('common.close')}
                   </button>
                   <button
                     onClick={async () => {
@@ -4964,18 +5123,18 @@ function Content() {
                             groupImageFit: g.imageFit,
                           });
                         }
-                        toast('分组已保存', 'success');
+                        toast(t('selectionAdmin.groupSaved'), 'success');
                         setShowGroupModal(false);
                         setDeleteGroupId(null);
                         setRemoveGroupCatId(null);
                         mutateCats();
                       } catch {
-                        toast('保存失败', 'error');
+                        toast(t('selectionAdmin.saveFailed'), 'error');
                       }
                     }}
                     className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90"
                   >
-                    保存设置
+                    {t('selectionAdmin.saveSettings')}
                   </button>
                 </div>
               </>
@@ -4995,7 +5154,7 @@ function Content() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between shrink-0">
-              <h2 className="text-base font-bold text-on-surface">分类排序</h2>
+              <h2 className="text-base font-bold text-on-surface">{t('selectionAdmin.catSortTitle')}</h2>
               <button
                 onClick={() => setShowCatSortModal(false)}
                 className="text-on-surface-variant hover:text-on-surface"
@@ -5003,7 +5162,7 @@ function Content() {
                 <Icon name="close" size={18} />
               </button>
             </div>
-            <p className="text-xs text-on-surface-variant shrink-0">拖拽调整分类显示顺序</p>
+            <p className="text-xs text-on-surface-variant shrink-0">{t('selectionAdmin.catSortHint')}</p>
             <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
               {catSortItems.map((item, i) => (
                 <div
@@ -5039,22 +5198,22 @@ function Content() {
                 onClick={() => setShowCatSortModal(false)}
                 className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={async () => {
                   try {
                     await sortCategories(catSortItems.map((item, i) => ({ id: item.id, sortOrder: i })));
-                    toast('排序已保存', 'success');
+                    toast(t('selectionAdmin.orderSaved'), 'success');
                     setShowCatSortModal(false);
                     mutateCats();
                   } catch (err: unknown) {
-                    toast(getApiErrorMessage(err, '排序保存失败'), 'error');
+                    toast(getApiErrorMessage(err, t('selectionAdmin.orderSaveFailed')), 'error');
                   }
                 }}
                 className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90"
               >
-                保存排序
+                {t('selectionAdmin.saveOrder')}
               </button>
             </div>
           </div>
@@ -5065,7 +5224,8 @@ function Content() {
 }
 
 export default function SelectionAdminPage() {
-  useDocumentTitle('选型管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('selectionAdmin.pageTitle'));
 
   return (
     <AdminPageShell desktopContentClassName="overflow-y-scroll selection-scrollbarless [scrollbar-gutter:stable]">

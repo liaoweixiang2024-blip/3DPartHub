@@ -1,3 +1,5 @@
+import { i18n } from '../i18n';
+
 export type CustomerInquiryStatusView = {
   label: string;
   progress: string;
@@ -52,43 +54,57 @@ const STATUS_VIEWS: Record<string, CustomerInquiryStatusView> = {
 };
 
 export function getCustomerInquiryStatusView(status: string): CustomerInquiryStatusView {
-  return STATUS_VIEWS[status] || DEFAULT_VIEW;
+  const view = STATUS_VIEWS[status] || DEFAULT_VIEW;
+  return {
+    ...view,
+    label: i18n.t(`customerStatus.${status}.label`, { defaultValue: view.label }),
+    progress: i18n.t(`customerStatus.${status}.progress`, { defaultValue: view.progress }),
+    guide: i18n.t(`customerStatus.${status}.guide`, { defaultValue: view.guide }),
+  };
 }
 
 export function getCustomerInquiryFlow(status: string, assigneeName?: string) {
   const terminalStatus = status === 'rejected' || status === 'cancelled';
   const activeIndex = terminalStatus ? 3 : status === 'accepted' ? 3 : status === 'quoted' ? 2 : 1;
-  const finalTitle = terminalStatus ? (status === 'cancelled' ? '已取消' : '已关闭') : '销售跟进';
-  const salesDescription = assigneeName ? `由 ${assigneeName} 继续跟进。` : '需要线下推进时会安排对接人。';
+  const finalTitle = terminalStatus
+    ? status === 'cancelled'
+      ? i18n.t('customerStatus.flow.finalCancelled', { defaultValue: '已取消' })
+      : i18n.t('customerStatus.flow.finalClosed', { defaultValue: '已关闭' })
+    : i18n.t('customerStatus.flow.salesFollowUp', { defaultValue: '销售跟进' });
+  const salesDescription = assigneeName
+    ? i18n.t('customerStatus.flow.followWithAssignee', { defaultValue: '由 {{name}} 继续跟进。', name: assigneeName })
+    : i18n.t('customerStatus.flow.followNoAssignee', { defaultValue: '需要线下推进时会安排对接人。' });
   const steps: CustomerInquiryFlowStep[] = [
     {
       key: 'submitted',
-      title: '提交需求',
-      description: '询价需求已提交。',
+      title: i18n.t('customerStatus.flow.stepSubmitted', { defaultValue: '提交需求' }),
+      description: i18n.t('customerStatus.flow.stepSubmittedDesc', { defaultValue: '询价需求已提交。' }),
     },
     {
       key: 'review',
-      title: '业务确认',
-      description: '业务正在核对产品、数量和联系方式。',
+      title: i18n.t('customerStatus.flow.stepReview', { defaultValue: '业务确认' }),
+      description: i18n.t('customerStatus.flow.stepReviewDesc', { defaultValue: '业务正在核对产品、数量和联系方式。' }),
     },
     {
       key: 'reply',
-      title: '业务回复',
-      description: '查看报价、交期或参数确认意见。',
+      title: i18n.t('customerStatus.flow.stepReply', { defaultValue: '业务回复' }),
+      description: i18n.t('customerStatus.flow.stepReplyDesc', { defaultValue: '查看报价、交期或参数确认意见。' }),
     },
     {
       key: 'follow',
       title: finalTitle,
-      description: terminalStatus ? '该询价流程已结束。' : salesDescription,
+      description: terminalStatus
+        ? i18n.t('customerStatus.flow.stepFollowEndedDesc', { defaultValue: '该询价流程已结束。' })
+        : salesDescription,
     },
   ];
   const nextText = terminalStatus
-    ? '流程已结束，记录会保留用于查看。'
+    ? i18n.t('customerStatus.flow.nextEnded', { defaultValue: '流程已结束，记录会保留用于查看。' })
     : status === 'submitted'
-      ? '下一步：业务回复'
+      ? i18n.t('customerStatus.flow.nextReply', { defaultValue: '下一步：业务回复' })
       : status === 'quoted'
-        ? '下一步：销售跟进或继续沟通'
-        : '下一步：线下对接确认';
+        ? i18n.t('customerStatus.flow.nextSales', { defaultValue: '下一步：销售跟进或继续沟通' })
+        : i18n.t('customerStatus.flow.nextOffline', { defaultValue: '下一步：线下对接确认' });
 
   return {
     activeIndex,

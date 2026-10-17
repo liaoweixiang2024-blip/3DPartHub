@@ -109,11 +109,23 @@ const NAV_TRANSLATIONS: Record<string, NavTranslation> = {
   },
   '/admin/audit': {
     key: 'nav.admin.audit',
-    knownLabels: ['操作日志', 'Audit Logs'],
+    knownLabels: ['操作日志', '审计日志', 'Audit Logs'],
   },
   '/admin/settings': {
     key: 'nav.admin.settings',
     knownLabels: ['系统设置', 'System Settings'],
+  },
+  '/admin/product-wall': {
+    key: 'nav.admin.productWall',
+    knownLabels: ['图片管理', 'Gallery Admin'],
+  },
+  '/admin/category-nav': {
+    key: 'nav.admin.categoryNav',
+    knownLabels: ['导航管理', 'Selector Map Admin'],
+  },
+  '/admin/invites': {
+    key: 'nav.admin.invites',
+    knownLabels: ['邀请管理', 'Invites'],
   },
 };
 

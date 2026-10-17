@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import { categoriesApi, type CategoryItem } from '../api/categories';
 import client from '../api/client';
@@ -60,6 +61,7 @@ const CategoryRow = memo(function CategoryRow({
   onAddChild: (parentId: string) => void;
   onDelete: (cat: CategoryItem) => void;
 }) {
+  const { t } = useTranslation();
   const hasChildren = (cat.children?.length || 0) > 0;
   const isChild = depth > 0;
   const collapsed = hasChildren && collapsedIds.has(cat.id);
@@ -95,7 +97,7 @@ const CategoryRow = memo(function CategoryRow({
               ? 'cursor-not-allowed opacity-30'
               : 'cursor-grab hover:bg-surface-container-high hover:text-on-surface-variant active:cursor-grabbing'
           }`}
-          title={dragDisabled ? '搜索时暂不支持拖拽排序' : '拖拽排序'}
+          title={dragDisabled ? t('categoryAdminPage.dragDisabledSearch') : t('categoryAdminPage.dragSort')}
           data-tooltip-ignore
         >
           ⠿
@@ -107,7 +109,7 @@ const CategoryRow = memo(function CategoryRow({
               onClick={() => onToggleCollapse(cat.id)}
               className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
               data-tooltip-ignore
-              aria-label={collapsed ? '展开子分类' : '收起子分类'}
+              aria-label={collapsed ? t('categoryAdminPage.expandChildren') : t('categoryAdminPage.collapseChildren')}
             >
               <Icon
                 name="expand_more"
@@ -138,7 +140,7 @@ const CategoryRow = memo(function CategoryRow({
                 ? 'cursor-not-allowed opacity-30'
                 : 'cursor-grab hover:bg-surface-container-high hover:text-on-surface-variant active:cursor-grabbing'
             }`}
-            title={dragDisabled ? '搜索时暂不支持拖拽排序' : '拖拽排序'}
+            title={dragDisabled ? t('categoryAdminPage.dragDisabledSearch') : t('categoryAdminPage.dragSort')}
             data-tooltip-ignore
           >
             ⠿
@@ -150,7 +152,7 @@ const CategoryRow = memo(function CategoryRow({
                 onClick={() => onToggleCollapse(cat.id)}
                 className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
                 data-tooltip-ignore
-                aria-label={collapsed ? '展开子分类' : '收起子分类'}
+                aria-label={collapsed ? t('categoryAdminPage.expandChildren') : t('categoryAdminPage.collapseChildren')}
               >
                 <Icon
                   name="expand_more"
@@ -173,30 +175,30 @@ const CategoryRow = memo(function CategoryRow({
               {cat.restricted && (
                 <span
                   className="inline-flex items-center gap-0.5 rounded-full bg-error/15 px-2 py-1 text-[10px] font-medium text-error"
-                  title="该分类已开启访问限制"
+                  title={t('categoryAdminPage.restrictedTitle')}
                 >
                   <Icon name="lock" size={10} />
-                  受限
+                  {t('categoryAdminPage.restrictedBadge')}
                 </span>
               )}
               {!cat.restricted && inheritedRestricted && (
                 <span
                   className="inline-flex items-center gap-0.5 rounded-full bg-error/10 px-2 py-1 text-[10px] text-error/80"
-                  title="父分类已开启访问限制，限制沿子树向下生效"
+                  title={t('categoryAdminPage.restrictedInheritedTitle')}
                 >
                   <Icon name="lock" size={10} />
-                  受限（继承）
+                  {t('categoryAdminPage.restrictedInheritedBadge')}
                 </span>
               )}
               {isChild && (
                 <span className="hidden rounded-full bg-surface-container-high px-2 py-1 text-[10px] text-on-surface-variant sm:inline">
-                  子分类
+                  {t('categoryAdminPage.subCategoryBadge')}
                 </span>
               )}
             </div>
             <div className={`${ADMIN_ROW_META_CLASS} mt-1 hidden flex-wrap items-center gap-2 text-[11px] sm:flex`}>
               <span>ID: {cat.id.slice(0, 8)}</span>
-              <span>图标: {cat.icon || 'folder'}</span>
+              <span>{t('categoryAdminPage.iconLabel', { value: cat.icon || 'folder' })}</span>
             </div>
           </div>
         </div>
@@ -212,11 +214,13 @@ const CategoryRow = memo(function CategoryRow({
                 : 'bg-surface-container-high text-on-surface-variant disabled:cursor-default'
             }`}
           >
-            {hasChildren ? `${cat.children.length} 个子类` : '无子类'}
+            {hasChildren
+              ? t('categoryAdminPage.childCount', { count: cat.children.length })
+              : t('categoryAdminPage.noChildren')}
           </button>
         </div>
         <div className="hidden text-xs text-on-surface-variant sm:block">
-          <span className="font-mono">排序 {cat.sortOrder}</span>
+          <span className="font-mono">{t('categoryAdminPage.sortLabel', { value: cat.sortOrder })}</span>
         </div>
         <div className="flex min-w-0 items-center justify-end gap-1 sm:gap-1.5">
           {!isChild && (
@@ -225,18 +229,18 @@ const CategoryRow = memo(function CategoryRow({
               onClick={() => onAddChild(cat.id)}
               className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg px-2 text-xs font-medium whitespace-nowrap text-primary-container hover:bg-primary-container/10 sm:px-2.5"
               data-tooltip-ignore
-              aria-label="添加子分类"
-              title="添加子分类"
+              aria-label={t('categoryAdminPage.addSub')}
+              title={t('categoryAdminPage.addSub')}
             >
               <Icon name="add" size={14} />
-              <span className="hidden sm:inline">子类</span>
+              <span className="hidden sm:inline">{t('categoryAdminPage.addSubShort')}</span>
             </button>
           )}
           <button
             onClick={() => onEdit(cat)}
             className="grid h-8 w-8 place-items-center rounded-lg text-on-surface-variant transition-colors hover:bg-primary-container/10 hover:text-primary-container"
             data-tooltip-ignore
-            aria-label="编辑"
+            aria-label={t('common.edit')}
           >
             <Icon name="edit" size={15} />
           </button>
@@ -244,7 +248,7 @@ const CategoryRow = memo(function CategoryRow({
             onClick={() => onDelete(cat)}
             className="grid h-8 w-8 place-items-center rounded-lg text-on-surface-variant transition-colors hover:bg-error-container/10 hover:text-error"
             data-tooltip-ignore
-            aria-label="删除"
+            aria-label={t('common.delete')}
           >
             <Icon name="delete" size={15} />
           </button>
@@ -308,9 +312,9 @@ const CategoryRow = memo(function CategoryRow({
 
 // 可授权的角色（ADMIN 始终可见，不在此列）
 const ACCESS_ROLE_OPTIONS = [
-  { value: 'EDITOR', label: '编辑者' },
-  { value: 'VIEWER', label: '访客' },
-  { value: 'INTERNAL', label: '内部' },
+  { value: 'EDITOR', labelKey: 'categoryAdminPage.roleEditor' },
+  { value: 'VIEWER', labelKey: 'categoryAdminPage.roleViewer' },
+  { value: 'INTERNAL', labelKey: 'categoryAdminPage.roleInternal' },
 ];
 
 /** 沿祖先链检查是否存在受限分类：编辑已有分类时从其 parentId 向上爬；新增子分类时从 addParentId 向上爬 */
@@ -361,6 +365,7 @@ function CategoryAccessSection({
   allowedUsers: AccessUserOption[];
   onAllowedUsersChange: (users: AccessUserOption[]) => void;
 }) {
+  const { t } = useTranslation();
   const [userSearch, setUserSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -392,18 +397,18 @@ function CategoryAccessSection({
       <div className="flex items-center justify-between gap-3">
         <span className="flex items-center gap-2 text-sm font-medium text-on-surface">
           <Icon name="lock" size={16} className="text-on-surface-variant" />
-          访问限制
+          {t('categoryAdminPage.accessSectionTitle')}
         </span>
         <AppSwitch checked={restricted} onChange={onRestrictedChange} />
       </div>
-      <p className="mt-1.5 text-[11px] text-on-surface-variant/70">
-        开启后，该分类（含子分类）下的模型仅对白名单内的角色和指定用户可见；管理员始终可见。公开分享链接不受影响。
-      </p>
+      <p className="mt-1.5 text-[11px] text-on-surface-variant/70">{t('categoryAdminPage.accessSectionHint')}</p>
 
       {restricted && (
         <div className="mt-3 space-y-3 border-t border-outline-variant/10 pt-3">
           <div>
-            <div className="mb-1.5 text-xs font-medium text-on-surface-variant">允许访问的角色</div>
+            <div className="mb-1.5 text-xs font-medium text-on-surface-variant">
+              {t('categoryAdminPage.allowedRolesLabel')}
+            </div>
             <div className="flex flex-wrap gap-2">
               {ACCESS_ROLE_OPTIONS.map((opt) => {
                 const active = allowedRoles.includes(opt.value);
@@ -419,7 +424,7 @@ function CategoryAccessSection({
                     }`}
                   >
                     {active ? '✓ ' : ''}
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </button>
                 );
               })}
@@ -427,7 +432,9 @@ function CategoryAccessSection({
           </div>
 
           <div className="relative">
-            <div className="mb-1.5 text-xs font-medium text-on-surface-variant">指定用户（搜索用户名 / 邮箱）</div>
+            <div className="mb-1.5 text-xs font-medium text-on-surface-variant">
+              {t('categoryAdminPage.allowedUsersLabel')}
+            </div>
             <input
               name="user-search"
               value={userSearch}
@@ -436,7 +443,7 @@ function CategoryAccessSection({
                 setSearchOpen(true);
               }}
               onFocus={() => setSearchOpen(true)}
-              placeholder="输入关键词搜索用户"
+              placeholder={t('categoryAdminPage.userSearchPlaceholder')}
               className="h-10 w-full rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none focus:border-primary-container"
             />
             {allowedUsers.length > 0 && (
@@ -451,7 +458,7 @@ function CategoryAccessSection({
                       type="button"
                       onClick={() => onAllowedUsersChange(allowedUsers.filter((x) => x.id !== u.id))}
                       className="rounded-full p-0.5 hover:bg-primary-container/20"
-                      aria-label={`移除 ${u.username}`}
+                      aria-label={t('categoryAdminPage.removeUser', { name: u.username })}
                     >
                       <Icon name="close" size={12} />
                     </button>
@@ -462,9 +469,9 @@ function CategoryAccessSection({
             {searchOpen && debouncedSearch && (
               <div className="absolute inset-x-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border border-outline-variant/20 bg-surface-container-low shadow-xl">
                 {searching ? (
-                  <p className="px-3 py-2.5 text-xs text-on-surface-variant">搜索中...</p>
+                  <p className="px-3 py-2.5 text-xs text-on-surface-variant">{t('categoryAdminPage.searchingUsers')}</p>
                 ) : options.length === 0 ? (
-                  <p className="px-3 py-2.5 text-xs text-on-surface-variant">无匹配用户</p>
+                  <p className="px-3 py-2.5 text-xs text-on-surface-variant">{t('categoryAdminPage.noUserMatch')}</p>
                 ) : (
                   options.map((u) => (
                     <button
@@ -493,7 +500,7 @@ function CategoryAccessSection({
 
           {allowedRoles.length === 0 && allowedUsers.length === 0 && (
             <p className="rounded-lg bg-error/10 px-2.5 py-1.5 text-[11px] text-error">
-              白名单为空：除管理员外所有人都看不到该分类。请至少勾选一个角色或添加一个用户。
+              {t('categoryAdminPage.emptyWhitelistWarning')}
             </p>
           )}
         </div>
@@ -516,6 +523,7 @@ function CategoryModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(category?.name || '');
   const [icon, setIcon] = useState(category?.icon || 'folder');
   const [restricted, setRestricted] = useState(category?.restricted ?? false);
@@ -563,11 +571,11 @@ function CategoryModal({
 
   const handleSave = async () => {
     if (!name.trim()) {
-      toast('请输入分类名称', 'error');
+      toast(t('categoryAdminPage.nameRequiredToast'), 'error');
       return;
     }
     if (restricted && allowedRoles.length === 0 && allowedUsers.length === 0) {
-      toast('访问限制已开启，请至少勾选一个角色或添加一个指定用户', 'error');
+      toast(t('categoryAdminPage.restrictedWhitelistToast'), 'error');
       return;
     }
     setSaving(true);
@@ -582,11 +590,14 @@ function CategoryModal({
       } else {
         await categoriesApi.create({ name: name.trim(), icon, parentId: parentId || null, ...accessPayload });
       }
-      toast(isEdit ? '分类已更新' : '分类已创建', 'success');
+      toast(
+        isEdit ? t('categoryAdminPage.categoryUpdatedToast') : t('categoryAdminPage.categoryCreatedToast'),
+        'success',
+      );
       onSaved();
       onClose();
     } catch {
-      toast('操作失败', 'error');
+      toast(t('categoryAdminPage.operationFailedToast'), 'error');
     } finally {
       setSaving(false);
     }
@@ -627,9 +638,13 @@ function CategoryModal({
         <div className="flex items-start justify-between gap-3 border-b border-outline-variant/10 px-5 py-4">
           <div>
             <h2 className="text-base font-semibold text-on-surface">
-              {isEdit ? '编辑模型分类' : parentId ? '添加子分类' : '添加模型分类'}
+              {isEdit
+                ? t('categoryAdminPage.editTitle')
+                : parentId
+                  ? t('categoryAdminPage.addSub')
+                  : t('categoryAdminPage.addTitle')}
             </h2>
-            <p className="mt-1 text-xs text-on-surface-variant">分类会用于模型库筛选、上传归类和模型详情页展示。</p>
+            <p className="mt-1 text-xs text-on-surface-variant">{t('categoryAdminPage.modalHint')}</p>
           </div>
           <button
             onClick={onClose}
@@ -645,24 +660,26 @@ function CategoryModal({
               <Icon name={icon || 'folder'} size={30} />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-on-surface-variant">分类名称</label>
+              <label className="mb-1 block text-xs font-medium text-on-surface-variant">
+                {t('categoryAdminPage.nameLabel')}
+              </label>
               <input
                 name="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="h-11 w-full rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none transition-colors focus:border-primary-container focus:ring-2 focus:ring-primary-container/10"
-                placeholder="输入分类名称"
+                placeholder={t('categoryAdminPage.namePlaceholder')}
                 autoFocus
               />
-              <p className="mt-1.5 text-[11px] text-on-surface-variant/70">
-                建议使用产品族名称，例如“不锈钢接头”“气动阀门”。
-              </p>
+              <p className="mt-1.5 text-[11px] text-on-surface-variant/70">{t('categoryAdminPage.nameHint')}</p>
             </div>
           </div>
 
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <label className="text-xs font-medium text-on-surface-variant">选择图标</label>
+              <label className="text-xs font-medium text-on-surface-variant">
+                {t('categoryAdminPage.iconPickerLabel')}
+              </label>
               <span className="rounded-full bg-surface-container-high px-2 py-1 text-[10px] text-on-surface-variant">
                 {icon}
               </span>
@@ -694,7 +711,7 @@ function CategoryModal({
 
           {parentRestricted && (
             <p className="rounded-lg bg-error/10 px-2.5 py-1.5 text-[11px] text-error">
-              上级分类已开启访问限制：无论本分类开关如何，限制都会沿子树向下生效（如需单独放开，请先关闭上级分类的限制）。
+              {t('categoryAdminPage.parentRestrictedHint')}
             </p>
           )}
 
@@ -710,7 +727,7 @@ function CategoryModal({
 
         <div className="grid grid-cols-2 gap-2 border-t border-outline-variant/10 bg-surface-container-low px-5 py-4 sm:flex sm:justify-end">
           <AdminButton onClick={onClose} className="w-full sm:w-auto" variant="secondary">
-            取消
+            {t('common.cancel')}
           </AdminButton>
           <AdminButton
             onClick={handleSave}
@@ -718,7 +735,7 @@ function CategoryModal({
             className="w-full sm:w-auto"
             variant="primary"
           >
-            {saving ? '保存中...' : '保存分类'}
+            {saving ? t('categoryAdminPage.savingText') : t('categoryAdminPage.saveCategory')}
           </AdminButton>
         </div>
       </motion.div>
@@ -772,6 +789,7 @@ function findSiblingsByParent(items: CategoryItem[], parentId: string | null): C
 }
 
 function Content() {
+  const { t } = useTranslation();
   const [showModal, setShowModal] = useState(false);
   const [editingCat, setEditingCat] = useState<CategoryItem | null>(null);
   const [addParentId, setAddParentId] = useState<string | null>(null);
@@ -808,10 +826,10 @@ function Content() {
   const handleDelete = async (id: string) => {
     try {
       await categoriesApi.delete(id);
-      toast('分类已删除', 'success');
+      toast(t('categoryAdminPage.categoryDeletedToast'), 'success');
       mutate();
     } catch (err: unknown) {
-      toast(getErrorMessage(err, '删除失败'), 'error');
+      toast(getErrorMessage(err, t('categoryAdminPage.deleteFailedFallback')), 'error');
     }
     setDeleteConfirm(null);
   };
@@ -852,9 +870,9 @@ function Content() {
   const displayCollapsedIds = useMemo(() => (query.trim() ? EMPTY_COLLAPSED_IDS : collapsedIds), [query, collapsedIds]);
   const dragDisabled = Boolean(query.trim()) || sorting;
   const toolbarStatus = query
-    ? `搜索结果 ${visibleTree.length} 个一级分组，已自动展开匹配项`
+    ? t('categoryAdminPage.searchResultStatus', { count: visibleTree.length })
     : sorting
-      ? '正在保存排序...'
+      ? t('categoryAdminPage.sortingStatus')
       : '';
 
   const handleDropCategory = useCallback(
@@ -863,7 +881,7 @@ function Content() {
       const parentId = target.parentId || null;
       if (dragItem.id === target.id) return;
       if (dragItem.parentId !== parentId) {
-        toast('只能在同一层级内拖拽排序', 'error');
+        toast(t('categoryAdminPage.sameLevelOnlyToast'), 'error');
         setDragItem(null);
         return;
       }
@@ -883,10 +901,10 @@ function Content() {
       setSorting(true);
       try {
         await categoriesApi.reorder(next.map((item, index) => ({ id: item.id, sortOrder: index })));
-        toast('排序已保存', 'success');
+        toast(t('categoryAdminPage.sortSavedToast'), 'success');
         await mutate();
       } catch (err) {
-        toast(getErrorMessage(err, '排序保存失败'), 'error');
+        toast(getErrorMessage(err, t('categoryAdminPage.sortSaveFailed')), 'error');
       } finally {
         setSorting(false);
         setDragItem(null);
@@ -897,11 +915,11 @@ function Content() {
 
   return (
     <AdminManagementPage
-      title="分类管理"
-      description="维护模型库分类、子分类和图标展示"
+      title={t('categoryAdminPage.pageTitle')}
+      description={t('categoryAdminPage.pageDescription')}
       actions={
         <AdminButton onClick={handleAdd} icon="add" variant="primary">
-          添加分类
+          {t('categoryAdminPage.addCategory')}
         </AdminButton>
       }
       toolbar={
@@ -909,17 +927,17 @@ function Content() {
           <div className="flex min-h-9 items-center divide-x divide-outline-variant/20 overflow-x-auto">
             <div className="flex h-8 items-center gap-1.5 px-2.5 text-xs font-medium text-primary-container first:pl-0">
               <Icon name="folder" size={14} />
-              <span>大类</span>
+              <span>{t('categoryAdminPage.statRoots')}</span>
               <strong className="tabular-nums text-[11px] font-medium">{stats.roots}</strong>
             </div>
             <div className="flex h-8 items-center gap-1.5 px-2.5 text-xs font-medium text-on-surface-variant">
               <Icon name="folder_open" size={14} />
-              <span>子类</span>
+              <span>{t('categoryAdminPage.statChildren')}</span>
               <strong className="tabular-nums text-[11px] font-medium text-on-surface">{stats.children}</strong>
             </div>
             <div className="flex h-8 items-center gap-1.5 px-2.5 text-xs font-medium text-on-surface-variant">
               <Icon name="view_in_ar" size={14} />
-              <span>型号</span>
+              <span>{t('categoryAdminPage.statModels')}</span>
               <strong className="tabular-nums text-[11px] font-medium text-on-surface">
                 {stats.modelCount.toLocaleString()}
               </strong>
@@ -933,7 +951,7 @@ function Content() {
               inputProps={queryInputProps}
               value={queryInputValue}
               onClear={() => setQuery('')}
-              placeholder="搜索分类..."
+              placeholder={t('categoryAdminPage.searchPlaceholder')}
               className="md:w-72 md:shrink-0"
             />
           </div>
@@ -949,7 +967,7 @@ function Content() {
               tableColumns="28px 34px 44px minmax(0,1fr) 104px 68px 152px"
               tableCells={['checkbox', 'text', 'chip', 'title', 'chip', 'text', 'actions']}
               className="h-full rounded-none border-0"
-              label="分类加载中"
+              label={t('categoryAdminPage.loadingLabel')}
             />
           </AdminContentPanel>
         ) : (
@@ -958,10 +976,10 @@ function Content() {
               <span />
               <span />
               <span />
-              <span>分类名称</span>
-              <span>层级</span>
-              <span>排序</span>
-              <span className="text-right">操作</span>
+              <span>{t('categoryAdminPage.nameLabel')}</span>
+              <span>{t('categoryAdminPage.gridColLevel')}</span>
+              <span>{t('categoryAdminPage.gridColSort')}</span>
+              <span className="text-right">{t('categoryAdminPage.gridColActions')}</span>
             </AdminGridHeader>
 
             <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
@@ -988,22 +1006,20 @@ function Content() {
                 <div className="flex flex-col items-center justify-center py-16 gap-3">
                   <Icon name="folder_off" size={48} className="text-on-surface-variant/20" />
                   <div className="text-center">
-                    <p className="text-sm font-medium text-on-surface">暂无模型分类</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">
-                      添加第一个分类后，上传和模型库就可以按分类筛选。
-                    </p>
+                    <p className="text-sm font-medium text-on-surface">{t('categoryAdminPage.emptyTitle')}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">{t('categoryAdminPage.emptyHint')}</p>
                   </div>
                   <AdminButton onClick={handleAdd} icon="add" variant="primary">
-                    添加分类
+                    {t('categoryAdminPage.addCategory')}
                   </AdminButton>
                 </div>
               ) : (
                 visibleTree.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-14 gap-2">
                     <Icon name="search_off" size={40} className="text-on-surface-variant/25" />
-                    <p className="text-sm text-on-surface-variant">没有匹配的分类</p>
+                    <p className="text-sm text-on-surface-variant">{t('categoryAdminPage.noMatchTitle')}</p>
                     <button onClick={() => setQuery('')} className="text-sm text-primary-container hover:underline">
-                      清空搜索
+                      {t('categoryAdminPage.clearSearch')}
                     </button>
                   </div>
                 )
@@ -1049,18 +1065,20 @@ function Content() {
                   <Icon name="warning" size={20} />
                 </span>
                 <div>
-                  <h3 className="text-base font-semibold text-on-surface">确认删除分类</h3>
+                  <h3 className="text-base font-semibold text-on-surface">
+                    {t('categoryAdminPage.deleteConfirmTitle')}
+                  </h3>
                   <p className="mt-1 text-sm leading-relaxed text-on-surface-variant">
-                    删除后不可恢复，如果分类下有关联模型，可能会影响模型筛选展示。
+                    {t('categoryAdminPage.deleteConfirmHint')}
                   </p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <AdminButton onClick={() => setDeleteConfirm(null)} className="w-full" variant="secondary">
-                  取消
+                  {t('common.cancel')}
                 </AdminButton>
                 <AdminButton onClick={() => handleDelete(deleteConfirm)} className="w-full" variant="danger">
-                  确认删除
+                  {t('categoryAdminPage.confirmDeleteText')}
                 </AdminButton>
               </div>
             </motion.div>
@@ -1072,7 +1090,8 @@ function Content() {
 }
 
 export default function CategoryAdminPage() {
-  useDocumentTitle('分类管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('categoryAdminPage.pageTitle'));
   return (
     <AdminPageShell
       desktopContentClassName="min-h-0 overflow-hidden"

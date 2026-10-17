@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ColumnDef } from '../../api/selections';
 import Icon from '../shared/Icon';
 import { SELECTION_ICON_BUTTON_DELETE } from './constants';
@@ -6,6 +7,7 @@ import { SELECTION_ICON_BUTTON_DELETE } from './constants';
 export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (cols: ColumnDef[]) => void }) {
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [openAdvancedIdx, setOpenAdvancedIdx] = useState<number | null>(null);
+  const { t } = useTranslation();
 
   function addColumn() {
     onChange([...columns, { key: `col_${columns.length}`, label: '', unit: '' }]);
@@ -93,17 +95,15 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
     <div className="space-y-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <label className="text-sm font-bold text-on-surface">参数列定义</label>
-          <p className="mt-0.5 text-[11px] text-on-surface-variant/70">
-            从上到下就是客户选型顺序；拖动左侧手柄可调整顺序。
-          </p>
+          <label className="text-sm font-bold text-on-surface">{t('selectionAdmin.colDefTitle')}</label>
+          <p className="mt-0.5 text-[11px] text-on-surface-variant/70">{t('selectionAdmin.colDefHint')}</p>
         </div>
         <button
           type="button"
           onClick={addColumn}
           className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3 py-2 text-xs font-bold text-on-primary hover:opacity-90"
         >
-          <Icon name="add" size={14} /> 添加参数列
+          <Icon name="add" size={14} /> {t('selectionAdmin.addColumn')}
         </button>
       </div>
 
@@ -114,16 +114,20 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
               <Icon name="info" size={14} />
             </span>
             <div>
-              <p className="font-bold text-on-surface">怎么理解这张表</p>
-              <p className="mt-1 leading-5">
-                数据字段要和产品参数一致；页面名称是客户看到的文字；类型决定它是客户选择、客户填写，还是只在结果里展示。
-              </p>
+              <p className="font-bold text-on-surface">{t('selectionAdmin.howToReadTitle')}</p>
+              <p className="mt-1 leading-5">{t('selectionAdmin.howToRead')}</p>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-1.5 text-[10px] sm:w-[330px]">
-            <span className="rounded-md bg-surface-container-high px-2 py-1 text-center">客户选择=按钮筛选</span>
-            <span className="rounded-md bg-surface-container-high px-2 py-1 text-center">客户填写=手输长度</span>
-            <span className="rounded-md bg-surface-container-high px-2 py-1 text-center">只展示=结果信息</span>
+            <span className="rounded-md bg-surface-container-high px-2 py-1 text-center">
+              {t('selectionAdmin.chipSelect')}
+            </span>
+            <span className="rounded-md bg-surface-container-high px-2 py-1 text-center">
+              {t('selectionAdmin.chipManual')}
+            </span>
+            <span className="rounded-md bg-surface-container-high px-2 py-1 text-center">
+              {t('selectionAdmin.chipDisplay')}
+            </span>
           </div>
         </div>
       </div>
@@ -132,26 +136,26 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
         <div className="hidden grid-cols-[36px_44px_minmax(150px,1.1fr)_minmax(170px,1.1fr)_76px_118px_104px_40px] items-center gap-2 border-b border-outline-variant/10 bg-surface-container-high px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant md:grid">
           <span />
           {/* 表头文字按下方控件的内边距内缩，视觉上与输入框文字对齐（输入框 13px / 下拉与按钮 9px / 序号徽标 8px） */}
-          <span className="pl-2">顺序</span>
-          <span className="pl-[13px]">数据字段</span>
-          <span className="pl-[13px]">页面名称</span>
-          <span className="pl-[13px]">单位</span>
-          <span className="pl-[9px]">类型</span>
-          <span className="pl-[9px]">设置</span>
+          <span className="pl-2">{t('selectionAdmin.colOrder')}</span>
+          <span className="pl-[13px]">{t('selectionAdmin.colField')}</span>
+          <span className="pl-[13px]">{t('selectionAdmin.colLabelHead')}</span>
+          <span className="pl-[13px]">{t('selectionAdmin.colUnit')}</span>
+          <span className="pl-[9px]">{t('selectionAdmin.colType')}</span>
+          <span className="pl-[9px]">{t('selectionAdmin.colSettings')}</span>
           <span />
         </div>
 
         {columns.length === 0 ? (
           <div className="grid place-items-center px-4 py-10 text-center">
             <Icon name="view_column" size={28} className="mb-2 text-on-surface-variant/30" />
-            <p className="text-sm font-medium text-on-surface">还没有参数列</p>
-            <p className="mt-1 text-xs text-on-surface-variant">添加后，客户会按这些列一步步完成选型。</p>
+            <p className="text-sm font-medium text-on-surface">{t('selectionAdmin.noColumnsYet')}</p>
+            <p className="mt-1 text-xs text-on-surface-variant">{t('selectionAdmin.noColumnsHint')}</p>
             <button
               type="button"
               onClick={addColumn}
               className="mt-3 rounded-lg bg-primary-container px-3 py-2 text-xs font-bold text-on-primary hover:opacity-90"
             >
-              添加第一列
+              {t('selectionAdmin.addFirstColumn')}
             </button>
           </div>
         ) : (
@@ -174,12 +178,12 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                     : 'bg-primary-container/10 text-primary-container';
             const modeLabel =
               mode === 'manual'
-                ? '客户填写'
+                ? t('selectionAdmin.modeManual')
                 : mode === 'preset'
-                  ? '固定选项'
+                  ? t('selectionAdmin.modePreset')
                   : mode === 'displayOnly'
-                    ? '只展示'
-                    : '客户选择';
+                    ? t('selectionAdmin.modeDisplay')
+                    : t('selectionAdmin.modeSelect');
 
             return (
               <div
@@ -213,42 +217,46 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
 
                   <label className="min-w-0">
                     <span className="mb-1 block text-[10px] font-medium text-on-surface-variant md:hidden">
-                      数据字段
+                      {t('selectionAdmin.colField')}
                     </span>
                     <input
                       name="key"
                       value={col.key}
                       onChange={(e) => updateCol(i, 'key', e.target.value)}
-                      placeholder="如 通径"
-                      title="必须和产品参数 specs 里的字段名一致"
+                      placeholder={t('selectionAdmin.fieldPlaceholder')}
+                      title={t('selectionAdmin.fieldTitle')}
                       className="h-9 w-full min-w-0 rounded-lg border border-outline-variant/15 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none transition-colors focus:border-primary-container focus:ring-2 focus:ring-primary-container/10"
                     />
                   </label>
                   <label className="min-w-0">
                     <span className="mb-1 block text-[10px] font-medium text-on-surface-variant md:hidden">
-                      页面名称
+                      {t('selectionAdmin.colLabelHead')}
                     </span>
                     <input
                       name="label"
                       value={col.label}
                       onChange={(e) => updateCol(i, 'label', e.target.value)}
-                      placeholder="如 选择通径"
-                      title="客户在选型页面看到的名字，不影响数据匹配"
+                      placeholder={t('selectionAdmin.labelPlaceholder')}
+                      title={t('selectionAdmin.labelTitle')}
                       className="h-9 w-full min-w-0 rounded-lg border border-outline-variant/15 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none transition-colors focus:border-primary-container focus:ring-2 focus:ring-primary-container/10"
                     />
                   </label>
                   <label>
-                    <span className="mb-1 block text-[10px] font-medium text-on-surface-variant md:hidden">单位</span>
+                    <span className="mb-1 block text-[10px] font-medium text-on-surface-variant md:hidden">
+                      {t('selectionAdmin.colUnit')}
+                    </span>
                     <input
                       name="unit"
                       value={col.unit}
                       onChange={(e) => updateCol(i, 'unit', e.target.value)}
-                      placeholder="单位"
+                      placeholder={t('selectionAdmin.colUnit')}
                       className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none transition-colors focus:border-primary-container focus:ring-2 focus:ring-primary-container/10"
                     />
                   </label>
                   <label>
-                    <span className="mb-1 block text-[10px] font-medium text-on-surface-variant md:hidden">类型</span>
+                    <span className="mb-1 block text-[10px] font-medium text-on-surface-variant md:hidden">
+                      {t('selectionAdmin.colType')}
+                    </span>
                     <select
                       name="mode"
                       value={mode}
@@ -257,10 +265,10 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       }
                       className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-lowest px-2 text-sm text-on-surface outline-none transition-colors focus:border-primary-container focus:ring-2 focus:ring-primary-container/10"
                     >
-                      <option value="select">客户选择</option>
-                      <option value="manual">客户填写</option>
-                      <option value="preset">固定选项</option>
-                      <option value="displayOnly">只展示</option>
+                      <option value="select">{t('selectionAdmin.modeSelect')}</option>
+                      <option value="manual">{t('selectionAdmin.modeManual')}</option>
+                      <option value="preset">{t('selectionAdmin.modePreset')}</option>
+                      <option value="displayOnly">{t('selectionAdmin.modeDisplay')}</option>
                     </select>
                   </label>
 
@@ -275,14 +283,14 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       }`}
                     >
                       <Icon name={isAdvancedOpen ? 'expand_less' : 'tune'} size={14} />
-                      {isAdvancedOpen ? '收起' : '更多'}
+                      {isAdvancedOpen ? t('selectionAdmin.collapse') : t('selectionAdmin.more')}
                     </button>
                     <button
                       type="button"
                       onClick={() => removeCol(i)}
                       className={`${SELECTION_ICON_BUTTON_DELETE} md:hidden`}
                       data-tooltip-ignore
-                      aria-label="删除参数列"
+                      aria-label={t('selectionAdmin.deleteColumnAria')}
                     >
                       <Icon name="delete" size={15} />
                     </button>
@@ -293,7 +301,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                     onClick={() => removeCol(i)}
                     className={`${SELECTION_ICON_BUTTON_DELETE} hidden md:grid`}
                     data-tooltip-ignore
-                    aria-label="删除参数列"
+                    aria-label={t('selectionAdmin.deleteColumnAria')}
                   >
                     <Icon name="delete" size={15} />
                   </button>
@@ -305,19 +313,21 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                       <span className={`rounded-full px-2 py-1 font-bold ${modeTone}`}>{modeLabel}</span>
                       <span>
                         {mode === 'manual'
-                          ? `型号模板中写 [${col.key || '数据字段'}]，会替换为客户填写值。`
+                          ? t('selectionAdmin.modeManualHint', { field: col.key || t('selectionAdmin.colField') })
                           : mode === 'preset'
-                            ? `固定选项供客户选择，型号模板中写 [${col.key || '数据字段'}] 会被替换。`
+                            ? t('selectionAdmin.modePresetHint', { field: col.key || t('selectionAdmin.colField') })
                             : mode === 'displayOnly'
-                              ? '只在结果中展示，不会成为客户选择步骤。'
-                              : '用于生成筛选选项，可配置排序、图片展示和字段完整性；只有一个可选值时前台会自动确认。'}
+                              ? t('selectionAdmin.modeDisplayHint')
+                              : t('selectionAdmin.modeSelectHint')}
                       </span>
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                       {mode === 'preset' && (
                         <>
                           <label className="sm:col-span-2">
-                            <span className="mb-1 block text-[10px] text-on-surface-variant">可选值（逗号分隔）</span>
+                            <span className="mb-1 block text-[10px] text-on-surface-variant">
+                              {t('selectionAdmin.presetOptionsLabel')}
+                            </span>
                             <input
                               name="text"
                               value={(col.presetOptions || []).join(',')}
@@ -328,12 +338,14 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                                   .filter(Boolean);
                                 updateCol(i, 'presetOptions', val.length ? val : undefined);
                               }}
-                              placeholder="如：04,06,08,10,12"
+                              placeholder={t('selectionAdmin.presetPlaceholder')}
                               className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-3 text-xs text-on-surface outline-none focus:border-primary-container"
                             />
                           </label>
                           <label>
-                            <span className="mb-1 block text-[10px] text-on-surface-variant">依赖字段</span>
+                            <span className="mb-1 block text-[10px] text-on-surface-variant">
+                              {t('selectionAdmin.dependsField')}
+                            </span>
                             <select
                               name="depends-on"
                               value={col.dependsOn?.field || ''}
@@ -347,7 +359,7 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                               }}
                               className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container"
                             >
-                              <option value="">无（始终显示）</option>
+                              <option value="">{t('selectionAdmin.noDepend')}</option>
                               {columns.map((c, ci) =>
                                 ci !== i && c.key ? (
                                   <option key={c.key} value={c.key}>
@@ -358,7 +370,9 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                             </select>
                           </label>
                           <label>
-                            <span className="mb-1 block text-[10px] text-on-surface-variant">依赖最小序号</span>
+                            <span className="mb-1 block text-[10px] text-on-surface-variant">
+                              {t('selectionAdmin.dependMinIndex')}
+                            </span>
                             <input
                               name="depends-on"
                               type="number"
@@ -371,14 +385,16 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                                 }
                               }}
                               disabled={!col.dependsOn?.field}
-                              placeholder="如：1 表示依赖字段≥1时显示"
+                              placeholder={t('selectionAdmin.dependMinPlaceholder')}
                               className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-3 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
                             />
                           </label>
                         </>
                       )}
                       <label>
-                        <span className="mb-1 block text-[10px] text-on-surface-variant">填写内容</span>
+                        <span className="mb-1 block text-[10px] text-on-surface-variant">
+                          {t('selectionAdmin.valueType')}
+                        </span>
                         <select
                           name="value-type"
                           disabled={mode !== 'manual'}
@@ -388,57 +404,67 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                           }
                           className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
                         >
-                          <option value="text">任意文字</option>
-                          <option value="number">仅数字（可小数）</option>
+                          <option value="text">{t('selectionAdmin.anyText')}</option>
+                          <option value="number">{t('selectionAdmin.numberOnly')}</option>
                         </select>
                       </label>
                       <label>
-                        <span className="mb-1 block text-[10px] text-on-surface-variant">输入提示</span>
+                        <span className="mb-1 block text-[10px] text-on-surface-variant">
+                          {t('selectionAdmin.placeholderLabel')}
+                        </span>
                         <input
                           name="placeholder"
                           value={col.placeholder || ''}
                           onChange={(e) => updateCol(i, 'placeholder', e.target.value || undefined)}
                           disabled={mode !== 'manual'}
-                          placeholder="如：请输入长度，如 1.5"
+                          placeholder={t('selectionAdmin.placeholderPlaceholder')}
                           className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-3 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
                         />
                       </label>
                       <label>
-                        <span className="mb-1 block text-[10px] text-on-surface-variant">填写后缀</span>
+                        <span className="mb-1 block text-[10px] text-on-surface-variant">
+                          {t('selectionAdmin.suffixLabel')}
+                        </span>
                         <input
                           name="suffix"
                           value={col.suffix || ''}
                           onChange={(e) => updateCol(i, 'suffix', e.target.value || undefined)}
                           disabled={mode !== 'manual'}
-                          placeholder="如：M"
+                          placeholder={t('selectionAdmin.suffixPlaceholder')}
                           className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-3 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
                         />
                       </label>
                       <label>
-                        <span className="mb-1 block text-[10px] text-on-surface-variant">结果里显示</span>
+                        <span className="mb-1 block text-[10px] text-on-surface-variant">
+                          {t('selectionAdmin.showInResults')}
+                        </span>
                         <select
                           name="hide-in-results"
                           value={col.hideInResults ? 'hide' : 'show'}
                           onChange={(e) => updateCol(i, 'hideInResults', e.target.value === 'hide' ? true : undefined)}
                           className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container"
                         >
-                          <option value="show">显示</option>
-                          <option value="hide">隐藏</option>
+                          <option value="show">{t('selectionAdmin.show')}</option>
+                          <option value="hide">{t('selectionAdmin.hideCount')}</option>
                         </select>
                       </label>
                       <label>
-                        <span className="mb-1 block text-[10px] text-on-surface-variant">兼容旧占位符</span>
+                        <span className="mb-1 block text-[10px] text-on-surface-variant">
+                          {t('selectionAdmin.legacyPlaceholder')}
+                        </span>
                         <input
                           name="legacy-placeholder"
                           value={col.legacyPlaceholder || ''}
                           onChange={(e) => updateCol(i, 'legacyPlaceholder', e.target.value || undefined)}
                           disabled={mode !== 'manual'}
-                          placeholder="如：[M]"
+                          placeholder={t('selectionAdmin.legacyPlaceholderExample')}
                           className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-3 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
                         />
                       </label>
                       <label>
-                        <span className="mb-1 block text-[10px] text-on-surface-variant">选项排序</span>
+                        <span className="mb-1 block text-[10px] text-on-surface-variant">
+                          {t('selectionAdmin.sortType')}
+                        </span>
                         <select
                           name="sort-type"
                           disabled={mode !== 'select'}
@@ -452,13 +478,15 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                           }
                           className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
                         >
-                          <option value="default">按文字</option>
-                          <option value="numeric">按数字大小</option>
-                          <option value="thread">按规格大小</option>
+                          <option value="default">{t('selectionAdmin.sortByText')}</option>
+                          <option value="numeric">{t('selectionAdmin.sortByNumber')}</option>
+                          <option value="thread">{t('selectionAdmin.sortBySize')}</option>
                         </select>
                       </label>
                       <label>
-                        <span className="mb-1 block text-[10px] text-on-surface-variant">选项显示</span>
+                        <span className="mb-1 block text-[10px] text-on-surface-variant">
+                          {t('selectionAdmin.optionDisplay')}
+                        </span>
                         <select
                           name="option-display"
                           disabled={mode !== 'select'}
@@ -472,13 +500,15 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                           }
                           className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
                         >
-                          <option value="auto">有图用图</option>
-                          <option value="text">文字按钮</option>
-                          <option value="image">图片卡片</option>
+                          <option value="auto">{t('selectionAdmin.autoImage')}</option>
+                          <option value="text">{t('selectionAdmin.textButtons')}</option>
+                          <option value="image">{t('selectionAdmin.imageCards')}</option>
                         </select>
                       </label>
                       <label>
-                        <span className="mb-1 block text-[10px] text-on-surface-variant">显示产品数</span>
+                        <span className="mb-1 block text-[10px] text-on-surface-variant">
+                          {t('selectionAdmin.showCountLabel')}
+                        </span>
                         <select
                           name="show-count"
                           disabled={mode !== 'select'}
@@ -486,12 +516,14 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                           onChange={(e) => updateCol(i, 'showCount', e.target.value === 'hide' ? false : undefined)}
                           className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
                         >
-                          <option value="show">显示</option>
-                          <option value="hide">不显示</option>
+                          <option value="show">{t('selectionAdmin.show')}</option>
+                          <option value="hide">{t('selectionAdmin.doNotShow')}</option>
                         </select>
                       </label>
                       <label>
-                        <span className="mb-1 block text-[10px] text-on-surface-variant">单一选项</span>
+                        <span className="mb-1 block text-[10px] text-on-surface-variant">
+                          {t('selectionAdmin.singleOption')}
+                        </span>
                         <select
                           name="auto-select-single"
                           disabled={mode !== 'select'}
@@ -499,12 +531,14 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                           onChange={(e) => updateSingleOptionBehavior(i, e.target.value as 'auto' | 'manual')}
                           className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
                         >
-                          <option value="auto">默认自动确认</option>
-                          <option value="manual">让客户手动点</option>
+                          <option value="auto">{t('selectionAdmin.autoConfirm')}</option>
+                          <option value="manual">{t('selectionAdmin.manualConfirm')}</option>
                         </select>
                       </label>
                       <label>
-                        <span className="mb-1 block text-[10px] text-on-surface-variant">字段完整性</span>
+                        <span className="mb-1 block text-[10px] text-on-surface-variant">
+                          {t('selectionAdmin.requiredLabel')}
+                        </span>
                         <select
                           name="required"
                           disabled={mode !== 'select'}
@@ -512,8 +546,8 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                           onChange={(e) => updateEmptyBehavior(i, e.target.value as 'skip' | 'required')}
                           className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
                         >
-                          <option value="skip">可为空，自动跳过</option>
-                          <option value="required">必填，缺失提示</option>
+                          <option value="skip">{t('selectionAdmin.optionalEmpty')}</option>
+                          <option value="required">{t('selectionAdmin.requiredMissing')}</option>
                         </select>
                       </label>
                     </div>

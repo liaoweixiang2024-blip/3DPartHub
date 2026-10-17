@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { modelApi, type ConversionQueueJob, type ConversionQueueState } from '../../api/models';
@@ -38,17 +39,19 @@ function formatLogLine(line: string): string {
 // ── Loading states ─────────────────────────────────────────────────────────
 
 function ConversionQueueListLoadingState({ compact }: { compact: boolean }) {
+  const { t } = useTranslation();
   return (
     <div className={`flex flex-1 ${compact ? 'min-h-[224px]' : 'min-h-[280px]'}`}>
-      <PageRefreshIndicator label="转换队列刷新中" />
+      <PageRefreshIndicator label={t('modelAdminComp.queueRefreshing')} />
     </div>
   );
 }
 
 function ConversionQueueDetailLoadingState() {
+  const { t } = useTranslation();
   return (
     <div className="flex min-h-[220px]">
-      <PageRefreshIndicator label="转换任务详情刷新中" />
+      <PageRefreshIndicator label={t('modelAdminComp.queueDetailRefreshing')} />
     </div>
   );
 }
@@ -75,6 +78,7 @@ export default function ConversionQueuePanel({
   embedded?: boolean;
 }) {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [queueAction, setQueueAction] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<
     'retry' | 'cancel-rebuilds' | 'clean-completed' | 'clean-failed' | null
@@ -101,8 +105,10 @@ export default function ConversionQueuePanel({
   const completedQueueCount = queueCounts?.completed || 0;
   const selectedQueueLabel =
     selectedQueueState === 'all'
-      ? '最近任务'
-      : `${QUEUE_STATUS_CARDS.find((item) => item.key === selectedQueueState)?.label || getQueueStateLabel(selectedQueueState)}任务`;
+      ? t('modelAdminComp.recentTasks')
+      : `${t(
+          QUEUE_STATUS_CARDS.find((item) => item.key === selectedQueueState)?.label || 'modelAdminComp.queueUnknown',
+        )}${t('modelAdminComp.tasksSuffix')}`;
   const [queueNow, setQueueNow] = useState(() => Date.now());
   const queueGeneratedAt = data?.generated_at ? Date.parse(data.generated_at) : queueNow;
 
@@ -141,12 +147,13 @@ export default function ConversionQueuePanel({
     try {
       const result = await modelApi.retryFailedConversionJobs({ limit: 25 });
       toast(
-        `已重试 ${result.retried || 0} 个失败任务${result.skipped ? `，跳过 ${result.skipped} 个` : ''}`,
+        t('modelAdminComp.retriedToast', { count: result.retried || 0 }) +
+          (result.skipped ? t('modelAdminComp.skippedPart', { count: result.skipped }) : ''),
         result.failed ? 'error' : 'success',
       );
       mutate();
     } catch {
-      toast('重试失败任务失败', 'error');
+      toast(t('modelAdminComp.retryFailToast'), 'error');
     } finally {
       setQueueAction(null);
     }
@@ -163,11 +170,14 @@ export default function ConversionQueuePanel({
     setQueueAction('cancel-rebuilds');
     try {
       const result = await modelApi.cancelPreviewRebuildJobs({ limit: 10000 });
-      const activeText = result.active ? `，${result.active} 个正在处理会自然完成` : '';
-      toast(`已取消 ${result.cancelled || 0} 个重建任务${activeText}`, result.failed ? 'error' : 'success');
+      const activeText = result.active ? t('modelAdminComp.cancelActivePart', { count: result.active }) : '';
+      toast(
+        t('modelAdminComp.cancelledToast', { count: result.cancelled || 0 }) + activeText,
+        result.failed ? 'error' : 'success',
+      );
       mutate();
     } catch {
-      toast('取消预览重建任务失败', 'error');
+      toast(t('modelAdminComp.cancelRebuildsFail'), 'error');
     } finally {
       setQueueAction(null);
     }
@@ -183,14 +193,14 @@ export default function ConversionQueuePanel({
     const count = type === 'completed' ? completedQueueCount : failedCount;
     if (count <= 0) return;
     setConfirmAction(null);
-    const label = type === 'completed' ? '已完成' : '失败';
+    const label = type === 'completed' ? t('modelAdminComp.cleanLabelCompleted') : t('modelAdminComp.cleanLabelFailed');
     setQueueAction(`clean-${type}`);
     try {
       const result = await modelApi.cleanConversionQueue({ type, limit: 100, graceMs: 0 });
-      toast(`已清理 ${result.cleaned || 0} 条${label}任务记录`, 'success');
+      toast(t('modelAdminComp.cleanedToast', { count: result.cleaned || 0, label }), 'success');
       mutate();
     } catch {
-      toast('清理转换队列失败', 'error');
+      toast(t('modelAdminComp.cleanQueueFail'), 'error');
     } finally {
       setQueueAction(null);
     }
@@ -199,34 +209,33 @@ export default function ConversionQueuePanel({
   const confirmDialogCopy = (() => {
     if (confirmAction === 'retry') {
       return {
-        title: '确认重试失败任务',
-        description: `将重试最多 ${Math.min(failedCount, 25)} 个失败的转换任务，并把关联模型重新标记为排队中。`,
-        confirmLabel: '确认重试',
+        title: t('modelAdminComp.confirmRetryTitle'),
+        description: t('modelAdminComp.confirmRetryDesc', { count: Math.min(failedCount, 25) }),
+        confirmLabel: t('modelAdminComp.confirmRetryLabel'),
         onConfirm: () => void confirmRetryFailed(),
       };
     }
     if (confirmAction === 'cancel-rebuilds') {
       return {
-        title: '确认停止重建',
-        description:
-          '将取消等待中/延迟中的预览重建任务。正在处理的当前模型不会强制中断，会完成后停止继续执行后续重建。',
-        confirmLabel: '停止重建',
+        title: t('modelAdminComp.confirmStopTitle'),
+        description: t('modelAdminComp.confirmStopDesc'),
+        confirmLabel: t('modelAdminComp.stopRebuildLabel'),
         onConfirm: () => void confirmCancelPreviewRebuilds(),
       };
     }
     if (confirmAction === 'clean-completed') {
       return {
-        title: '确认清理完成任务',
-        description: '将清理最多 100 条已完成转换任务记录。只删除队列记录，不会删除模型文件。',
-        confirmLabel: '确认清理',
+        title: t('modelAdminComp.confirmCleanCompletedTitle'),
+        description: t('modelAdminComp.confirmCleanDesc', { label: t('modelAdminComp.cleanLabelCompleted') }),
+        confirmLabel: t('modelAdminComp.confirmCleanLabel'),
         onConfirm: () => void confirmCleanQueue('completed'),
       };
     }
     if (confirmAction === 'clean-failed') {
       return {
-        title: '确认清理失败任务',
-        description: '将清理最多 100 条失败转换任务记录。只删除队列记录，不会删除模型文件。',
-        confirmLabel: '确认清理',
+        title: t('modelAdminComp.confirmCleanFailedTitle'),
+        description: t('modelAdminComp.confirmCleanDesc', { label: t('modelAdminComp.cleanLabelFailed') }),
+        confirmLabel: t('modelAdminComp.confirmCleanLabel'),
         onConfirm: () => void confirmCleanQueue('failed'),
       };
     }
@@ -244,17 +253,21 @@ export default function ConversionQueuePanel({
             <QueueStateBadge state={job.state} />
             {job.is_stale && (
               <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-sm border border-error/20 bg-error/10 px-1.5 py-0.5 text-[10px] font-medium text-error">
-                可能卡住
+                {t('modelAdminComp.staleBadge')}
               </span>
             )}
           </div>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-on-surface-variant">
             <span className="font-mono">#{job.id}</span>
             {job.ext && <span>{job.ext.toUpperCase()}</span>}
-            {job.rebuild_reason && <span>重建 {job.rebuild_reason}</span>}
+            {job.rebuild_reason && <span>{t('modelAdminComp.rebuildPrefix', { reason: job.rebuild_reason })}</span>}
             <span>{formatQueueTime(job.processed_on || job.timestamp)}</span>
-            {job.state === 'active' && <span>已处理 {formatQueueDuration(getLiveActiveMs(job))}</span>}
-            {job.state === 'active' && <span>估算 {Math.round(getVisualProgress(job))}%</span>}
+            {job.state === 'active' && (
+              <span>{t('modelAdminComp.processedFor', { duration: formatQueueDuration(getLiveActiveMs(job)) })}</span>
+            )}
+            {job.state === 'active' && (
+              <span>{t('modelAdminComp.estimatePercent', { value: Math.round(getVisualProgress(job)) })}</span>
+            )}
           </div>
           {(job.state === 'active' || job.state === 'waiting' || job.state === 'delayed') && (
             <div className="mt-2 h-1.5 overflow-hidden rounded-sm bg-surface-container-highest">
@@ -273,7 +286,7 @@ export default function ConversionQueuePanel({
             onClick={() => setDetailJobId(job.id)}
             className="inline-flex items-center justify-center rounded-sm border border-outline-variant/20 px-2 py-1 text-[10px] text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
           >
-            详情
+            {t('modelAdminComp.detail')}
           </button>
           {job.model_id && (
             <Link
@@ -318,16 +331,16 @@ export default function ConversionQueuePanel({
           <div className="min-w-0 shrink-0">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Icon name="hourglass_top" size={17} className="text-primary" />
-              <h3 className="shrink-0 text-sm font-semibold text-on-surface">转换队列</h3>
+              <h3 className="shrink-0 text-sm font-semibold text-on-surface">{t('modelAdminComp.queueTitle')}</h3>
               <span
                 className={`inline-flex max-w-full shrink-0 whitespace-nowrap rounded-sm px-1.5 py-0.5 text-[10px] leading-none ${running > 0 ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}
               >
-                {running > 0 ? `${formatCount(running)} 个待完成` : '空闲'}
+                {running > 0
+                  ? t('modelAdminComp.pendingCount', { count: formatCount(running) })
+                  : t('modelAdminComp.idle')}
               </span>
             </div>
-            {!embedded && (
-              <p className="mt-1 text-xs text-on-surface-variant">实时查看上传、重建和缩略图生成任务状态。</p>
-            )}
+            {!embedded && <p className="mt-1 text-xs text-on-surface-variant">{t('modelAdminComp.queueSubtitle')}</p>}
           </div>
           <div className={previewOpsActionRowClass(compact)}>
             <button
@@ -336,7 +349,7 @@ export default function ConversionQueuePanel({
               className={`${previewOpsButtonClass(compact)} border border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface`}
             >
               <Icon name="refresh" size={15} className={isLoading ? 'animate-spin' : ''} />
-              <span>刷新</span>
+              <span>{t('modelAdminComp.refresh')}</span>
             </button>
             <button
               onClick={handleRetryFailed}
@@ -344,7 +357,7 @@ export default function ConversionQueuePanel({
               className={`${previewOpsButtonClass(compact)} border border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface`}
             >
               <Icon name="replay" size={14} className={queueAction === 'retry' ? 'animate-spin' : ''} />
-              <span>重试</span>
+              <span>{t('modelAdminComp.retry')}</span>
             </button>
             <button
               onClick={handleCancelPreviewRebuilds}
@@ -352,7 +365,7 @@ export default function ConversionQueuePanel({
               className={`${previewOpsButtonClass(compact)} border border-error/20 text-error hover:bg-error/10`}
             >
               <Icon name="close" size={14} className={queueAction === 'cancel-rebuilds' ? 'animate-spin' : ''} />
-              <span>停止重建</span>
+              <span>{t('modelAdminComp.stopRebuildLabel')}</span>
             </button>
             <button
               onClick={() => handleCleanQueue('completed')}
@@ -364,7 +377,7 @@ export default function ConversionQueuePanel({
                 size={14}
                 className={queueAction === 'clean-completed' ? 'animate-spin' : ''}
               />
-              清理完成
+              {t('modelAdminComp.cleanCompleted')}
             </button>
             <button
               onClick={() => handleCleanQueue('failed')}
@@ -372,7 +385,7 @@ export default function ConversionQueuePanel({
               className={`${previewOpsButtonClass(compact)} border border-outline-variant/20 text-on-surface-variant hover:bg-error/10 hover:text-error`}
             >
               <Icon name="delete_sweep" size={14} className={queueAction === 'clean-failed' ? 'animate-spin' : ''} />
-              清理失败
+              {t('modelAdminComp.cleanFailed')}
             </button>
           </div>
         </div>
@@ -388,7 +401,7 @@ export default function ConversionQueuePanel({
                   onClick={() => setSelectedQueueState((current) => (current === item.key ? 'all' : item.key))}
                   className={previewOpsFilterButtonClass(compact, active)}
                 >
-                  <span>{item.label}</span>
+                  <span>{t(item.label)}</span>
                   <span className="font-mono font-semibold">{formatCount(data?.counts[item.key])}</span>
                 </button>
               );
@@ -406,7 +419,7 @@ export default function ConversionQueuePanel({
                   className={`min-h-[68px] rounded-sm border px-3 py-2 text-left transition ${active ? 'border-primary bg-primary-container/20 text-primary ring-1 ring-primary/30' : getQueueStateTone(item.key)} hover:-translate-y-0.5 hover:shadow-sm`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-medium">{item.label}</span>
+                    <span className="text-[11px] font-medium">{t(item.label)}</span>
                     <Icon name={item.icon} size={16} className="shrink-0 opacity-80" />
                   </div>
                   <span className="mt-1 block font-mono text-lg font-semibold">
@@ -414,10 +427,10 @@ export default function ConversionQueuePanel({
                   </span>
                   <span className="mt-0.5 block text-[10px] opacity-75">
                     {item.key === 'completed'
-                      ? `保留 ${formatCount(queueCounts?.completed)}`
+                      ? t('modelAdminComp.retainedCount', { count: formatCount(queueCounts?.completed) })
                       : active
-                        ? '正在筛选'
-                        : '点击筛选'}
+                        ? t('modelAdminComp.filtering')
+                        : t('modelAdminComp.clickToFilter')}
                   </span>
                 </button>
               );
@@ -430,7 +443,10 @@ export default function ConversionQueuePanel({
             <span className="text-[11px] font-medium text-on-surface-variant">{selectedQueueLabel}</span>
             <div className="flex items-center gap-2 text-[10px] text-on-surface-variant">
               <span>
-                显示 {visibleQueueItems.length} / {queueDisplayTotal} 条
+                {t('modelAdminComp.showingCount', {
+                  shown: visibleQueueItems.length,
+                  total: queueDisplayTotal,
+                })}
               </span>
               {data?.generated_at && (
                 <span>
@@ -451,7 +467,7 @@ export default function ConversionQueuePanel({
             <div
               className={`flex flex-1 items-center justify-center rounded-sm border border-outline-variant/10 bg-surface-container-lowest px-3 py-4 text-center text-xs text-on-surface-variant ${compact ? 'min-h-[224px]' : 'min-h-[280px]'}`}
             >
-              暂无转换任务
+              {t('modelAdminComp.noTasks')}
             </div>
           )}
         </div>
@@ -463,7 +479,7 @@ export default function ConversionQueuePanel({
         icon={confirmAction === 'retry' ? 'replay' : confirmAction === 'cancel-rebuilds' ? 'close' : 'delete_sweep'}
         title={confirmDialogCopy?.title || ''}
         description={confirmDialogCopy?.description || ''}
-        confirmLabel={confirmDialogCopy?.confirmLabel || '确认'}
+        confirmLabel={confirmDialogCopy?.confirmLabel || t('common.confirm')}
         confirmDisabled={Boolean(queueAction)}
       />
       {detailJobId && (
@@ -477,7 +493,7 @@ export default function ConversionQueuePanel({
           >
             <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 px-5 py-4">
               <div className="min-w-0">
-                <h3 className="text-base font-semibold text-on-surface">转换任务详情</h3>
+                <h3 className="text-base font-semibold text-on-surface">{t('modelAdminComp.taskDetailTitle')}</h3>
                 <p className="mt-1 truncate text-xs text-on-surface-variant">{detailJobId}</p>
               </div>
               <button
@@ -494,13 +510,17 @@ export default function ConversionQueuePanel({
                 <div className="space-y-4">
                   <div className="grid gap-2 text-xs sm:grid-cols-2">
                     <div className="rounded-sm bg-surface-container-lowest p-3">
-                      <span className="block text-[10px] text-on-surface-variant">状态</span>
+                      <span className="block text-[10px] text-on-surface-variant">
+                        {t('modelAdminComp.statusLabel')}
+                      </span>
                       <span className="mt-1 inline-flex">
                         <QueueStateBadge state={detail.state} />
                       </span>
                     </div>
                     <div className="rounded-sm bg-surface-container-lowest p-3">
-                      <span className="block text-[10px] text-on-surface-variant">进度 / 尝试次数</span>
+                      <span className="block text-[10px] text-on-surface-variant">
+                        {t('modelAdminComp.progressAttempts')}
+                      </span>
                       <span className="mt-1 block font-mono text-on-surface">
                         {detail.progress}% / {detail.attempts_made}
                       </span>
@@ -512,25 +532,31 @@ export default function ConversionQueuePanel({
                               : 'mt-1 block text-[10px] text-on-surface-variant'
                           }
                         >
-                          已处理 {formatQueueDuration(detail.active_ms)}
-                          {detail.is_stale ? '，可能卡住' : ''}
+                          {t('modelAdminComp.processedFor', { duration: formatQueueDuration(detail.active_ms) })}
+                          {detail.is_stale ? t('modelAdminComp.maybeStuckSuffix') : ''}
                         </span>
                       )}
                     </div>
                     <div className="rounded-sm bg-surface-container-lowest p-3">
-                      <span className="block text-[10px] text-on-surface-variant">模型</span>
+                      <span className="block text-[10px] text-on-surface-variant">
+                        {t('modelAdminComp.modelLabel')}
+                      </span>
                       <span className="mt-1 block truncate text-on-surface">
                         {detail.model?.name || detail.data?.original_name || detail.model_id || '-'}
                       </span>
                     </div>
                     <div className="rounded-sm bg-surface-container-lowest p-3">
-                      <span className="block text-[10px] text-on-surface-variant">格式 / 重建原因</span>
+                      <span className="block text-[10px] text-on-surface-variant">
+                        {t('modelAdminComp.formatRebuildReason')}
+                      </span>
                       <span className="mt-1 block font-mono text-on-surface">
                         {detail.data?.ext?.toUpperCase() || '-'} / {detail.data?.rebuild_reason || '-'}
                       </span>
                     </div>
                     <div className="rounded-sm bg-surface-container-lowest p-3 sm:col-span-2">
-                      <span className="block text-[10px] text-on-surface-variant">源文件</span>
+                      <span className="block text-[10px] text-on-surface-variant">
+                        {t('modelAdminComp.sourceFile')}
+                      </span>
                       <span className="mt-1 block break-all font-mono text-on-surface">
                         {detail.data?.source_path || detail.data?.source_name || '-'}
                       </span>
@@ -538,24 +564,26 @@ export default function ConversionQueuePanel({
                         className={`mt-1 inline-block rounded-sm px-1.5 py-0.5 text-[10px] ${detail.data?.source_exists === false ? 'bg-error/10 text-error' : 'bg-primary/10 text-primary'}`}
                       >
                         {detail.data?.source_exists === null || detail.data?.source_exists === undefined
-                          ? '未知'
+                          ? t('modelAdminComp.queueUnknown')
                           : detail.data.source_exists
-                            ? '文件存在'
-                            : '文件不存在'}
+                            ? t('modelAdminComp.fileExists')
+                            : t('modelAdminComp.fileMissing')}
                       </span>
                     </div>
                   </div>
 
                   {detail.failed_reason && (
                     <div className="rounded-sm border border-error/20 bg-error/10 p-3">
-                      <div className="mb-1 text-[11px] font-medium text-error">失败原因</div>
+                      <div className="mb-1 text-[11px] font-medium text-error">{t('modelAdminComp.failReason')}</div>
                       <p className="break-words text-xs text-error">{formatQueueFailureReason(detail.failed_reason)}</p>
                     </div>
                   )}
 
                   <div className="rounded-sm border border-outline-variant/10 bg-surface-container-lowest p-3">
                     <div className="mb-2 flex items-center justify-between">
-                      <span className="text-[11px] font-medium text-on-surface-variant">任务日志</span>
+                      <span className="text-[11px] font-medium text-on-surface-variant">
+                        {t('modelAdminComp.jobLogs')}
+                      </span>
                       <span className="font-mono text-[10px] text-on-surface-variant">
                         {(detail.logs || []).length} / {detail.log_count || 0}
                       </span>
@@ -566,14 +594,16 @@ export default function ConversionQueuePanel({
                       </pre>
                     ) : (
                       <div className="rounded-sm bg-surface-container-high px-3 py-4 text-center text-xs text-on-surface-variant">
-                        暂无日志
+                        {t('modelAdminComp.noLogs')}
                       </div>
                     )}
                   </div>
 
                   {(detail.stacktrace || []).length > 0 && (
                     <div className="rounded-sm border border-outline-variant/10 bg-surface-container-lowest p-3">
-                      <div className="mb-2 text-[11px] font-medium text-on-surface-variant">错误栈</div>
+                      <div className="mb-2 text-[11px] font-medium text-on-surface-variant">
+                        {t('modelAdminComp.stacktrace')}
+                      </div>
                       <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-surface-container-high p-3 text-[11px] leading-relaxed text-error">
                         {(detail.stacktrace || []).join('\n')}
                       </pre>
@@ -589,20 +619,20 @@ export default function ConversionQueuePanel({
                         className="inline-flex items-center gap-1.5 rounded-sm border border-outline-variant/20 px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-primary"
                       >
                         <Icon name="open_in_new" size={14} />
-                        打开模型
+                        {t('modelAdminComp.openModel')}
                       </Link>
                     )}
                     <button
                       onClick={() => setDetailJobId(null)}
                       className="rounded-sm bg-primary-container px-3 py-1.5 text-xs font-medium text-on-primary hover:bg-primary"
                     >
-                      关闭
+                      {t('common.close')}
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="rounded-sm bg-surface-container-high px-3 py-8 text-center text-xs text-on-surface-variant">
-                  任务详情加载失败
+                  {t('modelAdminComp.detailLoadFail')}
                 </div>
               )}
             </div>

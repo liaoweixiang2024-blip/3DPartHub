@@ -33,6 +33,8 @@ import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { copyText } from '../lib/clipboard';
 import { getErrorMessage } from '../lib/errorNotifications';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 type AuditDetails = {
   body?: Record<string, unknown>;
@@ -84,99 +86,99 @@ type AuditRetentionCleanupResult = {
 const AUDIT_PAGE_SIZE = 30;
 const DEFAULT_AUDIT_RETENTION_DAYS = 365;
 const RETENTION_OPTIONS = [
-  { value: 0, label: '永久保留', description: '不自动清理历史日志' },
-  { value: 90, label: '保留 90 天', description: '适合日志增长较快的场景' },
-  { value: 180, label: '保留 180 天', description: '兼顾追溯和存储占用' },
-  { value: 365, label: '保留 365 天', description: '默认推荐，便于年度追溯' },
+  { value: 0, labelKey: 'auditLog.retention.forever.label', descriptionKey: 'auditLog.retention.forever.description' },
+  { value: 90, labelKey: 'auditLog.retention.90.label', descriptionKey: 'auditLog.retention.90.description' },
+  { value: 180, labelKey: 'auditLog.retention.180.label', descriptionKey: 'auditLog.retention.180.description' },
+  { value: 365, labelKey: 'auditLog.retention.365.label', descriptionKey: 'auditLog.retention.365.description' },
 ];
 
-const ACTION_MAP: Record<string, { label: string; color: string }> = {
-  create: { label: '创建', color: 'text-green-500 bg-green-500/10' },
-  upload: { label: '上传', color: 'text-green-500 bg-green-500/10' },
-  update: { label: '更新', color: 'text-blue-500 bg-blue-500/10' },
-  delete: { label: '删除', color: 'text-red-500 bg-red-500/10' },
-  login: { label: '登录', color: 'text-amber-500 bg-amber-500/10' },
-  download: { label: '下载', color: 'text-purple-500 bg-purple-500/10' },
-  register: { label: '注册', color: 'text-teal-500 bg-teal-500/10' },
-  settings_update: { label: '设置', color: 'text-cyan-500 bg-cyan-500/10' },
-  favorite: { label: '收藏', color: 'text-pink-500 bg-pink-500/10' },
-  unfavorite: { label: '取消收藏', color: 'text-on-surface-variant bg-surface-container-highest' },
-  comment: { label: '评论', color: 'text-indigo-500 bg-indigo-500/10' },
-  ticket_create: { label: '创建工单', color: 'text-primary-container bg-primary-container/10' },
-  ticket_reply: { label: '回复工单', color: 'text-blue-500 bg-blue-500/10' },
-  ticket_status: { label: '工单状态', color: 'text-amber-500 bg-amber-500/10' },
-  backup_create: { label: '创建备份', color: 'text-cyan-500 bg-cyan-500/10' },
-  backup_policy_check: { label: '备份体检', color: 'text-orange-500 bg-orange-500/10' },
-  backup_verify: { label: '备份校验', color: 'text-teal-500 bg-teal-500/10' },
-  backup_restore_result: { label: '恢复结果', color: 'text-amber-500 bg-amber-500/10' },
-  backup_restore: { label: '恢复备份', color: 'text-amber-500 bg-amber-500/10' },
-  backup_import_restore: { label: '导入恢复', color: 'text-amber-500 bg-amber-500/10' },
-  backup_import_save: { label: '导入保存', color: 'text-cyan-500 bg-cyan-500/10' },
-  backup_delete: { label: '删除备份', color: 'text-red-500 bg-red-500/10' },
-  backup_download: { label: '下载备份', color: 'text-purple-500 bg-purple-500/10' },
-  backup_rename: { label: '重命名备份', color: 'text-blue-500 bg-blue-500/10' },
-  system_update: { label: '系统更新', color: 'text-cyan-500 bg-cyan-500/10' },
-  audit_cleanup: { label: '清理日志', color: 'text-amber-500 bg-amber-500/10' },
+const ACTION_COLORS: Record<string, string> = {
+  create: 'text-green-500 bg-green-500/10',
+  upload: 'text-green-500 bg-green-500/10',
+  update: 'text-blue-500 bg-blue-500/10',
+  delete: 'text-red-500 bg-red-500/10',
+  login: 'text-amber-500 bg-amber-500/10',
+  download: 'text-purple-500 bg-purple-500/10',
+  register: 'text-teal-500 bg-teal-500/10',
+  settings_update: 'text-cyan-500 bg-cyan-500/10',
+  favorite: 'text-pink-500 bg-pink-500/10',
+  unfavorite: 'text-on-surface-variant bg-surface-container-highest',
+  comment: 'text-indigo-500 bg-indigo-500/10',
+  ticket_create: 'text-primary-container bg-primary-container/10',
+  ticket_reply: 'text-blue-500 bg-blue-500/10',
+  ticket_status: 'text-amber-500 bg-amber-500/10',
+  backup_create: 'text-cyan-500 bg-cyan-500/10',
+  backup_policy_check: 'text-orange-500 bg-orange-500/10',
+  backup_verify: 'text-teal-500 bg-teal-500/10',
+  backup_restore_result: 'text-amber-500 bg-amber-500/10',
+  backup_restore: 'text-amber-500 bg-amber-500/10',
+  backup_import_restore: 'text-amber-500 bg-amber-500/10',
+  backup_import_save: 'text-cyan-500 bg-cyan-500/10',
+  backup_delete: 'text-red-500 bg-red-500/10',
+  backup_download: 'text-purple-500 bg-purple-500/10',
+  backup_rename: 'text-blue-500 bg-blue-500/10',
+  system_update: 'text-cyan-500 bg-cyan-500/10',
+  audit_cleanup: 'text-amber-500 bg-amber-500/10',
 };
 
-const RESOURCE_MAP: Record<string, string> = {
-  model: '模型',
-  user: '用户',
-  settings: '系统设置',
-  category: '分类',
-  comment: '评论',
-  auth: '认证',
-  ticket: '工单',
-  favorite: '收藏',
-  download: '下载',
-  share: '分享',
-  backup: '备份',
-  audit: '审计',
-  project: '项目',
-  other: '其他',
+const RESOURCE_KEYS: Record<string, string> = {
+  model: 'auditLog.resource.model',
+  user: 'auditLog.resource.user',
+  settings: 'auditLog.resource.settings',
+  category: 'auditLog.resource.category',
+  comment: 'auditLog.resource.comment',
+  auth: 'auditLog.resource.auth',
+  ticket: 'auditLog.resource.ticket',
+  favorite: 'auditLog.resource.favorite',
+  download: 'auditLog.resource.download',
+  share: 'auditLog.resource.share',
+  backup: 'auditLog.resource.backup',
+  audit: 'auditLog.resource.audit',
+  project: 'auditLog.resource.project',
+  other: 'auditLog.resource.other',
 };
 
-const ACTION_TABS: Array<{ value: AuditActionTabValue; label: string; icon: string }> = [
-  { value: 'all', label: '全部', icon: 'format_list_bulleted' },
-  { value: 'create', label: '创建', icon: 'add_circle' },
-  { value: 'update', label: '更新', icon: 'edit' },
-  { value: 'delete', label: '删除', icon: 'delete' },
-  { value: 'login', label: '登录', icon: 'login' },
-  { value: 'download', label: '下载', icon: 'download' },
-  { value: 'ticket', label: '工单', icon: 'build' },
-  { value: 'settings', label: '设置', icon: 'settings' },
+const ACTION_TABS: Array<{ value: AuditActionTabValue; labelKey: string; icon: string }> = [
+  { value: 'all', labelKey: 'auditLog.tab.all', icon: 'format_list_bulleted' },
+  { value: 'create', labelKey: 'auditLog.tab.create', icon: 'add_circle' },
+  { value: 'update', labelKey: 'auditLog.tab.update', icon: 'edit' },
+  { value: 'delete', labelKey: 'auditLog.tab.delete', icon: 'delete' },
+  { value: 'login', labelKey: 'auditLog.tab.login', icon: 'login' },
+  { value: 'download', labelKey: 'auditLog.tab.download', icon: 'download' },
+  { value: 'ticket', labelKey: 'auditLog.tab.ticket', icon: 'build' },
+  { value: 'settings', labelKey: 'auditLog.tab.settings', icon: 'settings' },
 ];
 
-const RESOURCE_FILTERS: Array<{ value: string; label: string; icon: string }> = [
-  { value: '', label: '全部资源', icon: 'apps' },
-  { value: 'model', label: '模型', icon: 'view_in_ar' },
-  { value: 'user', label: '用户', icon: 'person' },
-  { value: 'category', label: '分类', icon: 'folder' },
-  { value: 'auth', label: '认证', icon: 'login' },
-  { value: 'ticket', label: '工单', icon: 'build' },
-  { value: 'favorite', label: '收藏', icon: 'star' },
-  { value: 'download', label: '下载', icon: 'download' },
-  { value: 'share', label: '分享', icon: 'share' },
-  { value: 'settings', label: '设置', icon: 'settings' },
-  { value: 'backup', label: '备份', icon: 'database' },
-  { value: 'audit', label: '审计', icon: 'policy' },
+const RESOURCE_FILTERS: Array<{ value: string; labelKey: string; icon: string }> = [
+  { value: '', labelKey: 'auditLog.filter.all', icon: 'apps' },
+  { value: 'model', labelKey: 'auditLog.resource.model', icon: 'view_in_ar' },
+  { value: 'user', labelKey: 'auditLog.resource.user', icon: 'person' },
+  { value: 'category', labelKey: 'auditLog.resource.category', icon: 'folder' },
+  { value: 'auth', labelKey: 'auditLog.resource.auth', icon: 'login' },
+  { value: 'ticket', labelKey: 'auditLog.resource.ticket', icon: 'build' },
+  { value: 'favorite', labelKey: 'auditLog.resource.favorite', icon: 'star' },
+  { value: 'download', labelKey: 'auditLog.resource.download', icon: 'download' },
+  { value: 'share', labelKey: 'auditLog.resource.share', icon: 'share' },
+  { value: 'settings', labelKey: 'auditLog.filter.settings', icon: 'settings' },
+  { value: 'backup', labelKey: 'auditLog.resource.backup', icon: 'database' },
+  { value: 'audit', labelKey: 'auditLog.resource.audit', icon: 'policy' },
 ];
 
 const BODY_LABELS: Record<string, string> = {
-  name: '名称',
-  title: '标题',
-  status: '状态',
-  classification: '分类',
-  description: '描述',
-  role: '角色',
-  email: '邮箱',
-  username: '用户',
-  format: '格式',
-  content: '内容',
-  retentionDays: '保留天数',
-  cutoffAt: '清理边界',
-  deleted: '清理数量',
-  source: '来源',
+  name: 'auditLog.body.name',
+  title: 'auditLog.body.title',
+  status: 'auditLog.body.status',
+  classification: 'auditLog.body.classification',
+  description: 'auditLog.body.description',
+  role: 'auditLog.body.role',
+  email: 'auditLog.body.email',
+  username: 'auditLog.body.username',
+  format: 'auditLog.body.format',
+  content: 'auditLog.body.content',
+  retentionDays: 'auditLog.body.retentionDays',
+  cutoffAt: 'auditLog.body.cutoffAt',
+  deleted: 'auditLog.body.deleted',
+  source: 'auditLog.body.source',
 };
 
 function formatDateTime(value: string) {
@@ -189,12 +191,12 @@ function formatExportTimestamp() {
   return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }
 
-function actionInfo(action: string) {
-  return ACTION_MAP[action] || { label: action, color: 'text-on-surface-variant bg-surface-container-highest' };
+function actionColor(action: string) {
+  return ACTION_COLORS[action] || 'text-on-surface-variant bg-surface-container-highest';
 }
 
-function resourceLabel(resource: string) {
-  return RESOURCE_MAP[resource] || resource;
+function resourceLabel(resource: string, t: TFunction) {
+  return t(RESOURCE_KEYS[resource] || '', { defaultValue: resource });
 }
 
 function valueToText(value: unknown) {
@@ -208,33 +210,35 @@ function valueToText(value: unknown) {
   }
 }
 
-function getLogDetails(log: AuditEntry) {
+function getLogDetails(log: AuditEntry, t: TFunction) {
   const detailLines: { label: string; value: string }[] = [];
-  if (log.resourceId) detailLines.push({ label: '资源ID', value: log.resourceId });
+  if (log.resourceId) detailLines.push({ label: t('auditLog.detail.resourceId'), value: log.resourceId });
   if (log.details?.body) {
     for (const [key, rawValue] of Object.entries(log.details.body)) {
       const value = valueToText(rawValue);
       if (!value) continue;
-      detailLines.push({ label: BODY_LABELS[key] || key, value: value.slice(0, 160) });
+      detailLines.push({ label: t(BODY_LABELS[key] || '', { defaultValue: key }), value: value.slice(0, 160) });
     }
   }
-  if (log.details?.method) detailLines.push({ label: '方法', value: log.details.method });
-  if (log.details?.path) detailLines.push({ label: '路径', value: log.details.path });
-  if (log.details?.statusCode) detailLines.push({ label: '状态码', value: String(log.details.statusCode) });
-  if (log.details?.status) detailLines.push({ label: '结果', value: log.details.status });
-  if (log.details?.riskLevel) detailLines.push({ label: '风险等级', value: log.details.riskLevel });
-  if (log.details?.scopeLabel) detailLines.push({ label: '范围', value: log.details.scopeLabel });
-  if (log.details?.fileSizeText) detailLines.push({ label: '文件大小', value: log.details.fileSizeText });
+  if (log.details?.method) detailLines.push({ label: t('auditLog.detail.method'), value: log.details.method });
+  if (log.details?.path) detailLines.push({ label: t('auditLog.detail.path'), value: log.details.path });
+  if (log.details?.statusCode)
+    detailLines.push({ label: t('auditLog.detail.statusCode'), value: String(log.details.statusCode) });
+  if (log.details?.status) detailLines.push({ label: t('auditLog.detail.result'), value: log.details.status });
+  if (log.details?.riskLevel) detailLines.push({ label: t('auditLog.detail.riskLevel'), value: log.details.riskLevel });
+  if (log.details?.scopeLabel) detailLines.push({ label: t('auditLog.detail.scope'), value: log.details.scopeLabel });
+  if (log.details?.fileSizeText)
+    detailLines.push({ label: t('auditLog.detail.fileSize'), value: log.details.fileSizeText });
   if (typeof log.details?.modelCount === 'number')
-    detailLines.push({ label: '模型数', value: String(log.details.modelCount) });
+    detailLines.push({ label: t('auditLog.detail.modelCount'), value: String(log.details.modelCount) });
   if (typeof log.details?.thumbnailCount === 'number') {
-    detailLines.push({ label: '预览图', value: String(log.details.thumbnailCount) });
+    detailLines.push({ label: t('auditLog.detail.thumbnailCount'), value: String(log.details.thumbnailCount) });
   }
-  if (log.details?.jobId) detailLines.push({ label: '任务ID', value: log.details.jobId });
+  if (log.details?.jobId) detailLines.push({ label: t('auditLog.detail.jobId'), value: log.details.jobId });
   return detailLines;
 }
 
-function getLogSummary(log: AuditEntry) {
+function getLogSummary(log: AuditEntry, t: TFunction) {
   const body = log.details?.body;
   const primary = valueToText(body?.title || body?.name || body?.description || body?.status || body?.classification);
   if (primary) return primary;
@@ -243,7 +247,7 @@ function getLogSummary(log: AuditEntry) {
   if (log.details?.error) return log.details.error;
   if (log.details?.path) return log.details.path;
   if (log.resourceId) return log.resourceId;
-  return '无附加详情';
+  return t('auditLog.noDetails');
 }
 
 async function fetchAuditLogs({
@@ -312,6 +316,7 @@ function LogSelectBox({
   checked: boolean;
   onToggle: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
@@ -321,7 +326,7 @@ function LogSelectBox({
           ? 'border-primary-container bg-primary-container text-on-primary'
           : 'border-outline-variant/35 text-transparent hover:border-primary-container/50'
       }`}
-      aria-label={checked ? '取消选择日志' : '选择日志'}
+      aria-label={checked ? t('auditLog.deselectLog') : t('auditLog.selectLog')}
     >
       <Icon name="check" size={13} />
     </button>
@@ -341,12 +346,14 @@ function LogRow({
   selected: boolean;
   onToggleSelect: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const act = actionInfo(log.action);
-  const resLabel = resourceLabel(log.resource);
-  const detailLines = getLogDetails(log);
-  const summary = getLogSummary(log);
-  const actor = log.username || (log.userId ? `${log.userId.slice(0, 8)}...` : '系统');
+  const actColor = actionColor(log.action);
+  const actLabel = t(`auditLog.action.${log.action}`, { defaultValue: log.action });
+  const resLabel = resourceLabel(log.resource, t);
+  const detailLines = getLogDetails(log, t);
+  const summary = getLogSummary(log, t);
+  const actor = log.username || (log.userId ? `${log.userId.slice(0, 8)}...` : t('auditLog.systemActor'));
 
   if (isDesktop) {
     return (
@@ -367,7 +374,7 @@ function LogRow({
             </AdminTableCell>
           ) : null}
           <AdminTableCell>
-            <span className={`rounded-sm px-2 py-0.5 text-[10px] font-medium ${act.color}`}>{act.label}</span>
+            <span className={`rounded-sm px-2 py-0.5 text-[10px] font-medium ${actColor}`}>{actLabel}</span>
           </AdminTableCell>
           <AdminTableCell>
             <span className="rounded-sm bg-surface-container-highest px-2 py-0.5 text-[11px] font-medium text-on-surface-variant">
@@ -423,7 +430,7 @@ function LogRow({
         ) : null}
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className={`rounded-sm px-2 py-0.5 text-[10px] font-bold ${act.color}`}>{act.label}</span>
+            <span className={`rounded-sm px-2 py-0.5 text-[10px] font-bold ${actColor}`}>{actLabel}</span>
             <span className="rounded-sm bg-surface-container-highest px-1.5 py-0.5 text-[10px] text-on-surface-variant">
               {resLabel}
             </span>
@@ -466,18 +473,21 @@ function AuditActionTabs({
   mobileTriggerVariant?: 'plain' | 'surface';
   onChange: (value: AuditActionTabValue) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <ResponsiveSectionTabs
       tabs={ACTION_TABS.map((tab) => ({
-        ...tab,
+        value: tab.value,
+        label: t(tab.labelKey),
+        icon: tab.icon,
         count: counts[tab.value] ?? 0,
       }))}
       value={active}
       onChange={(value) => onChange(value as AuditActionTabValue)}
-      mobileTitle="日志类型"
+      mobileTitle={t('auditLog.mobileTabsTitle')}
       mobileTriggerVariant={mobileTriggerVariant}
       desktopVariant={desktopVariant}
-      countUnit="条"
+      countUnit={t('auditLog.logCountUnit')}
       className={className}
     />
   );
@@ -490,6 +500,7 @@ function AuditHeaderActionTabs({
   active: AuditActionTabValue;
   onChange: (value: AuditActionTabValue) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <nav className="hidden min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 md:flex">
       {ACTION_TABS.map((tab) => {
@@ -510,7 +521,7 @@ function AuditHeaderActionTabs({
               size={15}
               className={isActive ? 'text-primary-container' : 'text-on-surface-variant/62 group-hover:text-on-surface'}
             />
-            <span>{tab.label}</span>
+            <span>{t(tab.labelKey)}</span>
           </button>
         );
       })}
@@ -519,9 +530,12 @@ function AuditHeaderActionTabs({
 }
 
 function ResourceFilterChips({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const { t } = useTranslation();
   return (
     <div className="flex min-w-0 items-center gap-2 overflow-hidden border-t border-outline-variant/10 pt-2">
-      <span className="hidden shrink-0 text-[11px] font-medium text-on-surface-variant/60 md:inline">资源范围</span>
+      <span className="hidden shrink-0 text-[11px] font-medium text-on-surface-variant/60 md:inline">
+        {t('auditLog.resourceScope')}
+      </span>
       <div className="flex min-w-0 flex-1 items-center overflow-x-auto scrollbar-none">
         {RESOURCE_FILTERS.map((item, index) => {
           const active = value === item.value;
@@ -542,7 +556,7 @@ function ResourceFilterChips({ value, onChange }: { value: string; onChange: (va
                     active ? 'text-primary-container/80' : 'text-on-surface-variant/45 group-hover:text-on-surface'
                   }
                 />
-                <span>{item.label}</span>
+                <span>{t(item.labelKey)}</span>
                 {active ? (
                   <span className="absolute inset-x-1.5 bottom-0 h-px rounded-full bg-primary-container/70" />
                 ) : null}
@@ -564,12 +578,13 @@ function AdminSearchField({
   value: string;
   onClear: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <SearchField
       inputProps={inputProps}
       value={value}
       onClear={onClear}
-      placeholder="搜索用户、资源ID、路径"
+      placeholder={t('auditLog.searchPlaceholder')}
       className="md:w-72 md:shrink-0"
     />
   );
@@ -598,6 +613,7 @@ function AuditToolbar({
   onClearSearch: () => void;
   total: number;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex min-h-10 min-w-0 flex-col gap-2.5">
       <div className="md:hidden">
@@ -612,7 +628,8 @@ function AuditToolbar({
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
           <AdminSearchField inputProps={searchInputProps} value={searchInputValue} onClear={onClearSearch} />
           <span className="shrink-0 whitespace-nowrap text-xs text-on-surface-variant">
-            当前结果 <strong className="text-on-surface tabular-nums">{total}</strong> 条
+            {t('auditLog.currentResults')} <strong className="text-on-surface tabular-nums">{total}</strong>
+            {t('auditLog.resultUnit')}
           </span>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
@@ -643,10 +660,11 @@ function AuditRetentionDialog({
   onCleanup: () => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const currentDays = policy?.retentionDays ?? DEFAULT_AUDIT_RETENTION_DAYS;
   const changed = selectedDays !== currentDays;
   const deleteCount = policy?.deleteCount ?? 0;
-  const cutoffLabel = policy?.cutoffAt ? formatDateTime(policy.cutoffAt) : '不清理历史日志';
+  const cutoffLabel = policy?.cutoffAt ? formatDateTime(policy.cutoffAt) : t('auditLog.retention.noCleanup');
   const cleanupDisabled = loading || changed || selectedDays <= 0 || deleteCount <= 0 || cleaning || saving;
 
   return (
@@ -657,16 +675,14 @@ function AuditRetentionDialog({
             <Icon name="auto_delete" size={22} />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-on-surface">日志保留策略</h2>
-            <p className="mt-1 text-xs leading-5 text-on-surface-variant">
-              设置操作日志保留时长，并可手动清理早于策略边界的历史记录。
-            </p>
+            <h2 className="text-base font-semibold text-on-surface">{t('auditLog.retention.title')}</h2>
+            <p className="mt-1 text-xs leading-5 text-on-surface-variant">{t('auditLog.retention.description')}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-sm text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-            aria-label="关闭保留策略"
+            aria-label={t('auditLog.retention.closeAria')}
           >
             <Icon name="close" size={18} />
           </button>
@@ -689,9 +705,11 @@ function AuditRetentionDialog({
                 >
                   <span className="flex items-center gap-2 text-sm font-semibold">
                     <Icon name={active ? 'radio_button_checked' : 'radio_button_unchecked'} size={15} />
-                    {option.label}
+                    {t(option.labelKey)}
                   </span>
-                  <span className="mt-1 block text-xs leading-5 text-on-surface-variant">{option.description}</span>
+                  <span className="mt-1 block text-xs leading-5 text-on-surface-variant">
+                    {t(option.descriptionKey)}
+                  </span>
                 </button>
               );
             })}
@@ -699,19 +717,25 @@ function AuditRetentionDialog({
 
           <div className="rounded-lg border border-outline-variant/15 bg-surface-container-low px-4 py-3">
             <div className="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
-              <span>当前策略</span>
-              <strong className="text-on-surface">{currentDays > 0 ? `保留 ${currentDays} 天` : '永久保留'}</strong>
-              {changed ? <span className="text-amber-500">保存后重新计算可清理数量</span> : null}
+              <span>{t('auditLog.retention.currentPolicy')}</span>
+              <strong className="text-on-surface">
+                {currentDays > 0
+                  ? t('auditLog.retention.keepDays', { count: currentDays })
+                  : t('auditLog.retention.forever.label')}
+              </strong>
+              {changed ? <span className="text-amber-500">{t('auditLog.retention.recalcHint')}</span> : null}
             </div>
             <div className="mt-3 grid gap-2 text-xs text-on-surface-variant sm:grid-cols-2">
               <div>
-                <span className="block text-on-surface-variant/60">清理边界</span>
+                <span className="block text-on-surface-variant/60">{t('auditLog.detail.cutoffAt')}</span>
                 <span className="mt-1 block font-medium text-on-surface">{cutoffLabel}</span>
               </div>
               <div>
-                <span className="block text-on-surface-variant/60">可清理日志</span>
+                <span className="block text-on-surface-variant/60">{t('auditLog.retention.cleanableLogs')}</span>
                 <span className="mt-1 block font-medium text-on-surface">
-                  {loading ? '计算中...' : `${deleteCount} 条`}
+                  {loading
+                    ? t('auditLog.retention.computing')
+                    : t('auditLog.retention.countUnitRecords', { count: deleteCount })}
                 </span>
               </div>
             </div>
@@ -724,12 +748,12 @@ function AuditRetentionDialog({
             disabled={cleanupDisabled}
             icon="delete_sweep"
             variant="danger"
-            title={changed ? '请先保存保留策略' : undefined}
+            title={changed ? t('auditLog.retention.saveFirstHint') : undefined}
           >
-            {cleaning ? '清理中...' : '立即清理'}
+            {cleaning ? t('auditLog.retention.cleaning') : t('auditLog.retention.cleanupNow')}
           </AdminButton>
           <AdminButton onClick={onSave} disabled={!changed || saving || cleaning} icon="save" variant="primary">
-            {saving ? '保存中...' : '保存策略'}
+            {saving ? t('auditLog.retention.savingPolicy') : t('auditLog.retention.savePolicy')}
           </AdminButton>
         </div>
       </div>
@@ -738,6 +762,7 @@ function AuditRetentionDialog({
 }
 
 function AuditLogContent() {
+  const { t } = useTranslation();
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const { toast } = useToast();
   const [actionGroup, setActionGroup] = useState<AuditActionTabValue>('all');
@@ -846,16 +871,16 @@ function AuditLogContent() {
     anchor.click();
     // 延迟回收：同步 revoke 可能赶在浏览器异步读取 blob 前，下载内容被截断
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    toast(`已导出 ${selectedLogs.length} 条日志`, 'success');
+    toast(t('auditLog.exportToast', { count: selectedLogs.length }), 'success');
   }
 
   async function copySelectedIds() {
     if (selectedLogs.length === 0) return;
     try {
       await copyText(selectedLogs.map((log) => log.resourceId || log.id).join('\n'));
-      toast('已复制所选日志 ID', 'success');
+      toast(t('auditLog.copiedIds'), 'success');
     } catch {
-      toast('复制失败，请重试', 'error');
+      toast(t('auditLog.copyRetryFailed'), 'error');
     }
   }
 
@@ -867,9 +892,9 @@ function AuditLogContent() {
         refreshCounts(undefined, { revalidate: true }),
         refreshRetentionPolicy(undefined, { revalidate: true }),
       ]);
-      toast('操作日志已刷新', 'success');
+      toast(t('auditLog.refreshed'), 'success');
     } catch (err: unknown) {
-      toast(getErrorMessage(err, '刷新操作日志失败'), 'error');
+      toast(getErrorMessage(err, t('auditLog.refreshFailed')), 'error');
     }
   }
 
@@ -883,9 +908,9 @@ function AuditLogContent() {
     try {
       await updateAuditRetentionPolicy(retentionDaysDraft);
       await refreshRetentionPolicy();
-      toast('日志保留策略已保存', 'success');
+      toast(t('auditLog.retention.policySaved'), 'success');
     } catch {
-      toast('保存保留策略失败，请重试', 'error');
+      toast(t('auditLog.retention.policySaveFailed'), 'error');
     } finally {
       setRetentionSaving(false);
     }
@@ -893,12 +918,12 @@ function AuditLogContent() {
 
   async function handleCleanupByRetention() {
     if (retentionDaysDraft <= 0) {
-      toast('当前为永久保留，无需清理', 'info');
+      toast(t('auditLog.retention.keepForeverNoClean'), 'info');
       return;
     }
     const deleteCount = retentionPolicy?.deleteCount ?? 0;
     if (deleteCount <= 0) {
-      toast('当前没有需要清理的日志', 'info');
+      toast(t('auditLog.retention.nothingToClean'), 'info');
       return;
     }
     setRetentionCleanupConfirmOpen(true);
@@ -910,9 +935,9 @@ function AuditLogContent() {
     try {
       const result = await cleanupAuditLogsByRetention(retentionDaysDraft);
       await Promise.all([mutate(), refreshCounts(), refreshRetentionPolicy()]);
-      toast(`已清理 ${result.deleted} 条操作日志`, 'success');
+      toast(t('auditLog.retention.cleanedToast', { count: result.deleted }), 'success');
     } catch {
-      toast('清理日志失败，请重试', 'error');
+      toast(t('auditLog.retention.cleanFailed'), 'error');
     } finally {
       setRetentionCleaning(false);
     }
@@ -922,7 +947,7 @@ function AuditLogContent() {
     <div className="flex items-center gap-2">
       <AdminRefreshButton onRefresh={handleRefresh} mobileIconOnly />
       <AdminButton onClick={openRetentionPolicy} icon="auto_delete" size={isDesktop ? 'md' : 'sm'} variant="secondary">
-        {isDesktop ? '保留策略' : '策略'}
+        {isDesktop ? t('auditLog.btnRetention') : t('auditLog.btnRetentionShort')}
       </AdminButton>
       {total > 0 ? (
         <AdminButton
@@ -932,7 +957,13 @@ function AuditLogContent() {
           size={isDesktop ? 'md' : 'sm'}
           variant="secondary"
         >
-          {isDesktop ? (selectMode ? '取消选择' : '批量操作') : selectMode ? '取消' : '批量'}
+          {isDesktop
+            ? selectMode
+              ? t('auditLog.cancelSelection')
+              : t('auditLog.btnBatch')
+            : selectMode
+              ? t('common.cancel')
+              : t('auditLog.btnBatchShort')}
         </AdminButton>
       ) : null}
     </div>
@@ -962,7 +993,7 @@ function AuditLogContent() {
           tableCells={isDesktop ? ['chip', 'chip', 'text', 'text', 'text'] : undefined}
           variant={isDesktop ? undefined : 'list'}
           className={isDesktop ? 'h-full rounded-none border-0' : 'min-h-[320px]'}
-          label="操作日志加载中"
+          label={t('auditLog.loadingLabel')}
         />
       ) : null}
       {logs.length > 0 && isDesktop ? (
@@ -971,11 +1002,11 @@ function AuditLogContent() {
             <thead className={ADMIN_TABLE_HEAD_CLASS}>
               <AdminTableHeadRow>
                 {selectMode ? <AdminTableHeadCell className="w-10" /> : null}
-                <AdminTableHeadCell>操作</AdminTableHeadCell>
-                <AdminTableHeadCell>资源</AdminTableHeadCell>
-                <AdminTableHeadCell>详情</AdminTableHeadCell>
-                <AdminTableHeadCell>用户</AdminTableHeadCell>
-                <AdminTableHeadCell>时间</AdminTableHeadCell>
+                <AdminTableHeadCell>{t('auditLog.tableHead.action')}</AdminTableHeadCell>
+                <AdminTableHeadCell>{t('auditLog.tableHead.resource')}</AdminTableHeadCell>
+                <AdminTableHeadCell>{t('auditLog.tableHead.detail')}</AdminTableHeadCell>
+                <AdminTableHeadCell>{t('common.user')}</AdminTableHeadCell>
+                <AdminTableHeadCell>{t('auditLog.tableHead.time')}</AdminTableHeadCell>
               </AdminTableHeadRow>
             </thead>
             <tbody>
@@ -1016,12 +1047,8 @@ function AuditLogContent() {
       {logs.length === 0 && !isLoading ? (
         <AdminEmptyState
           icon={hasActiveFilter ? 'search_off' : 'schedule'}
-          title={hasActiveFilter ? '没有匹配的日志' : '暂无操作日志'}
-          description={
-            hasActiveFilter
-              ? '请换个关键词，或切换日志类型和资源筛选。'
-              : '后台操作、登录、下载和数据变更记录会显示在这里。'
-          }
+          title={hasActiveFilter ? t('auditLog.emptyFilterTitle') : t('auditLog.emptyTitle')}
+          description={hasActiveFilter ? t('auditLog.emptyFilterDescription') : t('auditLog.emptyDescription')}
           className={isDesktop ? undefined : 'min-h-[320px] md:min-h-[360px]'}
         />
       ) : null}
@@ -1030,8 +1057,8 @@ function AuditLogContent() {
 
   return (
     <AdminManagementPage
-      title="操作日志"
-      description="查看后台操作、登录、下载和数据变更记录"
+      title={t('auditLog.pageTitle')}
+      description={t('auditLog.pageDescription')}
       headerNavigation={headerNavigation}
       toolbar={toolbar}
       contentClassName="min-h-0 overflow-hidden"
@@ -1054,22 +1081,25 @@ function AuditLogContent() {
         onClose={() => setRetentionCleanupConfirmOpen(false)}
         onConfirm={() => void handleConfirmCleanupByRetention()}
         icon="auto_delete"
-        title="确认清理日志"
-        description={`确认清理 ${retentionPolicy?.deleteCount ?? 0} 条早于 ${
-          retentionPolicy?.cutoffAt ? formatDateTime(retentionPolicy.cutoffAt) : '保留截止时间'
-        } 的操作日志吗？清理后不可恢复。`}
-        confirmLabel={retentionCleaning ? '清理中...' : '确认清理'}
+        title={t('auditLog.cleanupTitle')}
+        description={t('auditLog.cleanupDescription', {
+          count: retentionPolicy?.deleteCount ?? 0,
+          cutoff: retentionPolicy?.cutoffAt ? formatDateTime(retentionPolicy.cutoffAt) : t('auditLog.noCleanupDate'),
+        })}
+        confirmLabel={retentionCleaning ? t('auditLog.retention.cleaning') : t('auditLog.cleanupConfirm')}
         confirmDisabled={retentionCleaning}
       />
       {selectMode && selectedCount > 0 ? (
         <div className="mb-4 flex items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-high px-4 py-3 shadow-lg">
-          <span className="text-sm font-medium text-on-surface">已选 {selectedCount} 条</span>
+          <span className="text-sm font-medium text-on-surface">
+            {t('auditLog.batchSelected', { count: selectedCount })}
+          </span>
           <div className="flex-1" />
           <AdminButton onClick={exportSelectedLogs} icon="download" size="sm" variant="tonal">
-            导出所选
+            {t('auditLog.exportSelected')}
           </AdminButton>
           <AdminButton onClick={copySelectedIds} icon="content_copy" size="sm" variant="secondary">
-            复制ID
+            {t('auditLog.copyIds')}
           </AdminButton>
           <AdminIconButton
             onClick={() => {
@@ -1079,7 +1109,7 @@ function AuditLogContent() {
             icon="close"
             size="icon-sm"
             variant="ghost"
-            aria-label="取消选择"
+            aria-label={t('auditLog.cancelSelection')}
           />
         </div>
       ) : null}
@@ -1089,7 +1119,8 @@ function AuditLogContent() {
 }
 
 export default function AuditLogPage() {
-  useDocumentTitle('操作日志');
+  const { t } = useTranslation();
+  useDocumentTitle(t('auditLog.pageTitle'));
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   if (isDesktop) {

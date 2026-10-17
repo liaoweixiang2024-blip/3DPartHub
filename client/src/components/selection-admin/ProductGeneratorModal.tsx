@@ -1,4 +1,5 @@
 import type { ColumnDef, SelectionCategory } from '../../api/selections';
+import { useTranslation } from 'react-i18next';
 import { AdminButton } from '../shared/AdminControls';
 import { AdminTableHeadCell, AdminTableHeadRow, ADMIN_TABLE_HEAD_CLASS } from '../shared/AdminDataTable';
 import {
@@ -82,6 +83,7 @@ export function ProductGeneratorModal({
   generatePreviewStart,
   pagedGeneratePreview,
 }: ProductGeneratorModalProps) {
+  const { t } = useTranslation();
   if (!showGenerateModal || !generateCat) return null;
 
   return (
@@ -95,41 +97,35 @@ export function ProductGeneratorModal({
       >
         <div className="shrink-0 space-y-3">
           <div>
-            <h2 className="text-base font-bold text-on-surface">批量生成产品组合</h2>
-            <p className="mt-1 text-xs text-on-surface-variant">
-              按当前已选分类的参数列组合生成型号；不允许的组合写到排除规则里。相同型号会自动更新。
-            </p>
+            <h2 className="text-base font-bold text-on-surface">{t('selectionAdmin.generateTitle')}</h2>
+            <p className="mt-1 text-xs text-on-surface-variant">{t('selectionAdmin.generateDesc')}</p>
           </div>
           <div className="rounded-lg border border-primary-container/15 bg-primary-container/5 px-3 py-2 text-xs text-on-surface-variant">
-            将生成到当前分类：<span className="font-bold text-on-surface">{generateCat.name}</span>，共{' '}
-            {selectableGenerateColumns.length} 个生成字段。
+            {t('selectionAdmin.generateTargetPrefix')}
+            <span className="font-bold text-on-surface">{generateCat.name}</span>
+            {t('selectionAdmin.generateTargetSuffix', { count: selectableGenerateColumns.length })}
           </div>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto pr-0.5 space-y-4">
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             <label>
-              <span className={APP_FIELD_LABEL_CLASS}>型号模板</span>
+              <span className={APP_FIELD_LABEL_CLASS}>{t('selectionAdmin.modelTemplate')}</span>
               <AppTextInput
                 value={generateModelTemplate}
                 onChange={(e) => setGenerateModelTemplate(e.target.value)}
-                placeholder={`如：${generateTemplateExample}`}
+                placeholder={t('selectionAdmin.modelTemplatePlaceholder', { example: generateTemplateExample })}
               />
-              <span className={APP_FIELD_HELP_CLASS}>
-                只把需要组成型号的字段写进模板，例如
-                `[系列]-[规格]`，不要把所有参数都拼进去；字段按选项里填的「代码」拼入型号。
-              </span>
+              <span className={APP_FIELD_HELP_CLASS}>{t('selectionAdmin.modelTemplateHint')}</span>
             </label>
             <label>
-              <span className={APP_FIELD_LABEL_CLASS}>名称模板</span>
+              <span className={APP_FIELD_LABEL_CLASS}>{t('selectionAdmin.nameTemplate')}</span>
               <AppTextInput
                 value={generateNameTemplate}
                 onChange={(e) => setGenerateNameTemplate(e.target.value)}
-                placeholder="不填则使用型号"
+                placeholder={t('selectionAdmin.nameTemplatePlaceholder')}
               />
-              <span className={APP_FIELD_HELP_CLASS}>
-                名称建议写产品名称本身，不要带型号编号；不填时会用型号编号兜底。
-              </span>
+              <span className={APP_FIELD_HELP_CLASS}>{t('selectionAdmin.nameTemplateHint')}</span>
             </label>
           </div>
 
@@ -146,7 +142,7 @@ export function ProductGeneratorModal({
                       {col.label || col.key}
                       {col.unit ? ` (${col.unit})` : ''}
                     </span>
-                    <span>{values.length} 个</span>
+                    <span>{t('selectionAdmin.nOptions', { count: values.length })}</span>
                   </span>
                   <AppTextArea
                     value={generateOptionTexts[col.key] || ''}
@@ -154,21 +150,18 @@ export function ProductGeneratorModal({
                       setGenerateOptionTexts((prev) => ({ ...prev, [col.key]: e.target.value }));
                       setGeneratePreview([]);
                     }}
-                    placeholder={'一行一个选项；拼型号的代码不同时写 代码|显示名，如 02|2分 (1/4)'}
+                    placeholder={t('selectionAdmin.optionPlaceholder')}
                     rows={5}
                     className="resize-y text-xs"
                   />
-                  <span className={APP_FIELD_HELP_CLASS}>
-                    型号代码与参数值不同时写「代码|显示名」（如 `02|2分 (1/4)`：型号拼 02，参数存 2分
-                    (1/4)）；竖线前留空表示不进型号（如 `|无球阀开关`）。
-                  </span>
+                  <span className={APP_FIELD_HELP_CLASS}>{t('selectionAdmin.optionHint')}</span>
                 </label>
               );
             })}
           </div>
 
           <label className="block">
-            <span className={APP_FIELD_LABEL_CLASS}>排除规则（每行一条，全部条件满足时不生成）</span>
+            <span className={APP_FIELD_LABEL_CLASS}>{t('selectionAdmin.excludeRulesLabel')}</span>
             <AppTextArea
               value={generateExcludeRules}
               onChange={(e) => {
@@ -179,21 +172,30 @@ export function ProductGeneratorModal({
               rows={4}
               className="resize-y text-xs"
             />
-            <span className={APP_FIELD_HELP_CLASS}>`*` 表示该字段有值就匹配；多个禁止值可用 `|` 分隔。</span>
+            <span className={APP_FIELD_HELP_CLASS}>{t('selectionAdmin.excludeHint')}</span>
           </label>
 
           <div className="space-y-2 rounded-xl border border-outline-variant/10 bg-surface-container-lowest p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-sm font-bold text-on-surface">生成预览</p>
+                <p className="text-sm font-bold text-on-surface">{t('selectionAdmin.previewTitle')}</p>
                 <p className="text-xs text-on-surface-variant">
                   {generatePreview.length
-                    ? `将生成 ${generatePreview.length} 条产品，预览 ${3 + selectableGenerateColumns.length} 列${generatePreviewSearch ? `，已筛选 ${filteredGeneratePreview.length} 条` : ''}`
-                    : '点击预览后再确认导入'}
+                    ? generatePreviewSearch
+                      ? t('selectionAdmin.previewSummaryFiltered', {
+                          total: generatePreview.length,
+                          cols: 3 + selectableGenerateColumns.length,
+                          filtered: filteredGeneratePreview.length,
+                        })
+                      : t('selectionAdmin.previewSummary', {
+                          total: generatePreview.length,
+                          cols: 3 + selectableGenerateColumns.length,
+                        })
+                    : t('selectionAdmin.previewHint')}
                 </p>
               </div>
               <AdminButton type="button" onClick={refreshGeneratePreview} size="sm" variant="secondary">
-                生成预览
+                {t('selectionAdmin.generatePreviewBtn')}
               </AdminButton>
             </div>
             {generateErrors.length > 0 && (
@@ -215,11 +217,11 @@ export function ProductGeneratorModal({
                       setGeneratePreviewSearch('');
                       setGeneratePreviewPage(1);
                     }}
-                    placeholder="搜索名称、型号或参数"
+                    placeholder={t('selectionAdmin.searchPreviewPlaceholder')}
                     className="sm:w-72"
                   />
                   <div className="flex items-center gap-2 text-xs text-on-surface-variant">
-                    <span>每页</span>
+                    <span>{t('selectionAdmin.perPage')}</span>
                     <AppSelect
                       value={generatePreviewPageSize}
                       onChange={(e) => {
@@ -230,7 +232,7 @@ export function ProductGeneratorModal({
                     >
                       {[30, 50, 100, 200].map((size) => (
                         <option key={size} value={size}>
-                          {size} 条
+                          {t('selectionAdmin.perPageOption', { count: size })}
                         </option>
                       ))}
                     </AppSelect>
@@ -241,8 +243,12 @@ export function ProductGeneratorModal({
                     <thead className={ADMIN_TABLE_HEAD_CLASS}>
                       <AdminTableHeadRow>
                         <AdminTableHeadCell className="sticky left-0 z-20 h-8 px-2 py-1.5">#</AdminTableHeadCell>
-                        <AdminTableHeadCell className="h-8 px-2 py-1.5">名称</AdminTableHeadCell>
-                        <AdminTableHeadCell className="h-8 px-2 py-1.5">型号编号</AdminTableHeadCell>
+                        <AdminTableHeadCell className="h-8 px-2 py-1.5">
+                          {t('selectionAdmin.colName')}
+                        </AdminTableHeadCell>
+                        <AdminTableHeadCell className="h-8 px-2 py-1.5">
+                          {t('selectionAdmin.colModelIndex')}
+                        </AdminTableHeadCell>
                         {selectableGenerateColumns.map((col) => (
                           <AdminTableHeadCell key={col.key} className="h-8 px-2 py-1.5">
                             {col.label || col.key}
@@ -275,7 +281,7 @@ export function ProductGeneratorModal({
                             colSpan={3 + selectableGenerateColumns.length}
                             className="px-2 py-6 text-center text-on-surface-variant"
                           >
-                            没有匹配的预览数据
+                            {t('selectionAdmin.noPreviewMatch')}
                           </td>
                         </tr>
                       )}
@@ -284,11 +290,14 @@ export function ProductGeneratorModal({
                 </div>
                 <div className="flex flex-col gap-2 text-xs text-on-surface-variant sm:flex-row sm:items-center sm:justify-between">
                   <span>
-                    第 {generatePreviewPage} / {generatePreviewTotalPages} 页，显示{' '}
-                    {filteredGeneratePreview.length
-                      ? `${generatePreviewStart + 1}-${Math.min(generatePreviewStart + generatePreviewPageSize, filteredGeneratePreview.length)}`
-                      : '0'}{' '}
-                    / {filteredGeneratePreview.length} 条
+                    {t('selectionAdmin.pageIndicator', {
+                      page: generatePreviewPage,
+                      total: generatePreviewTotalPages,
+                      range: filteredGeneratePreview.length
+                        ? `${generatePreviewStart + 1}-${Math.min(generatePreviewStart + generatePreviewPageSize, filteredGeneratePreview.length)}`
+                        : '0',
+                      count: filteredGeneratePreview.length,
+                    })}
                   </span>
                   <div className="flex items-center gap-1">
                     <AdminButton
@@ -298,7 +307,7 @@ export function ProductGeneratorModal({
                       size="sm"
                       variant="secondary"
                     >
-                      首页
+                      {t('selectionAdmin.firstPage')}
                     </AdminButton>
                     <AdminButton
                       type="button"
@@ -307,7 +316,7 @@ export function ProductGeneratorModal({
                       size="sm"
                       variant="secondary"
                     >
-                      上一页
+                      {t('selectionAdmin.prevPage')}
                     </AdminButton>
                     <AdminButton
                       type="button"
@@ -316,7 +325,7 @@ export function ProductGeneratorModal({
                       size="sm"
                       variant="secondary"
                     >
-                      下一页
+                      {t('selectionAdmin.nextPage')}
                     </AdminButton>
                     <AdminButton
                       type="button"
@@ -325,7 +334,7 @@ export function ProductGeneratorModal({
                       size="sm"
                       variant="secondary"
                     >
-                      末页
+                      {t('selectionAdmin.lastPage')}
                     </AdminButton>
                   </div>
                 </div>
@@ -336,7 +345,7 @@ export function ProductGeneratorModal({
 
         <div className="grid grid-cols-2 gap-2 shrink-0 pt-2 border-t border-outline-variant/10 sm:flex sm:justify-end">
           <AdminButton onClick={() => setShowGenerateModal(false)} variant="secondary" className="w-full sm:w-auto">
-            取消
+            {t('common.cancel')}
           </AdminButton>
           <AdminButton
             onClick={importGeneratedProducts}
@@ -344,7 +353,9 @@ export function ProductGeneratorModal({
             variant="primary"
             className="w-full sm:w-auto"
           >
-            {generateImporting ? '导入中...' : `确认导入 ${generatePreview.length} 条`}
+            {generateImporting
+              ? t('selectionAdmin.importing')
+              : t('selectionAdmin.importConfirm', { count: generatePreview.length })}
           </AdminButton>
         </div>
       </div>

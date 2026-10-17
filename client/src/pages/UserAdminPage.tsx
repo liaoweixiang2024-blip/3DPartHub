@@ -20,6 +20,8 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { copyText } from '../lib/clipboard';
 import { getErrorMessage } from '../lib/errorNotifications';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 interface UserItem {
   id: string;
@@ -50,10 +52,10 @@ interface UserStats {
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  ADMIN: '管理员',
-  EDITOR: '编辑者',
-  VIEWER: '访客',
-  INTERNAL: '内部',
+  ADMIN: 'userAdmin.roleLabel.ADMIN',
+  EDITOR: 'userAdmin.roleLabel.EDITOR',
+  VIEWER: 'userAdmin.roleLabel.VIEWER',
+  INTERNAL: 'userAdmin.roleLabel.INTERNAL',
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -64,29 +66,29 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 const SORT_OPTIONS = [
-  { value: 'created_at', label: '注册时间' },
-  { value: 'last_login', label: '最近活跃' },
-  { value: 'downloads', label: '下载次数' },
-  { value: 'favorites', label: '收藏次数' },
+  { value: 'created_at', labelKey: 'userAdmin.sortCreatedAt' },
+  { value: 'last_login', labelKey: 'userAdmin.sortLastActive' },
+  { value: 'downloads', labelKey: 'userAdmin.sortDownloads' },
+  { value: 'favorites', labelKey: 'userAdmin.sortFavorites' },
 ];
 
-const PERMISSION_HELP: Array<{ role: string; desc: string }> = [
-  { role: '管理员', desc: '全部后台功能：模型上传/管理、工单/询价处理、用户管理、系统设置' },
-  { role: '编辑者', desc: '权限同访客，另可被指定为询价「业务对接人」（客户询价优先分配给编辑者跟进）' },
-  { role: '访客', desc: '浏览、下载（受限额）、收藏、分享模型（受总开关控制）、提交工单/询价' },
-  { role: '内部', desc: '权限同访客，仅用于标识内部员工，便于区分内外部用户' },
+const PERMISSION_HELP: Array<{ role: string; helpKey: string }> = [
+  { role: 'ADMIN', helpKey: 'userAdmin.help.ADMIN' },
+  { role: 'EDITOR', helpKey: 'userAdmin.help.EDITOR' },
+  { role: 'VIEWER', helpKey: 'userAdmin.help.VIEWER' },
+  { role: 'INTERNAL', helpKey: 'userAdmin.help.INTERNAL' },
 ];
 
-function relativeTime(value: string | null): string {
-  if (!value) return '未登录';
+function relativeTime(value: string | null, t: TFunction): string {
+  if (!value) return t('userAdmin.neverLoggedIn');
   const ms = Date.now() - new Date(value).getTime();
   const day = Math.floor(ms / 86_400_000);
   if (day > 30) return new Date(value).toLocaleDateString();
-  if (day > 0) return `${day} 天前`;
+  if (day > 0) return t('userAdmin.daysAgo', { count: day });
   const hour = Math.floor(ms / 3_600_000);
-  if (hour > 0) return `${hour} 小时前`;
+  if (hour > 0) return t('userAdmin.hoursAgo', { count: hour });
   const min = Math.floor(ms / 60_000);
-  return min > 0 ? `${min} 分钟前` : '刚刚';
+  return min > 0 ? t('userAdmin.minutesAgo', { count: min }) : t('userAdmin.justNow');
 }
 
 async function fetchUserStats() {
@@ -103,25 +105,27 @@ function UserRoleTabs({
   counts: Record<string, number>;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <ResponsiveSectionTabs
       tabs={[
-        { value: '', label: '全部', count: counts.all ?? 0, icon: 'group' },
-        { value: 'ADMIN', label: '管理员', count: counts.ADMIN ?? 0, icon: 'shield' },
-        { value: 'EDITOR', label: '编辑者', count: counts.EDITOR ?? 0, icon: 'edit' },
-        { value: 'VIEWER', label: '访客', count: counts.VIEWER ?? 0, icon: 'person' },
-        { value: 'INTERNAL', label: '内部', count: counts.INTERNAL ?? 0, icon: 'badge' },
+        { value: '', label: t('userAdmin.tabAll'), count: counts.all ?? 0, icon: 'group' },
+        { value: 'ADMIN', label: t('userAdmin.roleLabel.ADMIN'), count: counts.ADMIN ?? 0, icon: 'shield' },
+        { value: 'EDITOR', label: t('userAdmin.roleLabel.EDITOR'), count: counts.EDITOR ?? 0, icon: 'edit' },
+        { value: 'VIEWER', label: t('userAdmin.roleLabel.VIEWER'), count: counts.VIEWER ?? 0, icon: 'person' },
+        { value: 'INTERNAL', label: t('userAdmin.roleLabel.INTERNAL'), count: counts.INTERNAL ?? 0, icon: 'badge' },
       ]}
       value={active}
       onChange={onChange}
-      mobileTitle="用户角色"
-      countUnit="人"
+      mobileTitle={t('userAdmin.roleTabsTitle')}
+      countUnit={t('userAdmin.countUnit')}
     />
   );
 }
 
 export default function UserAdminPage() {
-  useDocumentTitle('用户管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('userAdmin.title'));
   const {
     value: search,
     draftValue: searchInputValue,
@@ -204,19 +208,19 @@ export default function UserAdminPage() {
     try {
       await setSize(1);
       await refreshAll();
-      toast('用户数据已刷新', 'success');
+      toast(t('userAdmin.toastRefreshed'), 'success');
     } catch (err: unknown) {
-      toast(getErrorMessage(err, '刷新用户数据失败'), 'error');
+      toast(getErrorMessage(err, t('userAdmin.refreshFailed')), 'error');
     }
   }
 
   async function applyRoleChange(userId: string, role: string) {
     try {
       await client.put(`/admin/users/${userId}/role`, { role });
-      toast('角色已更新', 'success');
+      toast(t('userAdmin.roleUpdated'), 'success');
       refreshAll();
     } catch (err: unknown) {
-      toast(getErrorMessage(err, '修改失败'), 'error');
+      toast(getErrorMessage(err, t('userAdmin.roleChangeFailed')), 'error');
     }
   }
 
@@ -231,10 +235,10 @@ export default function UserAdminPage() {
   async function handleQuickToggleDisable(user: UserItem) {
     try {
       await client.put(`/admin/users/${user.id}`, { disabled: !user.disabled });
-      toast(user.disabled ? '已启用' : '已禁用', 'success');
+      toast(user.disabled ? t('userAdmin.enabled') : t('userAdmin.disabled'), 'success');
       refreshAll();
     } catch (err: unknown) {
-      toast(getErrorMessage(err, '操作失败'), 'error');
+      toast(getErrorMessage(err, t('userAdmin.operationFailed')), 'error');
     }
   }
 
@@ -242,22 +246,22 @@ export default function UserAdminPage() {
   async function handleUnlockLogin(user: UserItem) {
     try {
       await client.post('/admin/users/unlock-login', { email: user.email });
-      toast(`已解锁 ${user.username || user.email} 的登录`, 'success');
+      toast(t('userAdmin.unlockedToast', { name: user.username || user.email }), 'success');
     } catch (err: unknown) {
-      toast(getErrorMessage(err, '解锁失败'), 'error');
+      toast(getErrorMessage(err, t('userAdmin.unlockFailed')), 'error');
     }
   }
 
   async function handleDelete(userId: string) {
     try {
       await client.delete(`/admin/users/${userId}`);
-      toast('用户已删除', 'success');
+      toast(t('userAdmin.userDeleted'), 'success');
       setDeleteTarget(null);
       selected.delete(userId);
       setSelected(new Set(selected));
       refreshAll();
     } catch (err: unknown) {
-      toast(getErrorMessage(err, '删除失败'), 'error');
+      toast(getErrorMessage(err, t('userAdmin.deleteFailed')), 'error');
     }
   }
 
@@ -270,14 +274,14 @@ export default function UserAdminPage() {
       const res = await client.post('/admin/users/batch', payload);
       const result = unwrapResponse<{ updated: string[]; skipped: Array<{ id: string; reason: string }> }>(res);
       const skippedNote =
-        result.skipped.length > 0 ? `，跳过 ${result.skipped.length} 项（最后一个管理员/自己/无需变更）` : '';
-      toast(`已处理 ${result.updated.length} 项${skippedNote}`, 'success');
+        result.skipped.length > 0 ? t('userAdmin.batchSkipped', { count: result.skipped.length }) : '';
+      toast(t('userAdmin.batchDone', { count: result.updated.length, skipped: skippedNote }), 'success');
       setSelected(new Set());
       setBatchConfirm(null);
       setBatchRole('');
       refreshAll();
     } catch (err: unknown) {
-      toast(getErrorMessage(err, '批量操作失败'), 'error');
+      toast(getErrorMessage(err, t('userAdmin.batchFailed')), 'error');
     }
   }
 
@@ -308,9 +312,9 @@ export default function UserAdminPage() {
     if (!value) return;
     try {
       await copyText(value);
-      toast(`${label}已复制`, 'success');
+      toast(t('userAdmin.copiedToast', { label }), 'success');
     } catch {
-      toast(`${label}复制失败`, 'error');
+      toast(t('userAdmin.copyFailedToast', { label }), 'error');
     }
   }
 
@@ -326,17 +330,24 @@ export default function UserAdminPage() {
     <div className="flex min-h-10 min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <div className="min-w-0 flex-1">
         <UserRoleTabs active={roleFilter} counts={roleCounts} onChange={setRoleFilter} />
-        {stats?.disabled ? <p className="mt-1 text-[11px] text-error">已禁用 {stats.disabled} 人</p> : null}
+        {stats?.disabled ? (
+          <p className="mt-1 text-[11px] text-error">{t('userAdmin.disabledCount', { count: stats.disabled })}</p>
+        ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <AdminSortMenu value={sort} options={SORT_OPTIONS} onChange={setSort} ariaLabel="排序" />
+        <AdminSortMenu
+          value={sort}
+          options={SORT_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
+          onChange={setSort}
+          ariaLabel={t('userAdmin.sortAria')}
+        />
         <button
           type="button"
           onClick={() => setCreateOpen(true)}
           className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-outline-variant/20 bg-surface-container-high px-2.5 py-1.5 text-sm text-on-surface-variant hover:text-on-surface"
         >
           <Icon name="person_add" size={14} />
-          新增用户
+          {t('userAdmin.createUser')}
         </button>
         <button
           type="button"
@@ -344,13 +355,13 @@ export default function UserAdminPage() {
           className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-outline-variant/20 bg-surface-container-high px-2.5 py-1.5 text-sm text-on-surface-variant hover:text-on-surface"
         >
           <Icon name="download" size={14} />
-          导出
+          {t('userAdmin.export')}
         </button>
         <SearchField
           inputProps={searchInputProps}
           value={searchInputValue}
           onClear={() => setSearch('')}
-          placeholder="搜索用户名、邮箱、公司..."
+          placeholder={t('userAdmin.searchPlaceholder')}
           className="w-full md:w-64"
         />
       </div>
@@ -363,8 +374,8 @@ export default function UserAdminPage() {
         type="button"
         onClick={() => setShowHelp((v) => !v)}
         className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high"
-        aria-label="角色权限说明"
-        title="角色权限说明"
+        aria-label={t('userAdmin.helpTitle')}
+        title={t('userAdmin.helpTitle')}
       >
         <Icon name="help_outline" size={18} />
       </button>
@@ -376,8 +387,8 @@ export default function UserAdminPage() {
 
   const content = (
     <AdminManagementPage
-      title="用户管理"
-      description="管理用户角色、账号状态和使用数据"
+      title={t('userAdmin.title')}
+      description={t('userAdmin.description')}
       actions={actions}
       toolbar={toolbar}
     >
@@ -385,13 +396,13 @@ export default function UserAdminPage() {
         <div className="mb-3 rounded-md border border-outline-variant/10 bg-surface-container-low px-3 py-2.5 text-xs">
           <div className="mb-1.5 flex items-center gap-1.5 font-medium text-on-surface">
             <Icon name="shield" size={14} />
-            角色权限说明
+            {t('userAdmin.helpTitle')}
           </div>
           <div className="space-y-1 text-on-surface-variant">
             {PERMISSION_HELP.map((p) => (
               <div key={p.role} className="flex gap-2">
-                <span className="w-14 shrink-0 font-medium text-on-surface">{p.role}</span>
-                <span>{p.desc}</span>
+                <span className="w-14 shrink-0 font-medium text-on-surface">{t(`userAdmin.roleLabel.${p.role}`)}</span>
+                <span>{t(p.helpKey)}</span>
               </div>
             ))}
           </div>
@@ -400,18 +411,20 @@ export default function UserAdminPage() {
 
       {selected.size > 0 ? (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-primary/20 bg-primary-container/10 px-3 py-2">
-          <span className="text-xs font-medium text-on-surface">已选 {selected.size} 项</span>
+          <span className="text-xs font-medium text-on-surface">
+            {t('userAdmin.selectedCount', { count: selected.size })}
+          </span>
           <select
             name="batch-role"
             value={batchRole}
             onChange={(e) => setBatchRole(e.target.value)}
             className="rounded border border-outline-variant/20 bg-surface-container-high px-2 py-1 text-xs"
           >
-            <option value="">改角色为…</option>
-            <option value="ADMIN">管理员</option>
-            <option value="EDITOR">编辑者</option>
-            <option value="VIEWER">访客</option>
-            <option value="INTERNAL">内部</option>
+            <option value="">{t('userAdmin.batchRolePlaceholder')}</option>
+            <option value="ADMIN">{t('userAdmin.roleLabel.ADMIN')}</option>
+            <option value="EDITOR">{t('userAdmin.roleLabel.EDITOR')}</option>
+            <option value="VIEWER">{t('userAdmin.roleLabel.VIEWER')}</option>
+            <option value="INTERNAL">{t('userAdmin.roleLabel.INTERNAL')}</option>
           </select>
           <button
             type="button"
@@ -419,35 +432,35 @@ export default function UserAdminPage() {
             onClick={() => batchRole && setBatchConfirm({ action: 'role', role: batchRole })}
             className="rounded bg-primary-container px-2.5 py-1 text-xs font-medium text-on-primary-container disabled:opacity-40"
           >
-            应用
+            {t('userAdmin.apply')}
           </button>
           <button
             type="button"
             onClick={() => setBatchConfirm({ action: 'disable' })}
             className="rounded border border-error/30 px-2.5 py-1 text-xs text-error hover:bg-error/10"
           >
-            禁用
+            {t('userAdmin.disable')}
           </button>
           <button
             type="button"
             onClick={() => setBatchConfirm({ action: 'enable' })}
             className="rounded border border-outline-variant/30 px-2.5 py-1 text-xs text-on-surface-variant hover:bg-surface-container-high"
           >
-            启用
+            {t('userAdmin.enable')}
           </button>
           <button
             type="button"
             onClick={() => setSelected(new Set())}
             className="ml-auto text-xs text-on-surface-variant hover:text-on-surface"
           >
-            取消选择
+            {t('userAdmin.cancelSelection')}
           </button>
         </div>
       ) : null}
 
       {/* User list */}
       <div className="space-y-2">
-        {isLoading && users.length === 0 && <AdminLoadingState variant="list" label="用户列表加载中" />}
+        {isLoading && users.length === 0 && <AdminLoadingState variant="list" label={t('userAdmin.listLoading')} />}
         {users.length > 0 ? (
           <div className="flex items-center gap-2 px-1 pb-1 text-[11px] text-on-surface-variant">
             <input
@@ -457,7 +470,7 @@ export default function UserAdminPage() {
               onChange={toggleSelectAll}
               className="h-3.5 w-3.5"
             />
-            <span>全选当前页</span>
+            <span>{t('userAdmin.selectAllCurrent')}</span>
           </div>
         ) : null}
         {users.map((u) => {
@@ -483,7 +496,7 @@ export default function UserAdminPage() {
                       <button
                         onClick={() => setEditTarget(u)}
                         className="truncate text-left text-sm font-medium text-on-surface hover:text-primary"
-                        title="点击编辑"
+                        title={t('userAdmin.clickToEdit')}
                       >
                         {u.username}
                       </button>
@@ -492,24 +505,24 @@ export default function UserAdminPage() {
                           ROLE_COLORS[u.role] || ROLE_COLORS.VIEWER
                         }`}
                       >
-                        {ROLE_LABELS[u.role] || u.role}
+                        {t(ROLE_LABELS[u.role] || '', { defaultValue: u.role })}
                       </span>
                       {u.disabled ? (
                         <span className="rounded-sm bg-error/15 px-1.5 py-0.5 text-[10px] font-medium text-error">
-                          已禁用
+                          {t('userAdmin.disabled')}
                         </span>
                       ) : null}
                       {u.mustChangePassword ? (
                         <span className="rounded-sm bg-tertiary-container/30 px-1.5 py-0.5 text-[10px] text-on-surface-variant">
-                          待改密
+                          {t('userAdmin.pendingPassword')}
                         </span>
                       ) : null}
                     </div>
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-on-surface-variant">
                       <button
-                        onClick={() => handleCopy(u.email, '邮箱')}
+                        onClick={() => handleCopy(u.email, t('userAdmin.emailLabel'))}
                         className="break-all text-left hover:text-primary-container"
-                        title="复制邮箱"
+                        title={t('userAdmin.copyEmailTitle')}
                       >
                         {u.email}
                       </button>
@@ -517,9 +530,9 @@ export default function UserAdminPage() {
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-on-surface-variant/70">
                       {u.company ? <span className="break-words">{u.company}</span> : null}
                       {u.department ? <span>{u.department}</span> : null}
-                      <span>下载 {u._count.downloads}</span>
-                      <span>收藏 {u._count.favorites}</span>
-                      <span>活跃 {relativeTime(u.lastActiveAt ?? u.lastLoginAt)}</span>
+                      <span>{t('userAdmin.downloadsCount', { count: u._count.downloads })}</span>
+                      <span>{t('userAdmin.favoritesCount', { count: u._count.favorites })}</span>
+                      <span>{t('userAdmin.activeAt', { time: relativeTime(u.lastActiveAt ?? u.lastLoginAt, t) })}</span>
                       <span>{new Date(u.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>
@@ -530,35 +543,40 @@ export default function UserAdminPage() {
                     value={u.role}
                     onChange={(e) => handleRoleSelect(u.id, u.username, e.target.value)}
                     className="rounded border border-outline-variant/20 bg-surface-container-high px-2 py-1 text-xs text-on-surface"
-                    title="角色"
+                    title={t('userAdmin.roleLabelTitle')}
                   >
-                    <option value="ADMIN">管理员</option>
-                    <option value="EDITOR">编辑者</option>
-                    <option value="VIEWER">访客</option>
-                    <option value="INTERNAL">内部</option>
+                    <option value="ADMIN">{t('userAdmin.roleLabel.ADMIN')}</option>
+                    <option value="EDITOR">{t('userAdmin.roleLabel.EDITOR')}</option>
+                    <option value="VIEWER">{t('userAdmin.roleLabel.VIEWER')}</option>
+                    <option value="INTERNAL">{t('userAdmin.roleLabel.INTERNAL')}</option>
                   </select>
                   <AdminIconButton
                     icon={u.disabled ? 'lock_open' : 'block'}
                     onClick={() => handleQuickToggleDisable(u)}
                     size="icon-sm"
                     variant={u.disabled ? 'secondary' : 'danger'}
-                    aria-label={u.disabled ? '启用' : '禁用'}
+                    aria-label={u.disabled ? t('userAdmin.enable') : t('userAdmin.disable')}
                   />
-                  <AdminIconButton icon="edit" onClick={() => setEditTarget(u)} size="icon-sm" aria-label="编辑用户" />
+                  <AdminIconButton
+                    icon="edit"
+                    onClick={() => setEditTarget(u)}
+                    size="icon-sm"
+                    aria-label={t('userAdmin.editUserAria')}
+                  />
                   <AdminIconButton
                     icon="vpn_key"
                     onClick={() => handleUnlockLogin(u)}
                     size="icon-sm"
                     variant="secondary"
-                    aria-label="解锁登录"
-                    title="解锁登录（清除该账号登录失败锁定/验证码状态）"
+                    aria-label={t('userAdmin.unlockAria')}
+                    title={t('userAdmin.unlockTitle')}
                   />
                   <AdminIconButton
                     icon="delete"
                     onClick={() => setDeleteTarget({ id: u.id, username: u.username })}
                     size="icon-sm"
                     variant="danger"
-                    aria-label="删除用户"
+                    aria-label={t('userAdmin.deleteAria')}
                   />
                 </div>
               </div>
@@ -567,7 +585,7 @@ export default function UserAdminPage() {
         })}
         {users.length > 0 && <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />}
         {users.length === 0 && !isLoading && (
-          <div className="py-10 text-center text-sm text-on-surface-variant">暂无用户数据</div>
+          <div className="py-10 text-center text-sm text-on-surface-variant">{t('userAdmin.noData')}</div>
         )}
       </div>
     </AdminManagementPage>
@@ -590,9 +608,9 @@ export default function UserAdminPage() {
         onConfirm={() => {
           if (deleteTarget) void handleDelete(deleteTarget.id);
         }}
-        title="确认删除用户"
-        description={`确定删除用户「${deleteTarget?.username || ''}」？此操作不可撤销。`}
-        confirmLabel="确认删除"
+        title={t('userAdmin.deleteTitle')}
+        description={t('userAdmin.deleteDescription', { name: deleteTarget?.username || '' })}
+        confirmLabel={t('userAdmin.deleteConfirm')}
       />
       <ConfirmDialog
         open={Boolean(adminConfirm)}
@@ -601,9 +619,9 @@ export default function UserAdminPage() {
           if (adminConfirm) void applyRoleChange(adminConfirm.userId, 'ADMIN');
           setAdminConfirm(null);
         }}
-        title="提升为管理员"
-        description={`确定将「${adminConfirm?.username || ''}」提升为管理员？该用户将拥有全部后台权限。`}
-        confirmLabel="确认提升"
+        title={t('userAdmin.promoteTitle')}
+        description={t('userAdmin.promoteDescription', { name: adminConfirm?.username || '' })}
+        confirmLabel={t('userAdmin.promoteConfirm')}
       />
       <ConfirmDialog
         open={Boolean(batchConfirm)}
@@ -611,15 +629,20 @@ export default function UserAdminPage() {
         onConfirm={() => {
           if (batchConfirm) void handleBatch(batchConfirm.action, batchConfirm.role);
         }}
-        title="确认批量操作"
+        title={t('userAdmin.batchTitle')}
         description={
           batchConfirm?.action === 'disable'
-            ? `确定禁用选中的 ${selected.size} 个用户？他们将立即被登出。`
+            ? t('userAdmin.batchDisableDescription', { count: selected.size })
             : batchConfirm?.action === 'enable'
-              ? `确定启用选中的 ${selected.size} 个用户？`
-              : `确定将选中的 ${selected.size} 个用户角色改为${ROLE_LABELS[batchConfirm?.role ?? ''] ?? batchConfirm?.role ?? ''}？`
+              ? t('userAdmin.batchEnableDescription', { count: selected.size })
+              : t('userAdmin.batchRoleDescription', {
+                  count: selected.size,
+                  role: t(ROLE_LABELS[batchConfirm?.role ?? ''] ?? '', {
+                    defaultValue: batchConfirm?.role ?? '',
+                  }),
+                })
         }
-        confirmLabel="确认"
+        confirmLabel={t('common.confirm')}
       />
     </AdminPageShell>
   );

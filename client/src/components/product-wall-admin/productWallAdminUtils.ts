@@ -1,3 +1,4 @@
+import i18next from 'i18next';
 import type { ProductWallItem } from '../../api/productWall';
 
 type WallItem = ProductWallItem;
@@ -160,7 +161,7 @@ export function getProductWallColumnCount() {
   return 2;
 }
 
-export function errorMessage(error: unknown, fallback = '操作失败，请稍后重试') {
+export function errorMessage(error: unknown, fallback = i18next.t('productWallAdmin.operationFailedRetry')) {
   const detail = (error as { response?: { data?: { detail?: string; message?: string } } })?.response?.data;
   return detail?.detail || detail?.message || (error instanceof Error ? error.message : fallback);
 }

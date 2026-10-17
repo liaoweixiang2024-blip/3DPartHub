@@ -129,16 +129,37 @@ const ROUTE_FALLBACK_COPY: Record<string, RouteFallbackCopy> = {
     descriptionKey: 'productWall.management.pageDescription',
   },
   // 后台页面标题/描述为页面内硬编码中文，这里保持同样文案
-  '/admin/models': { title: '模型管理', description: '统一维护模型文件、分类归属、预览重建和同名模型合并关系。' },
-  '/admin/categories': { title: '分类管理', description: '维护模型库分类、子分类和图标展示' },
-  '/admin/users': { title: '用户管理', description: '管理用户角色、账号状态和使用数据' },
-  '/admin/shares': { title: '分享管理', description: '管理模型分享链接、访问权限和下载记录' },
-  '/admin/downloads': { title: '下载统计', description: '统计模型下载量、用户下载历史、热门模型和格式分布' },
-  '/admin/tickets': { title: '工单处理', description: '管理用户提交的模型需求工单' },
-  '/admin/inquiries': { title: '询价处理工作台', description: '管理员入口：处理客户询价、分配销售、导出业务明细' },
-  '/admin/selections': { title: '选型管理', description: '管理选型分类、产品、参数列定义和批量导入数据' },
-  '/admin/audit': { title: '操作日志', description: '查看后台操作、登录、下载和数据变更记录' },
-  '/admin/settings': { title: '系统设置', description: '配置平台的全局行为和访问策略' },
+  '/admin/models': {
+    titleKey: 'routerMeta.adminModels.title',
+    descriptionKey: 'routerMeta.adminModels.description',
+  },
+  '/admin/categories': {
+    titleKey: 'routerMeta.adminCategories.title',
+    descriptionKey: 'routerMeta.adminCategories.description',
+  },
+  '/admin/users': { titleKey: 'routerMeta.adminUsers.title', descriptionKey: 'routerMeta.adminUsers.description' },
+  '/admin/shares': { titleKey: 'routerMeta.adminShares.title', descriptionKey: 'routerMeta.adminShares.description' },
+  '/admin/downloads': {
+    titleKey: 'routerMeta.adminDownloads.title',
+    descriptionKey: 'routerMeta.adminDownloads.description',
+  },
+  '/admin/tickets': {
+    titleKey: 'routerMeta.adminTickets.title',
+    descriptionKey: 'routerMeta.adminTickets.description',
+  },
+  '/admin/inquiries': {
+    titleKey: 'routerMeta.adminInquiries.title',
+    descriptionKey: 'routerMeta.adminInquiries.description',
+  },
+  '/admin/selections': {
+    titleKey: 'routerMeta.adminSelections.title',
+    descriptionKey: 'routerMeta.adminSelections.description',
+  },
+  '/admin/audit': { titleKey: 'routerMeta.adminAudit.title', descriptionKey: 'routerMeta.adminAudit.description' },
+  '/admin/settings': {
+    titleKey: 'routerMeta.adminSettings.title',
+    descriptionKey: 'routerMeta.adminSettings.description',
+  },
 };
 
 function RoutePageSkeleton({ title, description }: { title: string; description?: string }) {

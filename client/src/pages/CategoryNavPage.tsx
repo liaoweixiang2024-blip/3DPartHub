@@ -224,11 +224,12 @@ function ModelNavContent({
   catalogOf: (categoryId: string) => CatalogEntry | undefined;
   onModelCategoryClick: (categoryId: string) => void;
 }) {
+  const { t } = useTranslation();
   /** 组内第 index 个节点绑定到拓扑图对应卡位 */
   const nodesOf = (groupId: string, index: number) => nodesOfGroup(groupId)[index];
-  // 区块标题 = 后台分组名（group.name），未配置回退默认文案
-  const groupName = (id: string, fallback: string) => groups.find((g) => g.id === id)?.name || fallback;
-  const { t } = useTranslation();
+  // 区块标题 = 后台分组名（group.name），未配置回退默认文案（默认文案再走 i18n）
+  const groupName = (id: string, fallback: string) =>
+    groups.find((g) => g.id === id)?.name || t(`frontMisc.categoryGroup.${id}`, { defaultValue: fallback });
   // 当前弹窗节点（groupId:index）；null = 关闭
   const [modalKey, setModalKey] = useState<string | null>(null);
   // 桌面拓扑管线几何（按 DOM 实测；ResizeObserver 跟随布局变化重算，线永远贴合卡位）

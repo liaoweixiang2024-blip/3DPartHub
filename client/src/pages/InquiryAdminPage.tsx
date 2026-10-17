@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
@@ -69,12 +70,13 @@ function AdminSearchField({
   value: string;
   onClear: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <SearchField
       inputProps={inputProps}
       value={value}
       onClear={onClear}
-      placeholder="搜索询价、客户、产品"
+      placeholder={t('inquiryAdminPage.searchPlaceholder')}
       className="md:w-72 md:shrink-0"
     />
   );
@@ -142,6 +144,7 @@ function InquiryStatusTabs({
   counts: Record<string, number>;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <ResponsiveSectionTabs
       tabs={tabs.map((tab) => ({
@@ -152,8 +155,8 @@ function InquiryStatusTabs({
       }))}
       value={active}
       onChange={onChange}
-      mobileTitle="询价状态"
-      countUnit="单"
+      mobileTitle={t('inquiryAdminPage.statusTitle')}
+      countUnit={t('inquiryAdminPage.countUnit')}
     />
   );
 }
@@ -186,6 +189,7 @@ function InquiryAdminToolbar({
 }
 
 function DesktopContent() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const {
@@ -204,10 +208,10 @@ function DesktopContent() {
   const statuses = business.inquiryStatuses;
   const statusTabs = useMemo(
     () => [
-      { value: 'all', label: '全部' },
+      { value: 'all', label: t('inquiryAdminPage.tabAll') },
       ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label })),
     ],
-    [statuses],
+    [statuses, t],
   );
   const { counts, refreshCounts } = useInquiryStatusCounts(statusTabs, search);
 
@@ -229,9 +233,9 @@ function DesktopContent() {
     try {
       await deleteInquiry(targetId);
       await Promise.all([refreshInquiries(), refreshCounts()]);
-      toast('询价单已删除', 'success');
+      toast(t('inquiryAdminPage.inquiryDeleted'), 'success');
     } catch (err) {
-      toast(getErrorMessage(err, '删除询价单失败'), 'error');
+      toast(getErrorMessage(err, t('inquiryAdminPage.deleteFail')), 'error');
     } finally {
       setDeletingId(null);
     }
@@ -244,9 +248,9 @@ function DesktopContent() {
         refreshInquiries(undefined, { revalidate: true }),
         refreshCounts(undefined, { revalidate: true }),
       ]);
-      toast('询价数据已刷新', 'success');
+      toast(t('inquiryAdminPage.dataRefreshed'), 'success');
     } catch (err) {
-      toast(getErrorMessage(err, '刷新询价失败'), 'error');
+      toast(getErrorMessage(err, t('inquiryAdminPage.refreshFail')), 'error');
     }
   }
 
@@ -255,7 +259,7 @@ function DesktopContent() {
     try {
       const exportItems = await fetchAllFilteredInquiries(statusFilter, search);
       if (exportItems.length === 0) {
-        toast('当前条件下没有可导出的询价单', 'error');
+        toast(t('inquiryAdminPage.exportEmpty'), 'error');
         return;
       }
       const suffix = [statusFilter === 'all' ? 'all' : statusFilter, search ? 'search' : ''].filter(Boolean).join('_');
@@ -264,9 +268,9 @@ function DesktopContent() {
         statuses,
         filenamePrefix: `inquiries_${suffix}`,
       });
-      toast(`已导出 ${exportItems.length} 条询价单，已按产品明细展开`, 'success');
+      toast(t('inquiryAdminPage.exportSuccess', { count: exportItems.length }), 'success');
     } catch (err) {
-      toast(getErrorMessage(err, '导出询价单失败'), 'error');
+      toast(getErrorMessage(err, t('inquiryAdminPage.exportFail')), 'error');
     } finally {
       setExporting(false);
     }
@@ -275,8 +279,8 @@ function DesktopContent() {
   return (
     <>
       <AdminManagementPage
-        title="询价处理工作台"
-        description="管理员入口：处理客户询价、分配销售、导出业务明细"
+        title={t('inquiryAdminPage.title')}
+        description={t('inquiryAdminPage.description')}
         actions={
           <>
             <AdminButton
@@ -286,7 +290,7 @@ function DesktopContent() {
               iconClassName={exporting ? 'animate-pulse' : ''}
               variant="secondary"
             >
-              {exporting ? '导出中...' : '导出明细'}
+              {exporting ? t('inquiryAdminPage.exporting') : t('inquiryAdminPage.exportDetail')}
             </AdminButton>
             <AdminRefreshButton onRefresh={handleRefresh} />
           </>
@@ -307,24 +311,24 @@ function DesktopContent() {
           {isLoading ? (
             <AdminLoadingState
               variant="table"
-              label="询价单加载中"
+              label={t('inquiryAdminPage.loadingLabel')}
               tableColumns="88px minmax(0,1fr) 170px 120px 150px"
               tableCells={['chip', 'title', 'text', 'text', 'action']}
             />
           ) : inquiries.length === 0 ? (
             <AdminEmptyState
               icon="request_quote"
-              title="暂无待处理询价"
-              description="切换状态、搜索客户/产品，或等待客户提交新的选型询价。"
+              title={t('inquiryAdminPage.emptyTitle')}
+              description={t('inquiryAdminPage.emptyDesc')}
             />
           ) : (
             <div className="max-h-[calc(100vh-260px)] overflow-auto rounded-xl border border-outline-variant/15 bg-surface-container-low">
               <AdminGridHeader columns={INQUIRY_ADMIN_GRID_COLUMNS} className="gap-4 px-6">
-                <span>状态</span>
-                <span>客户 / 询价内容</span>
-                <span>联系方式</span>
-                <span>提交时间</span>
-                <span className="text-right">处理</span>
+                <span>{t('inquiryAdminPage.colStatus')}</span>
+                <span>{t('inquiryAdminPage.colCustomer')}</span>
+                <span>{t('inquiryAdminPage.colContact')}</span>
+                <span>{t('inquiryAdminPage.colTime')}</span>
+                <span className="text-right">{t('inquiryAdminPage.colAction')}</span>
               </AdminGridHeader>
               {inquiries.map((inq) => {
                 const info = statusInfo(statuses, inq.status);
@@ -333,31 +337,38 @@ function DesktopContent() {
                     <span
                       className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${info.color || ''} ${info.bg || ''}`}
                     >
-                      {info.label}
+                      {t(`inquiryStatus.${inq.status}.label`, { defaultValue: info.label })}
                     </span>
                     <div className="min-w-0">
                       <p className={ADMIN_ROW_TITLE_CLASS}>
                         {inq.items.map((it) => it.modelNo || it.productName).join('、')}
                       </p>
                       <p className={ADMIN_ROW_META_CLASS}>
-                        客户：{inq.contactName || inq.user?.username || '—'} · {inq.items.length} 项
-                        {inq.salesAssignee ? ` · 对接：${inq.salesAssignee.username}` : ''}
+                        {t('inquiryAdminPage.customerMeta', {
+                          name: inq.contactName || inq.user?.username || '—',
+                          count: inq.items.length,
+                        })}
+                        {inq.salesAssignee
+                          ? t('inquiryAdminPage.assigneeSuffix', { name: inq.salesAssignee.username })
+                          : ''}
                       </p>
                     </div>
                     <div className="min-w-0 text-xs text-on-surface-variant">
-                      <p className="truncate">{inq.contactPhone || inq.user?.phone || '未留电话'}</p>
-                      <p className="mt-0.5 truncate">{inq.company || inq.user?.company || '未留公司'}</p>
+                      <p className="truncate">{inq.contactPhone || inq.user?.phone || t('inquiryAdminPage.noPhone')}</p>
+                      <p className="mt-0.5 truncate">
+                        {inq.company || inq.user?.company || t('inquiryAdminPage.noCompany')}
+                      </p>
                     </div>
                     <span className="text-xs text-on-surface-variant">
                       {new Date(inq.createdAt).toLocaleDateString('zh-CN')}
                     </span>
                     <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
                       <AdminButton onClick={() => navigate(`/admin/inquiries/${inq.id}`)} size="sm" variant="tonal">
-                        处理
+                        {t('inquiryAdminPage.actionHandle')}
                       </AdminButton>
                       {inq.status !== 'cancelled' && inq.status !== 'rejected' ? (
                         <AdminButton onClick={() => setAssignmentTarget(inq)} size="sm" variant="success">
-                          {inq.salesAssignee ? '改派' : '分配销售'}
+                          {inq.salesAssignee ? t('inquiryAdminPage.reassign') : t('inquiryAdminPage.assignSales')}
                         </AdminButton>
                       ) : null}
                       <AdminButton
@@ -366,7 +377,7 @@ function DesktopContent() {
                         size="sm"
                         variant="danger"
                       >
-                        {deletingId === inq.id ? '删除中' : '删除记录'}
+                        {deletingId === inq.id ? t('inquiryAdminPage.deleting') : t('inquiryAdminPage.deleteRecord')}
                       </AdminButton>
                     </div>
                   </AdminGridRow>
@@ -381,9 +392,9 @@ function DesktopContent() {
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDeleteInquiry}
-        title="确认删除询价单"
-        description="删除后询价单、产品明细和沟通记录将不可恢复。"
-        confirmLabel="删除询价单"
+        title={t('inquiryAdminPage.confirmTitle')}
+        description={t('inquiryAdminPage.confirmDesc')}
+        confirmLabel={t('inquiryAdminPage.confirmDeleteLabel')}
       />
       <InquirySalesAssignmentDialog
         open={Boolean(assignmentTarget)}
@@ -401,6 +412,7 @@ function DesktopContent() {
 }
 
 function MobileContent() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { toast } = useToast();
   const {
@@ -419,10 +431,10 @@ function MobileContent() {
   const statuses = business.inquiryStatuses;
   const statusTabs = useMemo(
     () => [
-      { value: 'all', label: '全部' },
+      { value: 'all', label: t('inquiryAdminPage.tabAll') },
       ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label })),
     ],
-    [statuses],
+    [statuses, t],
   );
   const { counts, refreshCounts } = useInquiryStatusCounts(statusTabs, search);
 
@@ -444,9 +456,9 @@ function MobileContent() {
     try {
       await deleteInquiry(targetId);
       await Promise.all([refreshInquiries(), refreshCounts()]);
-      toast('询价单已删除', 'success');
+      toast(t('inquiryAdminPage.inquiryDeleted'), 'success');
     } catch (err) {
-      toast(getErrorMessage(err, '删除询价单失败'), 'error');
+      toast(getErrorMessage(err, t('inquiryAdminPage.deleteFail')), 'error');
     } finally {
       setDeletingId(null);
     }
@@ -459,9 +471,9 @@ function MobileContent() {
         refreshInquiries(undefined, { revalidate: true }),
         refreshCounts(undefined, { revalidate: true }),
       ]);
-      toast('询价数据已刷新', 'success');
+      toast(t('inquiryAdminPage.dataRefreshed'), 'success');
     } catch (err) {
-      toast(getErrorMessage(err, '刷新询价失败'), 'error');
+      toast(getErrorMessage(err, t('inquiryAdminPage.refreshFail')), 'error');
     }
   }
 
@@ -470,7 +482,7 @@ function MobileContent() {
     try {
       const exportItems = await fetchAllFilteredInquiries(statusFilter, search);
       if (exportItems.length === 0) {
-        toast('当前条件下没有可导出的询价单', 'error');
+        toast(t('inquiryAdminPage.exportEmpty'), 'error');
         return;
       }
       const suffix = [statusFilter === 'all' ? 'all' : statusFilter, search ? 'search' : ''].filter(Boolean).join('_');
@@ -479,9 +491,9 @@ function MobileContent() {
         statuses,
         filenamePrefix: `inquiries_${suffix}`,
       });
-      toast(`已导出 ${exportItems.length} 条询价单，已按产品明细展开`, 'success');
+      toast(t('inquiryAdminPage.exportSuccess', { count: exportItems.length }), 'success');
     } catch (err) {
-      toast(getErrorMessage(err, '导出询价单失败'), 'error');
+      toast(getErrorMessage(err, t('inquiryAdminPage.exportFail')), 'error');
     } finally {
       setExporting(false);
     }
@@ -490,8 +502,8 @@ function MobileContent() {
   return (
     <>
       <AdminManagementPage
-        title="询价处理工作台"
-        description="管理员入口：处理客户询价、分配销售、导出业务明细"
+        title={t('inquiryAdminPage.title')}
+        description={t('inquiryAdminPage.description')}
         actions={
           <>
             <AdminIconButton
@@ -499,9 +511,13 @@ function MobileContent() {
               disabled={exporting || isLoading}
               icon="download"
               iconClassName={exporting ? 'animate-pulse' : ''}
-              aria-label={exporting ? '正在导出询价单' : '导出询价单'}
+              aria-label={exporting ? t('inquiryAdminPage.ariaExporting') : t('inquiryAdminPage.ariaExport')}
             />
-            <AdminRefreshButton onRefresh={handleRefresh} ariaLabel="刷新询价数据" mobileIconOnly />
+            <AdminRefreshButton
+              onRefresh={handleRefresh}
+              ariaLabel={t('inquiryAdminPage.ariaRefresh')}
+              mobileIconOnly
+            />
           </>
         }
         toolbar={
@@ -518,12 +534,12 @@ function MobileContent() {
       >
         <div key={statusFilter} className="admin-tab-panel">
           {isLoading ? (
-            <AdminLoadingState variant="list" rows={5} label="询价单加载中" />
+            <AdminLoadingState variant="list" rows={5} label={t('inquiryAdminPage.loadingLabel')} />
           ) : inquiries.length === 0 ? (
             <AdminEmptyState
               icon="request_quote"
-              title="暂无待处理询价"
-              description="切换状态、搜索客户/产品，或等待客户提交新的选型询价。"
+              title={t('inquiryAdminPage.emptyTitle')}
+              description={t('inquiryAdminPage.emptyDesc')}
             />
           ) : (
             <div className="flex flex-col gap-2.5">
@@ -539,7 +555,7 @@ function MobileContent() {
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${info.color || ''} ${info.bg || ''}`}
                       >
-                        {info.label}
+                        {t(`inquiryStatus.${inq.status}.label`, { defaultValue: info.label })}
                       </span>
                       <span className="text-[10px] text-on-surface-variant">
                         {new Date(inq.createdAt).toLocaleDateString('zh-CN')}
@@ -550,8 +566,13 @@ function MobileContent() {
                     </p>
                     <div className="text-xs text-on-surface-variant">
                       <span className="block min-w-0 break-words">
-                        客户：{inq.contactName || inq.user?.username || '—'} · {inq.items.length} 项
-                        {inq.salesAssignee ? ` · ${inq.salesAssignee.username}跟进` : ''}
+                        {t('inquiryAdminPage.customerMeta', {
+                          name: inq.contactName || inq.user?.username || '—',
+                          count: inq.items.length,
+                        })}
+                        {inq.salesAssignee
+                          ? t('inquiryAdminPage.followBySuffix', { name: inq.salesAssignee.username })
+                          : ''}
                       </span>
                       <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5 border-t border-outline-variant/10 pt-3">
                         <AdminButton
@@ -562,7 +583,7 @@ function MobileContent() {
                           size="sm"
                           variant="tonal"
                         >
-                          处理
+                          {t('inquiryAdminPage.actionHandle')}
                         </AdminButton>
                         {inq.status !== 'cancelled' && inq.status !== 'rejected' ? (
                           <AdminButton
@@ -573,7 +594,7 @@ function MobileContent() {
                             size="sm"
                             variant="success"
                           >
-                            {inq.salesAssignee ? '改派' : '分配销售'}
+                            {inq.salesAssignee ? t('inquiryAdminPage.reassign') : t('inquiryAdminPage.assignSales')}
                           </AdminButton>
                         ) : null}
                         <AdminButton
@@ -585,7 +606,7 @@ function MobileContent() {
                           size="sm"
                           variant="danger"
                         >
-                          {deletingId === inq.id ? '删除中' : '删除记录'}
+                          {deletingId === inq.id ? t('inquiryAdminPage.deleting') : t('inquiryAdminPage.deleteRecord')}
                         </AdminButton>
                       </div>
                     </div>
@@ -601,9 +622,9 @@ function MobileContent() {
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDeleteInquiry}
-        title="确认删除询价单"
-        description="删除后询价单、产品明细和沟通记录将不可恢复。"
-        confirmLabel="删除询价单"
+        title={t('inquiryAdminPage.confirmTitle')}
+        description={t('inquiryAdminPage.confirmDesc')}
+        confirmLabel={t('inquiryAdminPage.confirmDeleteLabel')}
       />
       <InquirySalesAssignmentDialog
         open={Boolean(assignmentTarget)}
@@ -621,7 +642,8 @@ function MobileContent() {
 }
 
 export default function InquiryAdminPage() {
-  useDocumentTitle('询价处理工作台');
+  const { t } = useTranslation();
+  useDocumentTitle(t('inquiryAdminPage.title'));
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   return <AdminPageShell>{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>;

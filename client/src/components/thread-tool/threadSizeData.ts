@@ -3,6 +3,18 @@
  * Extracted from ThreadSizeToolPage for reuse and testability.
  */
 
+import { i18n } from '../../i18n';
+
+/** 分类筛选 label 的 i18n 键（复用现有 threadSize.categories.* 键，':' 换 '_'） */
+export function categoryFilterLabelKey(key: string) {
+  return `threadSize.categories.${key.replace(/:/g, '_')}`;
+}
+
+/** 渲染处翻译 CATEGORY_FILTERS label 的便捷方法（defaultValue 兜底管理员自定义/未初始化场景） */
+export function categoryFilterLabel(filter: { key: string; label: string }) {
+  return i18n.t(categoryFilterLabelKey(filter.key), { defaultValue: filter.label });
+}
+
 // ── Types ───────────────────────────────────────────────────────────
 
 export type ThreadFamily = 'metric' | 'metricH' | 'metricA' | 'metricC' | 'metricD' | 'g' | 'r' | 'npt' | 'jic';
@@ -163,10 +175,10 @@ export function entryToThreadSpec(entry: import('../../api/threadSize').ThreadSi
   if (data?.size && typeof data.majorMm === 'number') return data;
   return {
     family: (entry.family as ThreadFamily) || 'metric',
-    familyLabel: entry.secondary || entry.family || '螺纹',
+    familyLabel: entry.secondary || entry.family || i18n.t('threadTool.defaultFamilyLabel', { defaultValue: '螺纹' }),
     size: entry.primary,
     majorMm: firstNumber(entry.meta),
-    seal: entry.meta || '待确认',
+    seal: entry.meta || i18n.t('threadTool.sealUnconfirmed', { defaultValue: '待确认' }),
     note: entry.note,
   };
 }
@@ -289,7 +301,7 @@ export function commonPipeNameAliases(value: string) {
 
 export function threadPitchText(spec: ThreadSpec) {
   if (spec.pitchMm) return `${spec.pitchMm} mm`;
-  return `${spec.tpi} 牙/英寸`;
+  return i18n.t('threadTool.tpiText', { defaultValue: '{{tpi}} 牙/英寸', tpi: spec.tpi });
 }
 
 export function pitchToMm(spec: ThreadSpec) {
@@ -325,8 +337,13 @@ export function threadInnerReference(spec: ThreadSpec) {
   if (!pitch) return '-';
   const minor = threadInnerValue(spec);
   if (!minor) return '-';
-  if (spec.family === 'r' || spec.family === 'npt') return `${minor.toFixed(2)} mm（基准位置）`;
-  if (spec.family === 'jic') return `${minor.toFixed(2)} mm（UN/UNF 参考小径）`;
+  if (spec.family === 'r' || spec.family === 'npt')
+    return i18n.t('threadTool.minorDatum', { defaultValue: '{{value}} mm（基准位置）', value: minor.toFixed(2) });
+  if (spec.family === 'jic')
+    return i18n.t('threadTool.minorUnfRef', {
+      defaultValue: '{{value}} mm（UN/UNF 参考小径）',
+      value: minor.toFixed(2),
+    });
   return `${minor.toFixed(2)} mm`;
 }
 
@@ -346,14 +363,14 @@ export function threadAngleText(spec: ThreadSpec) {
 }
 
 export function threadTaperText(spec: ThreadSpec) {
-  if (spec.family === 'metricH') return '直牙，H型密封';
-  if (spec.family === 'metricA') return '直牙，A型密封';
-  if (spec.family === 'metricC') return '直牙，C型密封';
-  if (spec.family === 'metricD') return '直牙，D型密封';
-  if (spec.family === 'r') return '1:16 锥管';
-  if (spec.family === 'npt') return '1:16 锥管';
-  if (spec.family === 'jic') return '直牙，37°锥面';
-  return '直牙';
+  if (spec.family === 'metricH') return i18n.t('threadTool.taperMetricH', { defaultValue: '直牙，H型密封' });
+  if (spec.family === 'metricA') return i18n.t('threadTool.taperMetricA', { defaultValue: '直牙，A型密封' });
+  if (spec.family === 'metricC') return i18n.t('threadTool.taperMetricC', { defaultValue: '直牙，C型密封' });
+  if (spec.family === 'metricD') return i18n.t('threadTool.taperMetricD', { defaultValue: '直牙，D型密封' });
+  if (spec.family === 'r') return i18n.t('threadTool.taperTaper1to16', { defaultValue: '1:16 锥管' });
+  if (spec.family === 'npt') return i18n.t('threadTool.taperTaper1to16', { defaultValue: '1:16 锥管' });
+  if (spec.family === 'jic') return i18n.t('threadTool.taperJic37', { defaultValue: '直牙，37°锥面' });
+  return i18n.t('threadTool.taperParallel', { defaultValue: '直牙' });
 }
 
 // ── Measurement query parsing ────────────────────────────────────────
@@ -420,7 +437,7 @@ export function parseMeasurementQuery(value: string): MeasurementQuery {
   if (tpiMatch) {
     tpi = Number(tpiMatch[1] || tpiMatch[2]);
     pitchMm = 25.4 / tpi;
-    pitchLabel = `${tpi} 牙/英寸`;
+    pitchLabel = i18n.t('threadTool.tpiText', { defaultValue: '{{tpi}} 牙/英寸', tpi });
   }
 
   const used = new Set<number>();
@@ -436,7 +453,7 @@ export function parseMeasurementQuery(value: string): MeasurementQuery {
       if (pitchValue >= 4) {
         tpi = pitchValue;
         pitchMm = 25.4 / pitchValue;
-        pitchLabel = `${pitchValue} 牙/英寸`;
+        pitchLabel = i18n.t('threadTool.tpiText', { defaultValue: '{{tpi}} 牙/英寸', tpi: pitchValue });
       } else {
         pitchMm = pitchValue;
         pitchLabel = `${pitchValue} mm`;
@@ -455,7 +472,7 @@ export function parseMeasurementQuery(value: string): MeasurementQuery {
       if (pitchValue >= 4) {
         tpi = pitchValue;
         pitchMm = 25.4 / pitchValue;
-        pitchLabel = `${pitchValue} 牙/英寸`;
+        pitchLabel = i18n.t('threadTool.tpiText', { defaultValue: '{{tpi}} 牙/英寸', tpi: pitchValue });
       } else {
         pitchMm = pitchValue;
         pitchLabel = `${pitchValue} mm`;

@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { lazy, memo, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import useSWR, { mutate as swrMutate } from 'swr';
 import useSWRInfinite from 'swr/infinite';
@@ -90,6 +91,7 @@ function useDebouncedValue<T>(value: T, delay = 300) {
 }
 
 function UploadModalFallback({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4"
@@ -102,14 +104,14 @@ function UploadModalFallback({ onClose }: { onClose: () => void }) {
           <Icon name="progress_activity" size={20} className="animate-spin" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-on-surface">上传面板加载中</p>
-          <p className="mt-0.5 text-xs text-on-surface-variant">正在准备文件选择和转换队列。</p>
+          <p className="text-sm font-semibold text-on-surface">{t('modelAdminPage.uploadLoadingTitle')}</p>
+          <p className="mt-0.5 text-xs text-on-surface-variant">{t('modelAdminPage.uploadLoadingDesc')}</p>
         </div>
         <button
           type="button"
           onClick={onClose}
           className="grid h-9 w-9 shrink-0 place-items-center rounded-sm text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-          aria-label="关闭上传面板"
+          aria-label={t('modelAdminPage.closeUploadPanel')}
         >
           <Icon name="close" size={18} />
         </button>
@@ -378,6 +380,7 @@ function DeletedModelsPanel({
   purging: boolean;
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
   const hasItems = items.length > 0;
   const actionBusy = purging || restoringSelected;
 
@@ -387,17 +390,23 @@ function DeletedModelsPanel({
         {hasItems && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2">
             <span className="text-xs text-on-surface-variant">
-              已加载 <span className="font-bold text-primary-container">{items.length}</span> / {total}
-              {selectedCount > 0 && <span>，已选 {selectedCount}</span>}
+              <Trans
+                i18nKey="modelAdminPage.loadedOfTotalCompact"
+                values={{ loaded: items.length, total }}
+                components={{ strong: <span className="font-bold text-primary-container" /> }}
+              />
+              {selectedCount > 0 && (
+                <Trans i18nKey="modelAdminPage.selectedCompact" values={{ count: selectedCount }} />
+              )}
             </span>
             <div className="flex flex-wrap items-center gap-2">
               <AdminButton onClick={onToggleSelectLoaded} disabled={actionBusy} size="sm" variant="secondary">
-                {allLoadedSelected ? '取消' : '全选'}
+                {allLoadedSelected ? t('modelAdminPage.deselect') : t('modelAdminPage.selectAll')}
               </AdminButton>
               {selectedCount > 0 && (
                 <>
                   <AdminButton onClick={onClearSelection} disabled={actionBusy} size="sm" variant="secondary">
-                    取消选择
+                    {t('modelAdminPage.clearSelection')}
                   </AdminButton>
                   <AdminButton
                     onClick={onRestoreSelected}
@@ -405,15 +414,15 @@ function DeletedModelsPanel({
                     size="sm"
                     variant="tonal"
                   >
-                    {restoringSelected ? '恢复中' : '恢复选中'}
+                    {restoringSelected ? t('modelAdminPage.restoring') : t('modelAdminPage.restoreSelected')}
                   </AdminButton>
                   <AdminButton onClick={onPurgeSelected} disabled={actionBusy} size="sm" variant="danger">
-                    彻底删除
+                    {t('modelAdminPage.permanentDelete')}
                   </AdminButton>
                 </>
               )}
               <AdminButton onClick={onClearAll} disabled={actionBusy || total === 0} size="sm" variant="danger">
-                清空回收站
+                {t('modelAdminPage.emptyRecycleBin')}
               </AdminButton>
             </div>
           </div>
@@ -430,7 +439,7 @@ function DeletedModelsPanel({
                 checked={selectedIds.has(model.model_id)}
                 onChange={() => onToggleSelect(model.model_id)}
                 className="mt-3 h-4 w-4 shrink-0 accent-primary-container"
-                aria-label={`选择 ${model.name}`}
+                aria-label={t('modelAdminPage.selectAria', { name: model.name })}
               />
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-surface-container-highest text-on-surface-variant">
                 <Icon name="delete_sweep" size={18} />
@@ -440,12 +449,12 @@ function DeletedModelsPanel({
                   {model.name}
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-on-surface-variant">
-                  <span>{model.category || '未分类'}</span>
+                  <span>{model.category || t('modelAdminPage.uncategorized')}</span>
                   <span className="font-mono">{model.format?.toUpperCase()}</span>
                   <span className="font-mono">{formatSize(model.original_size)}</span>
                 </div>
                 <p className="mt-1 text-[10px] text-on-surface-variant">
-                  删除时间：{formatModelDateTime(model.deleted_at)}
+                  {t('modelAdminPage.deletedAt', { time: formatModelDateTime(model.deleted_at) })}
                 </p>
               </div>
               <button
@@ -453,12 +462,12 @@ function DeletedModelsPanel({
                 disabled={actionBusy || !model.can_restore || restoringId === model.model_id}
                 className="shrink-0 rounded-sm border border-primary/25 px-2.5 py-1.5 text-xs font-medium text-primary disabled:cursor-not-allowed disabled:border-outline-variant/15 disabled:text-on-surface-variant/45"
               >
-                {restoringId === model.model_id ? '恢复中' : '恢复'}
+                {restoringId === model.model_id ? t('modelAdminPage.restoring') : t('modelAdminPage.restore')}
               </button>
             </div>
             {!model.can_restore && (
               <p className="mt-2 rounded-sm bg-error/10 px-2 py-1 text-[11px] text-error">
-                原始文件不存在，不能直接恢复。
+                {t('modelAdminPage.cannotRestore')}
               </p>
             )}
           </div>
@@ -469,8 +478,8 @@ function DeletedModelsPanel({
         {items.length === 0 && (
           <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
             <Icon name="delete_sweep" size={38} className="mb-3 text-on-surface-variant/25" />
-            <p className="text-sm font-medium text-on-surface">回收站是空的</p>
-            <p className="mt-1 text-xs text-on-surface-variant">已删除模型会暂存在这里，确认无误后可恢复。</p>
+            <p className="text-sm font-medium text-on-surface">{t('modelAdminPage.recycleBinEmpty')}</p>
+            <p className="mt-1 text-xs text-on-surface-variant">{t('modelAdminPage.recycleBinEmptyDesc')}</p>
           </div>
         )}
       </div>
@@ -482,12 +491,17 @@ function DeletedModelsPanel({
       {items.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/10 bg-surface-container-low px-4 py-3">
           <div className="text-sm text-on-surface-variant">
-            已加载 <strong className="text-primary">{items.length}</strong> / 共{' '}
-            <strong className="text-primary">{total}</strong> 个已删除模型
+            <Trans
+              i18nKey="modelAdminPage.deletedLoadedCount"
+              values={{ loaded: items.length, total }}
+              components={{ strong: <strong className="text-primary" /> }}
+            />
             {selectedCount > 0 && (
-              <>
-                ，已选择 <strong className="text-primary">{selectedCount}</strong> 个
-              </>
+              <Trans
+                i18nKey="modelAdminPage.selectedInline"
+                values={{ count: selectedCount }}
+                components={{ strong: <strong className="text-primary" /> }}
+              />
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -498,7 +512,7 @@ function DeletedModelsPanel({
               size="sm"
               variant="secondary"
             >
-              {allLoadedSelected ? '取消全选' : '全选已加载'}
+              {allLoadedSelected ? t('modelAdminPage.deselectAllLoaded') : t('modelAdminPage.selectAllLoaded')}
             </AdminButton>
             {selectedCount > 0 && (
               <>
@@ -509,7 +523,7 @@ function DeletedModelsPanel({
                   size="sm"
                   variant="secondary"
                 >
-                  取消选择
+                  {t('modelAdminPage.clearSelection')}
                 </AdminButton>
                 <AdminButton
                   onClick={onRestoreSelected}
@@ -518,10 +532,10 @@ function DeletedModelsPanel({
                   size="sm"
                   variant="tonal"
                 >
-                  {restoringSelected ? '恢复中...' : '恢复选中'}
+                  {restoringSelected ? t('modelAdminPage.restoringEllipsis') : t('modelAdminPage.restoreSelected')}
                 </AdminButton>
                 <AdminButton onClick={onPurgeSelected} disabled={actionBusy} icon="delete" size="sm" variant="danger">
-                  彻底删除
+                  {t('modelAdminPage.permanentDelete')}
                 </AdminButton>
               </>
             )}
@@ -532,7 +546,7 @@ function DeletedModelsPanel({
               size="sm"
               variant="danger"
             >
-              清空回收站
+              {t('modelAdminPage.emptyRecycleBin')}
             </AdminButton>
           </div>
         </div>
@@ -548,15 +562,17 @@ function DeletedModelsPanel({
                 disabled={items.length === 0 || actionBusy}
                 onChange={onToggleSelectLoaded}
                 className="h-4 w-4 accent-primary-container"
-                aria-label={allLoadedSelected ? '取消选择已显示模型' : '选择已显示模型'}
+                aria-label={
+                  allLoadedSelected ? t('modelAdminPage.deselectVisibleAria') : t('modelAdminPage.selectVisibleAria')
+                }
               />
             </AdminTableHeadCell>
-            <AdminTableHeadCell>模型</AdminTableHeadCell>
-            <AdminTableHeadCell>分类</AdminTableHeadCell>
-            <AdminTableHeadCell>格式</AdminTableHeadCell>
-            <AdminTableHeadCell>大小</AdminTableHeadCell>
-            <AdminTableHeadCell>删除时间</AdminTableHeadCell>
-            <AdminTableHeadCell className="text-right">操作</AdminTableHeadCell>
+            <AdminTableHeadCell>{t('modelAdminPage.columnModel')}</AdminTableHeadCell>
+            <AdminTableHeadCell>{t('modelAdminPage.columnCategory')}</AdminTableHeadCell>
+            <AdminTableHeadCell>{t('modelAdminPage.columnFormat')}</AdminTableHeadCell>
+            <AdminTableHeadCell>{t('modelAdminPage.columnSize')}</AdminTableHeadCell>
+            <AdminTableHeadCell>{t('modelAdminPage.columnDeletedAt')}</AdminTableHeadCell>
+            <AdminTableHeadCell className="text-right">{t('modelAdminPage.columnActions')}</AdminTableHeadCell>
           </AdminTableHeadRow>
         </thead>
         <tbody>
@@ -572,7 +588,7 @@ function DeletedModelsPanel({
                   checked={selectedIds.has(model.model_id)}
                   onChange={() => onToggleSelect(model.model_id)}
                   className="h-4 w-4 accent-primary-container"
-                  aria-label={`选择 ${model.name}`}
+                  aria-label={t('modelAdminPage.selectAria', { name: model.name })}
                 />
               </td>
               <td className="px-4 py-3">
@@ -583,12 +599,15 @@ function DeletedModelsPanel({
                   <div className="min-w-0">
                     <p className="block max-w-[360px] truncate font-medium text-on-surface">{model.name}</p>
                     <p className="mt-0.5 max-w-[360px] truncate text-xs text-on-surface-variant">
-                      原文件：{model.original_name || '—'}
+                      {t('modelAdminPage.originalFileLabel')}
+                      {model.original_name || '—'}
                     </p>
                   </div>
                 </div>
               </td>
-              <td className="px-4 py-3 text-on-surface-variant">{model.category || '未分类'}</td>
+              <td className="px-4 py-3 text-on-surface-variant">
+                {model.category || t('modelAdminPage.uncategorized')}
+              </td>
               <td className="px-4 py-3">
                 <span className="rounded-sm bg-surface-container-highest px-1.5 py-0.5 font-mono text-xs">
                   {model.format?.toUpperCase() || '—'}
@@ -603,7 +622,11 @@ function DeletedModelsPanel({
                   className="inline-flex items-center gap-1.5 rounded-sm border border-primary/25 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-outline-variant/15 disabled:text-on-surface-variant/45 disabled:hover:bg-transparent"
                 >
                   <Icon name="restore" size={14} />
-                  {restoringId === model.model_id ? '恢复中...' : model.can_restore ? '恢复' : '文件缺失'}
+                  {restoringId === model.model_id
+                    ? t('modelAdminPage.restoringEllipsis')
+                    : model.can_restore
+                      ? t('modelAdminPage.restore')
+                      : t('modelAdminPage.fileMissing')}
                 </button>
               </td>
             </tr>
@@ -618,7 +641,7 @@ function DeletedModelsPanel({
           {items.length === 0 && (
             <tr>
               <td colSpan={7} className="px-4 py-12 text-center text-on-surface-variant">
-                回收站是空的
+                {t('modelAdminPage.recycleBinEmpty')}
               </td>
             </tr>
           )}
@@ -668,6 +691,7 @@ function FailedModelsPanel({
   allLoadedSelected: boolean;
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
   const actionBusy = clearing;
 
   if (compact) {
@@ -676,25 +700,31 @@ function FailedModelsPanel({
         {items.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2">
             <span className="text-xs text-on-surface-variant">
-              已加载 <span className="font-bold text-primary-container">{items.length}</span> / {total}
-              {selectedCount > 0 && <span>，已选 {selectedCount}</span>}
+              <Trans
+                i18nKey="modelAdminPage.loadedOfTotalCompact"
+                values={{ loaded: items.length, total }}
+                components={{ strong: <span className="font-bold text-primary-container" /> }}
+              />
+              {selectedCount > 0 && (
+                <Trans i18nKey="modelAdminPage.selectedCompact" values={{ count: selectedCount }} />
+              )}
             </span>
             <div className="flex flex-wrap items-center gap-2">
               <AdminButton onClick={onToggleSelectLoaded} disabled={actionBusy} size="sm" variant="secondary">
-                {allLoadedSelected ? '取消' : '全选'}
+                {allLoadedSelected ? t('modelAdminPage.deselect') : t('modelAdminPage.selectAll')}
               </AdminButton>
               {selectedCount > 0 && (
                 <>
                   <AdminButton onClick={onClearSelection} disabled={actionBusy} size="sm" variant="secondary">
-                    取消选择
+                    {t('modelAdminPage.clearSelection')}
                   </AdminButton>
                   <AdminButton onClick={onClearSelected} disabled={actionBusy} size="sm" variant="danger">
-                    清理选中
+                    {t('modelAdminPage.clearSelected')}
                   </AdminButton>
                 </>
               )}
               <AdminButton onClick={onClearAll} disabled={actionBusy || total === 0} size="sm" variant="danger">
-                一键清理
+                {t('modelAdminPage.clearAll')}
               </AdminButton>
             </div>
           </div>
@@ -711,7 +741,7 @@ function FailedModelsPanel({
                 checked={selectedIds.has(model.model_id)}
                 onChange={() => onToggleSelect(model.model_id)}
                 className="mt-3 h-4 w-4 shrink-0 accent-primary-container"
-                aria-label={`选择 ${model.name}`}
+                aria-label={t('modelAdminPage.selectAria', { name: model.name })}
               />
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-error/10 text-error">
                 <Icon name="error" size={18} />
@@ -721,7 +751,7 @@ function FailedModelsPanel({
                   {model.name}
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-on-surface-variant">
-                  <span>{model.category || '未分类'}</span>
+                  <span>{model.category || t('modelAdminPage.uncategorized')}</span>
                   <span className="font-mono">{model.format?.toUpperCase()}</span>
                   <span className="font-mono">{formatSize(model.original_size)}</span>
                 </div>
@@ -737,14 +767,14 @@ function FailedModelsPanel({
                   disabled={actionBusy}
                   className="rounded-sm border border-primary/25 px-2.5 py-1.5 text-xs font-medium text-primary disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  导入产物
+                  {t('modelAdminPage.importArtifacts')}
                 </button>
                 <button
                   onClick={() => onClearOne(model)}
                   disabled={actionBusy || clearingId === model.model_id}
                   className="rounded-sm border border-error/25 px-2.5 py-1.5 text-xs font-medium text-error disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {clearingId === model.model_id ? '清理中' : '清理'}
+                  {clearingId === model.model_id ? t('modelAdminPage.clearing') : t('modelAdminPage.clear')}
                 </button>
               </div>
             </div>
@@ -756,8 +786,8 @@ function FailedModelsPanel({
         {items.length === 0 && (
           <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
             <Icon name="check_circle" size={38} className="mb-3 text-on-surface-variant/25" />
-            <p className="text-sm font-medium text-on-surface">没有转换失败的模型</p>
-            <p className="mt-1 text-xs text-on-surface-variant">转换失败 3 次的模型会出现在这里，可一键清理。</p>
+            <p className="text-sm font-medium text-on-surface">{t('modelAdminPage.noFailedModels')}</p>
+            <p className="mt-1 text-xs text-on-surface-variant">{t('modelAdminPage.noFailedModelsDesc')}</p>
           </div>
         )}
       </div>
@@ -769,12 +799,17 @@ function FailedModelsPanel({
       {items.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/10 bg-surface-container-low px-4 py-3">
           <div className="text-sm text-on-surface-variant">
-            已加载 <strong className="text-primary">{items.length}</strong> / 共{' '}
-            <strong className="text-primary">{total}</strong> 个转换失败模型
+            <Trans
+              i18nKey="modelAdminPage.failedLoadedCount"
+              values={{ loaded: items.length, total }}
+              components={{ strong: <strong className="text-primary" /> }}
+            />
             {selectedCount > 0 && (
-              <>
-                ，已选择 <strong className="text-primary">{selectedCount}</strong> 个
-              </>
+              <Trans
+                i18nKey="modelAdminPage.selectedInline"
+                values={{ count: selectedCount }}
+                components={{ strong: <strong className="text-primary" /> }}
+              />
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -785,7 +820,7 @@ function FailedModelsPanel({
               size="sm"
               variant="secondary"
             >
-              {allLoadedSelected ? '取消全选' : '全选已加载'}
+              {allLoadedSelected ? t('modelAdminPage.deselectAllLoaded') : t('modelAdminPage.selectAllLoaded')}
             </AdminButton>
             {selectedCount > 0 && (
               <>
@@ -796,10 +831,10 @@ function FailedModelsPanel({
                   size="sm"
                   variant="secondary"
                 >
-                  取消选择
+                  {t('modelAdminPage.clearSelection')}
                 </AdminButton>
                 <AdminButton onClick={onClearSelected} disabled={actionBusy} icon="delete" size="sm" variant="danger">
-                  清理选中
+                  {t('modelAdminPage.clearSelected')}
                 </AdminButton>
               </>
             )}
@@ -810,7 +845,7 @@ function FailedModelsPanel({
               size="sm"
               variant="danger"
             >
-              一键清理全部
+              {t('modelAdminPage.clearAllFull')}
             </AdminButton>
           </div>
         </div>
@@ -826,14 +861,16 @@ function FailedModelsPanel({
                 disabled={items.length === 0 || actionBusy}
                 onChange={onToggleSelectLoaded}
                 className="h-4 w-4 accent-primary-container"
-                aria-label={allLoadedSelected ? '取消选择已显示模型' : '选择已显示模型'}
+                aria-label={
+                  allLoadedSelected ? t('modelAdminPage.deselectVisibleAria') : t('modelAdminPage.selectVisibleAria')
+                }
               />
             </AdminTableHeadCell>
-            <AdminTableHeadCell>模型</AdminTableHeadCell>
-            <AdminTableHeadCell className="min-w-[220px]">失败原因</AdminTableHeadCell>
-            <AdminTableHeadCell>分类</AdminTableHeadCell>
-            <AdminTableHeadCell>大小</AdminTableHeadCell>
-            <AdminTableHeadCell className="text-right">操作</AdminTableHeadCell>
+            <AdminTableHeadCell>{t('modelAdminPage.columnModel')}</AdminTableHeadCell>
+            <AdminTableHeadCell className="min-w-[220px]">{t('modelAdminPage.columnFailReason')}</AdminTableHeadCell>
+            <AdminTableHeadCell>{t('modelAdminPage.columnCategory')}</AdminTableHeadCell>
+            <AdminTableHeadCell>{t('modelAdminPage.columnSize')}</AdminTableHeadCell>
+            <AdminTableHeadCell className="text-right">{t('modelAdminPage.columnActions')}</AdminTableHeadCell>
           </AdminTableHeadRow>
         </thead>
         <tbody>
@@ -849,7 +886,7 @@ function FailedModelsPanel({
                   checked={selectedIds.has(model.model_id)}
                   onChange={() => onToggleSelect(model.model_id)}
                   className="h-4 w-4 accent-primary-container"
-                  aria-label={`选择 ${model.name}`}
+                  aria-label={t('modelAdminPage.selectAria', { name: model.name })}
                 />
               </td>
               <td className="px-4 py-3">
@@ -860,17 +897,19 @@ function FailedModelsPanel({
                   <div className="min-w-0">
                     <p className="block max-w-[320px] truncate font-medium text-on-surface">{model.name}</p>
                     <p className="mt-0.5 max-w-[320px] truncate text-xs text-on-surface-variant">
-                      {formatModelDateTime(model.created_at)} 上传
+                      {t('modelAdminPage.uploadedAt', { time: formatModelDateTime(model.created_at) })}
                     </p>
                   </div>
                 </div>
               </td>
               <td className="max-w-[320px] px-4 py-3">
                 <p className="line-clamp-2 break-all text-xs text-error" title={model.error || undefined}>
-                  {model.error || '未记录失败原因'}
+                  {model.error || t('modelAdminPage.noFailReason')}
                 </p>
               </td>
-              <td className="px-4 py-3 text-on-surface-variant">{model.category || '未分类'}</td>
+              <td className="px-4 py-3 text-on-surface-variant">
+                {model.category || t('modelAdminPage.uncategorized')}
+              </td>
               <td className="px-4 py-3 font-mono text-on-surface-variant">{formatSize(model.original_size)}</td>
               <td className="px-4 py-3 text-right">
                 <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -879,14 +918,14 @@ function FailedModelsPanel({
                     disabled={actionBusy}
                     className="rounded-sm border border-primary/25 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    导入产物
+                    {t('modelAdminPage.importArtifacts')}
                   </button>
                   <button
                     onClick={() => onClearOne(model)}
                     disabled={actionBusy || clearingId === model.model_id}
                     className="rounded-sm border border-error/25 px-2.5 py-1.5 text-xs font-medium text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {clearingId === model.model_id ? '清理中...' : '清理'}
+                    {clearingId === model.model_id ? t('modelAdminPage.clearingEllipsis') : t('modelAdminPage.clear')}
                   </button>
                 </div>
               </td>
@@ -902,7 +941,7 @@ function FailedModelsPanel({
           {items.length === 0 && (
             <tr>
               <td colSpan={6} className="px-4 py-12 text-center text-on-surface-variant">
-                没有转换失败的模型
+                {t('modelAdminPage.noFailedModels')}
               </td>
             </tr>
           )}
@@ -923,6 +962,7 @@ function ModelCategoryFilter({
   options: { id: string; label: string }[];
   allValue: string;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -936,7 +976,7 @@ function ModelCategoryFilter({
   }, [open]);
 
   const selected = options.find((o) => o.id === value);
-  const label = selected ? selected.label : '全部分类';
+  const label = selected ? selected.label : t('modelAdminPage.allCategories');
 
   return (
     <div className="relative" ref={ref}>
@@ -958,7 +998,7 @@ function ModelCategoryFilter({
             className={`flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors ${value === allValue ? 'font-medium text-primary-container bg-primary-container/10' : 'text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'}`}
           >
             <Icon name="category_all" size={14} />
-            全部分类
+            {t('modelAdminPage.allCategories')}
           </button>
           {options.map((opt) => (
             <button
@@ -995,6 +1035,7 @@ const ModelTableRow = memo(function ModelTableRow({
   onEdit,
   onDelete,
 }: ModelRowHandlers & { model: ServerModelListItem; selected: boolean }) {
+  const { t } = useTranslation();
   return (
     <tr className="border-b border-outline-variant/10 hover:bg-surface-container-high/50 transition-colors">
       <td className="px-4 py-3 align-middle">
@@ -1004,7 +1045,7 @@ const ModelTableRow = memo(function ModelTableRow({
           checked={selected}
           onChange={() => onToggleSelect(model.model_id)}
           className="h-4 w-4 accent-primary-container"
-          aria-label={`选择 ${model.name}`}
+          aria-label={t('modelAdminPage.selectAria', { name: model.name })}
         />
       </td>
       <td className="px-4 py-3">
@@ -1021,7 +1062,8 @@ const ModelTableRow = memo(function ModelTableRow({
             <span className="block truncate text-on-surface font-medium">{model.name}</span>
             {model.group && (
               <span className="text-[10px] text-primary font-medium">
-                {model.group.name} {model.group.is_primary ? '· 主版本' : ''} (共{model.group.variant_count}个)
+                {model.group.name} {model.group.is_primary ? t('modelAdminPage.primaryVersionDot') : ''}{' '}
+                {t('modelAdminPage.groupVariantCount', { count: model.group.variant_count })}
               </span>
             )}
           </div>
@@ -1054,21 +1096,21 @@ const ModelTableRow = memo(function ModelTableRow({
             className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-sm transition-colors border border-outline-variant/20"
           >
             <Icon name="open_in_new" size={14} />
-            查看
+            {t('modelAdminPage.view')}
           </Link>
           <button
             onClick={() => onEdit(model)}
             className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20"
           >
             <Icon name="settings" size={14} />
-            编辑
+            {t('common.edit')}
           </button>
           <button
             onClick={() => onDelete(model)}
             className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-error hover:bg-error/10 rounded-sm transition-colors border border-outline-variant/20"
           >
             <Icon name="close" size={14} />
-            删除
+            {t('common.delete')}
           </button>
         </div>
       </td>
@@ -1084,6 +1126,7 @@ const ModelCard = memo(function ModelCard({
   onEdit,
   onDelete,
 }: ModelRowHandlers & { model: ServerModelListItem; selected: boolean }) {
+  const { t } = useTranslation();
   return (
     <Link
       to={`/model/${model.model_id}`}
@@ -1106,7 +1149,7 @@ const ModelCard = memo(function ModelCard({
           checked={selected}
           onChange={() => onToggleSelect(model.model_id)}
           className="h-4 w-4 accent-primary-container"
-          aria-label={`选择 ${model.name}`}
+          aria-label={t('modelAdminPage.selectAria', { name: model.name })}
         />
       </div>
       <div className="h-20 w-20 shrink-0 overflow-hidden rounded-l-lg bg-surface-container-highest">
@@ -1118,7 +1161,9 @@ const ModelCard = memo(function ModelCard({
           <span className="text-[10px] font-mono bg-surface-container-highest px-1 py-0.5 rounded-sm">
             {model.format?.toUpperCase()}
           </span>
-          <span className="text-[10px] text-on-surface-variant break-words">{model.category || '未分类'}</span>
+          <span className="text-[10px] text-on-surface-variant break-words">
+            {model.category || t('modelAdminPage.uncategorized')}
+          </span>
           <span className="text-[10px] text-on-surface-variant font-mono">{formatSize(model.original_size)}</span>
         </div>
       </div>
@@ -1142,6 +1187,7 @@ const ModelCard = memo(function ModelCard({
 
 function DesktopContent() {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const {
     value: search,
     draftValue: searchInputValue,
@@ -1333,11 +1379,16 @@ function DesktopContent() {
       )
     : groups;
   const modelAdminTabs: ResponsiveSectionTab[] = [
-    { value: 'models', label: '全部模型', count: displayModelTotal, icon: 'inventory_2' },
-    { value: 'suggestions', label: '合并建议', count: suggestionCount, icon: 'merge_type' },
-    { value: 'groups', label: '已合并', count: mergedGroupCount, icon: 'category' },
-    { value: 'failed', label: '转换失败', count: failedModelCount, icon: 'error' },
-    { value: 'deleted', label: '回收站', count: deletedModelCount, icon: 'delete_sweep' },
+    { value: 'models', label: t('modelAdminPage.tabAllModels'), count: displayModelTotal, icon: 'inventory_2' },
+    {
+      value: 'suggestions',
+      label: t('modelAdminPage.tabMergeSuggestions'),
+      count: suggestionCount,
+      icon: 'merge_type',
+    },
+    { value: 'groups', label: t('modelAdminPage.tabMerged'), count: mergedGroupCount, icon: 'category' },
+    { value: 'failed', label: t('modelAdminPage.tabFailed'), count: failedModelCount, icon: 'error' },
+    { value: 'deleted', label: t('modelAdminPage.tabRecycleBin'), count: deletedModelCount, icon: 'delete_sweep' },
   ];
 
   useEffect(() => {
@@ -1390,7 +1441,7 @@ function DesktopContent() {
     setDeleting(true);
     try {
       await modelApi.delete(deleteTarget.model_id);
-      toast('已删除', 'success');
+      toast(t('modelAdminPage.deletedToast'), 'success');
       setSelectedModelIds((prev) => {
         const next = new Set(prev);
         next.delete(deleteTarget.model_id);
@@ -1399,7 +1450,7 @@ function DesktopContent() {
       refreshModelAdminData();
       setDeleteTarget(null);
     } catch {
-      toast('删除失败', 'error');
+      toast(t('modelAdminPage.deleteFailed'), 'error');
     } finally {
       setDeleting(false);
     }
@@ -1464,13 +1515,16 @@ function DesktopContent() {
             }
           : { modelIds },
       );
-      const warningText = result.warnings > 0 ? `，${result.warnings} 个文件清理警告` : '';
-      toast(`已删除 ${result.deleted} 个模型${warningText}`, result.warnings > 0 ? 'error' : 'success');
+      const warningText = result.warnings > 0 ? t('modelAdminPage.fileWarningInline', { count: result.warnings }) : '';
+      toast(
+        `${t('modelAdminPage.batchDeletedToast', { count: result.deleted })}${warningText}`,
+        result.warnings > 0 ? 'error' : 'success',
+      );
       clearSelectedModels();
       setBatchDeleteOpen(false);
       refreshModelAdminData();
     } catch {
-      toast('批量删除失败', 'error');
+      toast(t('modelAdminPage.batchDeleteFailed'), 'error');
     } finally {
       setBatchDeleting(false);
     }
@@ -1493,14 +1547,16 @@ function DesktopContent() {
       );
       const skipped = result.requested - result.updated;
       toast(
-        `已修改 ${result.updated} 个模型的分类${skipped > 0 ? `，${skipped} 个已在目标分类自动跳过` : ''}`,
+        `${t('modelAdminPage.categoryUpdatedToast', { count: result.updated })}${
+          skipped > 0 ? t('modelAdminPage.categorySkippedInline', { count: skipped }) : ''
+        }`,
         'success',
       );
       clearSelectedModels();
       setBatchCategoryOpen(false);
       refreshModelAdminData();
     } catch {
-      toast('批量修改分类失败', 'error');
+      toast(t('modelAdminPage.batchCategoryFailed'), 'error');
     } finally {
       setBatchCategorySaving(false);
     }
@@ -1510,10 +1566,10 @@ function DesktopContent() {
     setRestoringModelId(model.model_id);
     try {
       await modelApi.restore(model.model_id);
-      toast('模型已恢复', 'success');
+      toast(t('modelAdminPage.modelRestored'), 'success');
       refreshModelAdminData();
     } catch {
-      toast('恢复失败', 'error');
+      toast(t('modelAdminPage.restoreFailed'), 'error');
     } finally {
       setRestoringModelId(null);
     }
@@ -1522,7 +1578,7 @@ function DesktopContent() {
   const restoreSelectedDeletedModels = async () => {
     const targets = deletedModels.filter((model) => selectedDeletedModelIds.has(model.model_id) && model.can_restore);
     if (targets.length === 0) {
-      toast('选中的模型文件缺失，无法批量恢复', 'error');
+      toast(t('modelAdminPage.restoreSelectedMissing'), 'error');
       return;
     }
     setRestoringDeletedBatch(true);
@@ -1538,7 +1594,9 @@ function DesktopContent() {
         return next;
       });
       toast(
-        failed > 0 ? `已恢复 ${restoredIds.size} 个模型，${failed} 个恢复失败` : `已恢复 ${restoredIds.size} 个模型`,
+        failed > 0
+          ? t('modelAdminPage.restoredWithFailures', { count: restoredIds.size, failed })
+          : t('modelAdminPage.restoredCount', { count: restoredIds.size }),
         failed > 0 ? 'error' : 'success',
       );
       refreshModelAdminData();
@@ -1606,15 +1664,15 @@ function DesktopContent() {
     try {
       const result = await modelApi.clearFailed(ids);
       if (result.failed > 0) {
-        toast(`已清理 ${result.cleared} 个，${result.failed} 个清理失败`, 'error');
+        toast(t('modelAdminPage.clearedWithFailures', { cleared: result.cleared, failed: result.failed }), 'error');
       } else {
-        toast(`已清理 ${result.cleared} 个转换失败模型`, 'success');
+        toast(t('modelAdminPage.clearedCount', { count: result.cleared }), 'success');
       }
       clearSelectedFailedModels();
       setClearingFailedId(null);
       refreshModelAdminData();
     } catch {
-      toast('清理转换失败模型失败', 'error');
+      toast(t('modelAdminPage.clearFailedError'), 'error');
     } finally {
       setFailedClearRequest(null);
       setClearingFailed(false);
@@ -1624,24 +1682,24 @@ function DesktopContent() {
   const handleClearFailedOne = (model: FailedModelListItem) => {
     setFailedClearRequest({
       ids: [model.model_id],
-      title: '确认清理失败记录',
-      description: `将删除「${model.name}」的失败记录及其残留文件。`,
+      title: t('modelAdminPage.confirmClearOneTitle'),
+      description: t('modelAdminPage.confirmClearOneDesc', { name: model.name }),
     });
   };
 
   const handleClearFailedSelected = () => {
     setFailedClearRequest({
       ids: Array.from(selectedFailedModelIds),
-      title: '确认清理选中记录',
-      description: `将删除选中的 ${selectedFailedModelIds.size} 个转换失败模型及其残留文件。`,
+      title: t('modelAdminPage.confirmClearSelectedTitle'),
+      description: t('modelAdminPage.confirmClearSelectedDesc', { count: selectedFailedModelIds.size }),
     });
   };
 
   const handleClearFailedAll = () => {
     setFailedClearRequest({
       ids: [],
-      title: '一键清理全部失败记录',
-      description: `将删除全部 ${failedModelCount} 个转换失败模型及其残留文件。`,
+      title: t('modelAdminPage.confirmClearAllTitle'),
+      description: t('modelAdminPage.confirmClearAllDesc', { count: failedModelCount }),
     });
   };
 
@@ -1656,13 +1714,16 @@ function DesktopContent() {
     setPurgingDeleted(true);
     try {
       const result = await modelApi.purgeDeleted(mode === 'all' ? { all: true } : { modelIds });
-      const warningText = result.warnings > 0 ? `，${result.warnings} 个文件清理警告` : '';
-      toast(`已彻底删除 ${result.deleted} 个模型${warningText}`, result.warnings > 0 ? 'error' : 'success');
+      const warningText = result.warnings > 0 ? t('modelAdminPage.fileWarningInline', { count: result.warnings }) : '';
+      toast(
+        `${t('modelAdminPage.purgedToast', { count: result.deleted })}${warningText}`,
+        result.warnings > 0 ? 'error' : 'success',
+      );
       clearSelectedDeletedModels();
       setPurgeConfirmMode(null);
       refreshModelAdminData();
     } catch {
-      toast('彻底删除失败', 'error');
+      toast(t('modelAdminPage.purgeFailed'), 'error');
     } finally {
       setPurgingDeleted(false);
     }
@@ -1682,10 +1743,16 @@ function DesktopContent() {
       // 走 downloadBrowserBlob：同步 revokeObjectURL 会在浏览器异步读取 blob 前把 URL
       // 作废，模型包几十 MB 时下载到的是截断 zip（选型数据包导出同款坑已修）
       const { downloadBrowserBlob } = await import('../lib/browserDownload');
-      await downloadBrowserBlob(blob, `模型导出-${ids.length}个-${new Date().toISOString().slice(0, 10)}.zip`);
-      toast(`已导出 ${ids.length} 个模型（转换失败的模型不会包含在内）`, 'success');
+      await downloadBrowserBlob(
+        blob,
+        t('modelAdminPage.exportFileName', {
+          count: ids.length,
+          date: new Date().toISOString().slice(0, 10),
+        }),
+      );
+      toast(t('modelAdminPage.exportedToast', { count: ids.length }), 'success');
     } catch (err) {
-      toast(err instanceof Error ? err.message : '导出失败', 'error');
+      toast(err instanceof Error ? err.message : t('modelAdminPage.exportFailed'), 'error');
     } finally {
       setExportingSelection(false);
     }
@@ -1696,16 +1763,23 @@ function DesktopContent() {
       <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2">
         {models.length > 0 ? (
           <span className="shrink-0 whitespace-nowrap text-xs text-on-surface-variant">
-            已加载 <strong className="text-primary">{visibleModels.length}</strong> / 共{' '}
-            <strong className="text-primary">{displayModelTotal}</strong> 个模型
+            <Trans
+              i18nKey="modelAdminPage.modelsLoadedCount"
+              values={{ loaded: visibleModels.length, total: displayModelTotal }}
+              components={{ strong: <strong className="text-primary" /> }}
+            />
             {selectedAllMatching ? (
-              <>
-                ，已选择 <strong className="text-primary">全部匹配的 {selectedModelCount}</strong> 个
-              </>
+              <Trans
+                i18nKey="modelAdminPage.selectedAllMatchingInline"
+                values={{ count: selectedModelCount }}
+                components={{ strong: <strong className="text-primary" /> }}
+              />
             ) : selectedModelCount > 0 ? (
-              <>
-                ，已选择 <strong className="text-primary">{selectedModelCount}</strong> 个
-              </>
+              <Trans
+                i18nKey="modelAdminPage.selectedInline"
+                values={{ count: selectedModelCount }}
+                components={{ strong: <strong className="text-primary" /> }}
+              />
             ) : null}
           </span>
         ) : null}
@@ -1727,13 +1801,13 @@ function DesktopContent() {
                 size="sm"
                 variant="tonal"
               >
-                选择全部
+                {t('modelAdminPage.selectAllMatching')}
               </AdminButton>
             ) : null}
             {selectedModelCount > 0 ? (
               <>
                 <AdminButton onClick={clearSelectedModels} icon="close" size="sm" variant="secondary">
-                  取消选择
+                  {t('modelAdminPage.clearSelection')}
                 </AdminButton>
                 <AdminButton
                   onClick={handleExportSelected}
@@ -1742,7 +1816,11 @@ function DesktopContent() {
                   size="sm"
                   variant="tonal"
                 >
-                  {exportingSelection ? '导出中...' : `导出选中${selectedModelCount > 100 ? '（前100）' : ''}`}
+                  {exportingSelection
+                    ? t('modelAdminPage.exporting')
+                    : selectedModelCount > 100
+                      ? t('modelAdminPage.exportSelectedFirst100')
+                      : t('modelAdminPage.exportSelected')}
                 </AdminButton>
                 <AdminButton
                   onClick={() => setBatchCategoryOpen(true)}
@@ -1751,7 +1829,7 @@ function DesktopContent() {
                   size="sm"
                   variant="tonal"
                 >
-                  批量改分类
+                  {t('modelAdminPage.batchChangeCategory')}
                 </AdminButton>
                 <AdminButton
                   onClick={() => setBatchDeleteOpen(true)}
@@ -1760,7 +1838,7 @@ function DesktopContent() {
                   size="sm"
                   variant="danger"
                 >
-                  批量删除
+                  {t('modelAdminPage.batchDelete')}
                 </AdminButton>
               </>
             ) : null}
@@ -1769,11 +1847,14 @@ function DesktopContent() {
       </div>
     ) : null;
   const purgeConfirmSelectedCount = purgeConfirmMode === 'all' ? deletedModelCount : selectedDeletedCount;
-  const purgeConfirmTitle = purgeConfirmMode === 'all' ? '确认清空回收站' : '确认彻底删除';
+  const purgeConfirmTitle =
+    purgeConfirmMode === 'all'
+      ? t('modelAdminPage.confirmPurgeAllTitle')
+      : t('modelAdminPage.confirmPurgeSelectedTitle');
   const purgeConfirmDescription =
     purgeConfirmMode === 'all'
-      ? `将彻底删除回收站中的 ${purgeConfirmSelectedCount} 个模型及相关文件，此操作不可恢复。`
-      : `将彻底删除选中的 ${purgeConfirmSelectedCount} 个模型及相关文件，此操作不可恢复。`;
+      ? t('modelAdminPage.confirmPurgeAllDesc', { count: purgeConfirmSelectedCount })
+      : t('modelAdminPage.confirmPurgeSelectedDesc', { count: purgeConfirmSelectedCount });
 
   const toggleSelect = (name: string) => {
     setSelectedNames((prev) => {
@@ -1807,13 +1888,13 @@ function DesktopContent() {
           modelIds: s.models.map((m) => m.id),
         }));
       const result = await modelApi.batchMerge(items);
-      toast(`已合并 ${result.merged} 组`, 'success');
+      toast(t('modelAdminPage.mergedToast', { count: result.merged }), 'success');
       setSelectedNames(new Set());
       sugMutate();
       suggestionCountMutate();
       groupMutate();
     } catch {
-      toast('合并失败', 'error');
+      toast(t('modelAdminPage.mergeFailed'), 'error');
     } finally {
       setMerging(false);
     }
@@ -1827,18 +1908,18 @@ function DesktopContent() {
   const handleSaveGroup = async (group: ModelGroupItem) => {
     const name = groupNameDraft.trim();
     if (!name) {
-      toast('分组名称不能为空', 'error');
+      toast(t('modelAdminPage.groupNameRequired'), 'error');
       return;
     }
     setGroupAction(`rename:${group.id}`);
     try {
       await modelApi.updateModelGroup(group.id, { name });
-      toast('分组已更新', 'success');
+      toast(t('modelAdminPage.groupUpdated'), 'success');
       setEditingGroupId(null);
       groupMutate();
       mutate();
     } catch {
-      toast('更新分组失败', 'error');
+      toast(t('modelAdminPage.groupUpdateFailed'), 'error');
     } finally {
       setGroupAction(null);
     }
@@ -1848,11 +1929,11 @@ function DesktopContent() {
     setGroupAction(`primary:${group.id}:${modelId}`);
     try {
       await modelApi.updateModelGroup(group.id, { primaryId: modelId });
-      toast('已设置主版本', 'success');
+      toast(t('modelAdminPage.primarySet'), 'success');
       groupMutate();
       mutate();
     } catch {
-      toast('设置主版本失败', 'error');
+      toast(t('modelAdminPage.primarySetFailed'), 'error');
     } finally {
       setGroupAction(null);
     }
@@ -1863,13 +1944,13 @@ function DesktopContent() {
     setGroupAction(`remove:${group.id}:${modelId}`);
     try {
       await modelApi.removeModelFromGroup(group.id, modelId);
-      toast('已移出分组', 'success');
+      toast(t('modelAdminPage.removedFromGroup'), 'success');
       groupMutate();
       sugMutate();
       suggestionCountMutate();
       mutate();
     } catch {
-      toast('移出分组失败', 'error');
+      toast(t('modelAdminPage.removeFromGroupFailed'), 'error');
     } finally {
       setGroupAction(null);
     }
@@ -1881,14 +1962,16 @@ function DesktopContent() {
     try {
       const result = await modelApi.deleteModelGroup(group.id);
       const msg =
-        result.dissolvedModels > 1 ? `分组已解散，${result.dissolvedModels} 个模型已恢复独立显示` : '分组已解散';
+        result.dissolvedModels > 1
+          ? t('modelAdminPage.groupDissolvedMulti', { count: result.dissolvedModels })
+          : t('modelAdminPage.groupDissolved');
       toast(msg, 'success');
       groupMutate();
       sugMutate();
       suggestionCountMutate();
       mutate();
     } catch {
-      toast('解散分组失败', 'error');
+      toast(t('modelAdminPage.dissolveGroupFailed'), 'error');
     } finally {
       setGroupAction(null);
     }
@@ -1898,8 +1981,8 @@ function DesktopContent() {
     <>
       <UploadModalLoader open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={refreshModelAdminData} />
       <AdminManagementPage
-        title="模型管理"
-        description="统一维护模型文件、分类归属、预览重建和同名模型合并关系。"
+        title={t('modelAdminPage.pageTitle')}
+        description={t('modelAdminPage.pageDescription')}
         actions={
           <div className="flex items-center gap-2">
             {/* neutral 变体 = 灰底实色（保存设置按钮已保存态同款配色），尺寸与「上传模型」完全一致 */}
@@ -1909,7 +1992,7 @@ function DesktopContent() {
               className="w-[122px]"
               variant="neutral"
             >
-              预览运维
+              {t('modelAdminPage.previewOps')}
             </AdminButton>
             <AdminButton
               onClick={() => setImportModelsOpen(true)}
@@ -1917,7 +2000,7 @@ function DesktopContent() {
               className="w-[122px]"
               variant="neutral"
             >
-              导入模型
+              {t('modelAdminPage.importModels')}
             </AdminButton>
             <AdminButton
               onClick={() => setUploadOpen(true)}
@@ -1928,7 +2011,7 @@ function DesktopContent() {
               className="w-[122px]"
               variant="primary"
             >
-              上传模型
+              {t('modelAdminPage.uploadModels')}
             </AdminButton>
           </div>
         }
@@ -1940,7 +2023,7 @@ function DesktopContent() {
                   tabs={modelAdminTabs}
                   value={activeTab}
                   onChange={(value) => handleTabChange(value as ModelAdminTab)}
-                  mobileTitle="模型管理分类"
+                  mobileTitle={t('modelAdminPage.mobileTabsTitle')}
                 />
               </div>
               {modelToolbarControls}
@@ -1977,14 +2060,14 @@ function DesktopContent() {
               }}
               placeholder={
                 activeTab === 'models'
-                  ? '搜索模型...'
+                  ? t('modelAdminPage.searchModelsPlaceholder')
                   : activeTab === 'suggestions'
-                    ? '搜索建议...'
+                    ? t('modelAdminPage.searchSuggestionsPlaceholder')
                     : activeTab === 'groups'
-                      ? '搜索分组...'
+                      ? t('modelAdminPage.searchGroupsPlaceholder')
                       : activeTab === 'failed'
-                        ? '搜索转换失败模型...'
-                        : '搜索已删除模型...'
+                        ? t('modelAdminPage.searchFailedPlaceholder')
+                        : t('modelAdminPage.searchDeletedPlaceholder')
               }
             />
           </div>
@@ -1993,18 +2076,23 @@ function DesktopContent() {
         <div className="admin-tab-panel min-h-0">
           {activeTab === 'suggestions' ? (
             sugLoading ? (
-              <AdminLoadingState variant="list" label="同名合并建议加载中" />
+              <AdminLoadingState variant="list" label={t('modelAdminPage.suggestionLoading')} />
             ) : (
               <div className={`${MODEL_ADMIN_PANEL_CLASS} p-3`}>
                 {filteredSuggestions.length > 0 && (
                   <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-surface-container-low rounded-sm border border-outline-variant/10">
                     <span className="text-sm text-on-surface">
-                      已加载 <strong className="text-primary">{filteredSuggestions.length}</strong> / 共{' '}
-                      <strong className="text-primary">{suggestionCount}</strong> 组建议
+                      <Trans
+                        i18nKey="modelAdminPage.suggestionsLoadedCount"
+                        values={{ loaded: filteredSuggestions.length, total: suggestionCount }}
+                        components={{ strong: <strong className="text-primary" /> }}
+                      />
                       {selectedSuggestionCount > 0 && (
-                        <>
-                          ，已选择 <strong className="text-primary">{selectedSuggestionCount}</strong> 组
-                        </>
+                        <Trans
+                          i18nKey="modelAdminPage.selectedGroupsInline"
+                          values={{ count: selectedSuggestionCount }}
+                          components={{ strong: <strong className="text-primary" /> }}
+                        />
                       )}
                     </span>
                     <div className="flex flex-wrap items-center gap-2">
@@ -2013,7 +2101,9 @@ function DesktopContent() {
                         className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-on-surface-variant bg-surface-container-high rounded-sm hover:text-on-surface hover:bg-surface-container-highest transition-colors"
                       >
                         <Icon name="checklist" size={16} />
-                        {allSuggestionsSelected ? '取消全选' : '全选已加载'}
+                        {allSuggestionsSelected
+                          ? t('modelAdminPage.deselectAllLoaded')
+                          : t('modelAdminPage.selectAllLoaded')}
                       </button>
                       {selectedSuggestionCount > 0 && (
                         <button
@@ -2021,7 +2111,7 @@ function DesktopContent() {
                           className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-on-surface-variant bg-surface-container-high rounded-sm hover:text-on-surface hover:bg-surface-container-highest transition-colors"
                         >
                           <Icon name="close" size={16} />
-                          取消选择
+                          {t('modelAdminPage.clearSelection')}
                         </button>
                       )}
                       <button
@@ -2030,7 +2120,9 @@ function DesktopContent() {
                         className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 disabled:opacity-50"
                       >
                         <Icon name="merge" size={16} />
-                        {merging ? '合并中...' : `合并选中 (${selectedSuggestionCount} 组)`}
+                        {merging
+                          ? t('modelAdminPage.mergingEllipsis')
+                          : t('modelAdminPage.mergeSelected', { count: selectedSuggestionCount })}
                       </button>
                     </div>
                   </div>
@@ -2051,7 +2143,7 @@ function DesktopContent() {
                         />
                         <span className="text-sm font-medium text-on-surface flex-1">{group.name}</span>
                         <span className="text-[10px] bg-surface-container-highest px-2 py-0.5 rounded-sm text-on-surface-variant font-mono">
-                          {group.count} 个同名
+                          {t('modelAdminPage.sameNameCount', { count: group.count })}
                         </span>
                       </div>
                       <div className="px-4 pb-3 flex gap-2 overflow-x-auto">
@@ -2079,17 +2171,15 @@ function DesktopContent() {
                 {filteredSuggestions.length === 0 && (
                   <div className="flex min-h-[320px] flex-col items-center justify-center text-center">
                     <Icon name="merge" size={38} className="mb-3 text-on-surface-variant/25" />
-                    <p className="text-sm font-medium text-on-surface">没有需要合并的同名模型</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">
-                      这里会保持和全部模型一致的内容区块，后续有建议时直接显示列表。
-                    </p>
+                    <p className="text-sm font-medium text-on-surface">{t('modelAdminPage.noSuggestions')}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">{t('modelAdminPage.noSuggestionsDesc')}</p>
                   </div>
                 )}
               </div>
             )
           ) : activeTab === 'failed' ? (
             failedLoading ? (
-              <AdminLoadingState variant="table" label="转换失败模型加载中" />
+              <AdminLoadingState variant="table" label={t('modelAdminPage.failedLoading')} />
             ) : (
               <FailedModelsPanel
                 items={failedModels}
@@ -2113,7 +2203,7 @@ function DesktopContent() {
             )
           ) : activeTab === 'deleted' ? (
             deletedLoading ? (
-              <AdminLoadingState variant="table" label="回收站加载中" />
+              <AdminLoadingState variant="table" label={t('modelAdminPage.recycleBinLoading')} />
             ) : (
               <DeletedModelsPanel
                 items={deletedModels}
@@ -2139,7 +2229,7 @@ function DesktopContent() {
             )
           ) : activeTab === 'groups' ? (
             groupsLoading ? (
-              <AdminLoadingState variant="list" label="模型分组加载中" />
+              <AdminLoadingState variant="list" label={t('modelAdminPage.groupLoading')} />
             ) : (
               <div className={`${MODEL_ADMIN_PANEL_CLASS} p-3`}>
                 <div className="space-y-2">
@@ -2185,7 +2275,10 @@ function DesktopContent() {
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-semibold text-on-surface">{group.name}</p>
                                 <p className="text-[11px] text-on-surface-variant">
-                                  {group.model_count} 个版本 · 主版本：{group.primary?.name || '未设置'}
+                                  {t('modelAdminPage.groupMeta', {
+                                    count: group.model_count,
+                                    primary: group.primary?.name || t('modelAdminPage.primaryNotSet'),
+                                  })}
                                 </p>
                               </div>
                             )}
@@ -2199,13 +2292,13 @@ function DesktopContent() {
                                   className="flex items-center gap-1.5 rounded-sm bg-primary-container px-3 py-2 text-xs font-medium text-on-primary disabled:opacity-50"
                                 >
                                   <Icon name="save" size={14} />
-                                  保存
+                                  {t('common.save')}
                                 </button>
                                 <button
                                   onClick={() => setEditingGroupId(null)}
                                   className="rounded-sm border border-outline-variant/20 px-3 py-2 text-xs text-on-surface-variant hover:text-on-surface"
                                 >
-                                  取消
+                                  {t('common.cancel')}
                                 </button>
                               </>
                             ) : (
@@ -2214,7 +2307,7 @@ function DesktopContent() {
                                 className="flex items-center gap-1.5 rounded-sm border border-outline-variant/20 px-3 py-2 text-xs text-on-surface-variant hover:text-on-surface"
                               >
                                 <Icon name="edit" size={14} />
-                                重命名
+                                {t('modelAdminPage.rename')}
                               </button>
                             )}
                             <button
@@ -2223,7 +2316,7 @@ function DesktopContent() {
                               className="flex items-center gap-1.5 rounded-sm border border-error/20 px-3 py-2 text-xs text-error hover:bg-error/10 disabled:opacity-50"
                             >
                               <Icon name="close" size={14} />
-                              解散
+                              {t('modelAdminPage.dissolve')}
                             </button>
                           </div>
                         </div>
@@ -2247,14 +2340,22 @@ function DesktopContent() {
                                       </p>
                                       {isPrimary && (
                                         <span className="shrink-0 rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                                          主版本
+                                          {t('modelAdminPage.primaryBadge')}
                                         </span>
                                       )}
                                     </div>
                                     <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-on-surface-variant">
                                       <span>{formatSize(model.originalSize)}</span>
-                                      <span>原始时间：{formatModelDateTime(model.fileModifiedAt)}</span>
-                                      <span>上传时间：{formatModelDateTime(model.createdAt)}</span>
+                                      <span>
+                                        {t('modelAdminPage.originalTime', {
+                                          time: formatModelDateTime(model.fileModifiedAt),
+                                        })}
+                                      </span>
+                                      <span>
+                                        {t('modelAdminPage.uploadTime', {
+                                          time: formatModelDateTime(model.createdAt),
+                                        })}
+                                      </span>
                                     </div>
                                   </div>
                                   <div className="flex shrink-0 items-center gap-2">
@@ -2264,7 +2365,7 @@ function DesktopContent() {
                                       rel="noopener"
                                       className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-primary"
                                     >
-                                      查看
+                                      {t('modelAdminPage.view')}
                                     </Link>
                                     {!isPrimary && (
                                       <button
@@ -2272,7 +2373,7 @@ function DesktopContent() {
                                         disabled={groupAction === `primary:${group.id}:${model.id}`}
                                         className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-primary disabled:opacity-50"
                                       >
-                                        设为主版本
+                                        {t('modelAdminPage.setPrimary')}
                                       </button>
                                     )}
                                     <button
@@ -2282,7 +2383,7 @@ function DesktopContent() {
                                       }
                                       className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-error disabled:opacity-40"
                                     >
-                                      移出
+                                      {t('modelAdminPage.removeFromGroupShort')}
                                     </button>
                                   </div>
                                 </div>
@@ -2297,13 +2398,15 @@ function DesktopContent() {
                 {groupData?.length === 0 && (
                   <div className="flex min-h-[320px] flex-col items-center justify-center text-center">
                     <Icon name="folder_special" size={38} className="mb-3 text-on-surface-variant/25" />
-                    <p className="text-sm font-medium text-on-surface">还没有已合并的模型分组</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">合并完成后会在这里统一维护主版本和分组关系。</p>
+                    <p className="text-sm font-medium text-on-surface">{t('modelAdminPage.noGroups')}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">{t('modelAdminPage.noGroupsDesc')}</p>
                   </div>
                 )}
                 {(groupData?.length ?? 0) > 0 && filteredGroups?.length === 0 && (
                   <div className="flex min-h-[200px] flex-col items-center justify-center text-center">
-                    <p className="text-sm text-on-surface-variant">没有匹配「{groupSearch}」的分组</p>
+                    <p className="text-sm text-on-surface-variant">
+                      {t('modelAdminPage.noMatchingGroups', { query: groupSearch })}
+                    </p>
                   </div>
                 )}
               </div>
@@ -2311,7 +2414,7 @@ function DesktopContent() {
           ) : isLoadingInitial ? (
             <AdminLoadingState
               variant="table"
-              label="模型列表加载中"
+              label={t('modelAdminPage.modelListLoading')}
               tableColumns="48px minmax(260px,1fr) 140px 80px 96px 80px 180px"
               tableCells={['checkbox', 'mediaTitle', 'text', 'chip', 'text', 'chip', 'actions']}
             />
@@ -2331,15 +2434,21 @@ function DesktopContent() {
                           disabled={visibleModelIds.length === 0}
                           onChange={toggleSelectVisibleModels}
                           className="h-4 w-4 accent-primary-container"
-                          aria-label={allVisibleModelsSelected ? '取消选择已显示模型' : '选择已显示模型'}
+                          aria-label={
+                            allVisibleModelsSelected
+                              ? t('modelAdminPage.deselectVisibleAria')
+                              : t('modelAdminPage.selectVisibleAria')
+                          }
                         />
                       </AdminTableHeadCell>
-                      <AdminTableHeadCell>模型</AdminTableHeadCell>
-                      <AdminTableHeadCell className="w-44">分类</AdminTableHeadCell>
-                      <AdminTableHeadCell className="w-24">格式</AdminTableHeadCell>
-                      <AdminTableHeadCell className="w-28">大小</AdminTableHeadCell>
-                      <AdminTableHeadCell className="w-20">图纸</AdminTableHeadCell>
-                      <AdminTableHeadCell className="w-64 text-right">操作</AdminTableHeadCell>
+                      <AdminTableHeadCell>{t('modelAdminPage.columnModel')}</AdminTableHeadCell>
+                      <AdminTableHeadCell className="w-44">{t('modelAdminPage.columnCategory')}</AdminTableHeadCell>
+                      <AdminTableHeadCell className="w-24">{t('modelAdminPage.columnFormat')}</AdminTableHeadCell>
+                      <AdminTableHeadCell className="w-28">{t('modelAdminPage.columnSize')}</AdminTableHeadCell>
+                      <AdminTableHeadCell className="w-20">{t('modelAdminPage.columnDrawing')}</AdminTableHeadCell>
+                      <AdminTableHeadCell className="w-64 text-right">
+                        {t('modelAdminPage.columnActions')}
+                      </AdminTableHeadCell>
                     </AdminTableHeadRow>
                   </thead>
                   <tbody>
@@ -2367,7 +2476,7 @@ function DesktopContent() {
                     {models.length === 0 && (
                       <tr>
                         <td colSpan={7} className="px-4 py-12 text-center text-on-surface-variant">
-                          没有找到模型
+                          {t('modelAdminPage.noModelsFound')}
                         </td>
                       </tr>
                     )}
@@ -2390,13 +2499,23 @@ function DesktopContent() {
             else void handleDeleteGroup(groupConfirm.group);
           }}
           icon={groupConfirm?.type === 'delete' ? 'close' : 'logout'}
-          title={groupConfirm?.type === 'delete' ? '确认解散分组' : '确认移出分组'}
+          title={
+            groupConfirm?.type === 'delete'
+              ? t('modelAdminPage.confirmDissolveTitle')
+              : t('modelAdminPage.confirmRemoveTitle')
+          }
           description={
             groupConfirm?.type === 'delete'
-              ? `确定解散「${groupConfirm.group.name}」吗？模型文件不会删除，只会取消合并关系。`
-              : '确定将该模型移出当前合并分组吗？模型不会被删除。'
+              ? t('modelAdminPage.confirmDissolveDesc', { name: groupConfirm.group.name })
+              : t('modelAdminPage.confirmRemoveDesc')
           }
-          confirmLabel={groupAction ? '处理中...' : groupConfirm?.type === 'delete' ? '确认解散' : '确认移出'}
+          confirmLabel={
+            groupAction
+              ? t('modelAdminPage.processing')
+              : groupConfirm?.type === 'delete'
+                ? t('modelAdminPage.confirmDissolve')
+                : t('modelAdminPage.confirmRemove')
+          }
           confirmDisabled={Boolean(groupAction)}
         />
         <ConfirmDialog
@@ -2411,7 +2530,13 @@ function DesktopContent() {
           icon="delete_sweep"
           title={purgeConfirmTitle}
           description={purgeConfirmDescription}
-          confirmLabel={purgingDeleted ? '删除中...' : purgeConfirmMode === 'all' ? '清空回收站' : '彻底删除'}
+          confirmLabel={
+            purgingDeleted
+              ? t('modelAdminPage.deleting')
+              : purgeConfirmMode === 'all'
+                ? t('modelAdminPage.emptyRecycleBin')
+                : t('modelAdminPage.permanentDelete')
+          }
           confirmDisabled={purgingDeleted || purgeConfirmSelectedCount <= 0}
         />
         <ConfirmDialog
@@ -2426,7 +2551,7 @@ function DesktopContent() {
           icon="delete_sweep"
           title={failedClearRequest?.title ?? ''}
           description={failedClearRequest?.description ?? ''}
-          confirmLabel={clearingFailed ? '清理中...' : '确认清理'}
+          confirmLabel={clearingFailed ? t('modelAdminPage.clearingEllipsis') : t('modelAdminPage.confirmClear')}
           confirmDisabled={clearingFailed}
         />
         <EditDialog
@@ -2465,23 +2590,25 @@ function DesktopContent() {
                 onClick={(e) => e.stopPropagation()}
                 className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-6"
               >
-                <h3 className="font-headline text-lg font-semibold text-on-surface mb-2">确认删除</h3>
+                <h3 className="font-headline text-lg font-semibold text-on-surface mb-2">
+                  {t('modelAdminPage.confirmDeleteTitle')}
+                </h3>
                 <p className="text-sm text-on-surface-variant mb-6">
-                  确定要删除「{deleteTarget.name}」吗？删除后会从前台隐藏，保留恢复能力。
+                  {t('modelAdminPage.confirmDeleteDesc', { name: deleteTarget.name })}
                 </p>
                 <div className="flex justify-end gap-3">
                   <button
                     onClick={() => setDeleteTarget(null)}
                     className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
                   >
-                    取消
+                    {t('common.cancel')}
                   </button>
                   <button
                     onClick={handleDelete}
                     disabled={deleting}
                     className="px-4 py-2 bg-error text-white rounded-sm text-sm hover:bg-error/90 transition-colors disabled:opacity-50"
                   >
-                    {deleting ? '删除中...' : '删除'}
+                    {deleting ? t('modelAdminPage.deleting') : t('common.delete')}
                   </button>
                 </div>
               </motion.div>
@@ -2504,11 +2631,12 @@ function DesktopContent() {
                 onClick={(e) => e.stopPropagation()}
                 className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-6"
               >
-                <h3 className="font-headline text-lg font-semibold text-on-surface mb-2">确认批量删除</h3>
+                <h3 className="font-headline text-lg font-semibold text-on-surface mb-2">
+                  {t('modelAdminPage.confirmBatchDeleteTitle')}
+                </h3>
                 <p className="text-sm text-on-surface-variant mb-6">
-                  {selectedAllMatching && ' 本次会按当前分类和搜索条件删除全部匹配模型。'}
-                  确定要删除已选择的 {selectedModelCount}{' '}
-                  个模型吗？删除后会从前台隐藏并进入回收站，可在文件仍存在时恢复。
+                  {selectedAllMatching && ` ${t('modelAdminPage.batchDeleteAllMatchingNote')} `}
+                  {t('modelAdminPage.confirmBatchDeleteDesc', { count: selectedModelCount })}
                 </p>
                 <div className="flex justify-end gap-3">
                   <button
@@ -2516,14 +2644,14 @@ function DesktopContent() {
                     disabled={batchDeleting}
                     className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-50"
                   >
-                    取消
+                    {t('common.cancel')}
                   </button>
                   <button
                     onClick={handleBatchDelete}
                     disabled={batchDeleting}
                     className="px-4 py-2 bg-error text-white rounded-sm text-sm hover:bg-error/90 transition-colors disabled:opacity-50"
                   >
-                    {batchDeleting ? '删除中...' : '确认删除'}
+                    {batchDeleting ? t('modelAdminPage.deleting') : t('modelAdminPage.confirmDeleteLabel')}
                   </button>
                 </div>
               </motion.div>
@@ -2548,6 +2676,7 @@ function DesktopContent() {
 
 function MobileContent() {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const {
     value: search,
     draftValue: searchInputValue,
@@ -2738,11 +2867,16 @@ function MobileContent() {
         : Math.max(deletedTotal, deletedGlobalCount)
       : deletedGlobalCount;
   const modelAdminTabs: ResponsiveSectionTab[] = [
-    { value: 'models', label: '全部模型', count: displayModelTotalM, icon: 'inventory_2' },
-    { value: 'suggestions', label: '合并建议', count: suggestionCount, icon: 'merge_type' },
-    { value: 'groups', label: '已合并', count: mergedGroupCount, icon: 'category' },
-    { value: 'failed', label: '转换失败', count: failedModelCount, icon: 'error' },
-    { value: 'deleted', label: '回收站', count: deletedModelCount, icon: 'delete_sweep' },
+    { value: 'models', label: t('modelAdminPage.tabAllModels'), count: displayModelTotalM, icon: 'inventory_2' },
+    {
+      value: 'suggestions',
+      label: t('modelAdminPage.tabMergeSuggestions'),
+      count: suggestionCount,
+      icon: 'merge_type',
+    },
+    { value: 'groups', label: t('modelAdminPage.tabMerged'), count: mergedGroupCount, icon: 'category' },
+    { value: 'failed', label: t('modelAdminPage.tabFailed'), count: failedModelCount, icon: 'error' },
+    { value: 'deleted', label: t('modelAdminPage.tabRecycleBin'), count: deletedModelCount, icon: 'delete_sweep' },
   ];
 
   useEffect(() => {
@@ -2795,7 +2929,7 @@ function MobileContent() {
     setDeleting(true);
     try {
       await modelApi.delete(deleteTarget.model_id);
-      toast('已删除', 'success');
+      toast(t('modelAdminPage.deletedToast'), 'success');
       setSelectedModelIds((prev) => {
         const next = new Set(prev);
         next.delete(deleteTarget.model_id);
@@ -2804,7 +2938,7 @@ function MobileContent() {
       refreshModelAdminData();
       setDeleteTarget(null);
     } catch {
-      toast('删除失败', 'error');
+      toast(t('modelAdminPage.deleteFailed'), 'error');
     } finally {
       setDeleting(false);
     }
@@ -2868,13 +3002,16 @@ function MobileContent() {
             }
           : { modelIds },
       );
-      const warningText = result.warnings > 0 ? `，${result.warnings} 个文件清理警告` : '';
-      toast(`已删除 ${result.deleted} 个模型${warningText}`, result.warnings > 0 ? 'error' : 'success');
+      const warningText = result.warnings > 0 ? t('modelAdminPage.fileWarningInline', { count: result.warnings }) : '';
+      toast(
+        `${t('modelAdminPage.batchDeletedToast', { count: result.deleted })}${warningText}`,
+        result.warnings > 0 ? 'error' : 'success',
+      );
       clearSelectedModels();
       setBatchDeleteOpen(false);
       refreshModelAdminData();
     } catch {
-      toast('批量删除失败', 'error');
+      toast(t('modelAdminPage.batchDeleteFailed'), 'error');
     } finally {
       setBatchDeleting(false);
     }
@@ -2897,14 +3034,16 @@ function MobileContent() {
       );
       const skipped = result.requested - result.updated;
       toast(
-        `已修改 ${result.updated} 个模型的分类${skipped > 0 ? `，${skipped} 个已在目标分类自动跳过` : ''}`,
+        `${t('modelAdminPage.categoryUpdatedToast', { count: result.updated })}${
+          skipped > 0 ? t('modelAdminPage.categorySkippedInline', { count: skipped }) : ''
+        }`,
         'success',
       );
       clearSelectedModels();
       setBatchCategoryOpen(false);
       refreshModelAdminData();
     } catch {
-      toast('批量修改分类失败', 'error');
+      toast(t('modelAdminPage.batchCategoryFailed'), 'error');
     } finally {
       setBatchCategorySaving(false);
     }
@@ -2914,10 +3053,10 @@ function MobileContent() {
     setRestoringModelId(model.model_id);
     try {
       await modelApi.restore(model.model_id);
-      toast('模型已恢复', 'success');
+      toast(t('modelAdminPage.modelRestored'), 'success');
       refreshModelAdminData();
     } catch {
-      toast('恢复失败', 'error');
+      toast(t('modelAdminPage.restoreFailed'), 'error');
     } finally {
       setRestoringModelId(null);
     }
@@ -2926,7 +3065,7 @@ function MobileContent() {
   const restoreSelectedDeletedModels = async () => {
     const targets = deletedModels.filter((model) => selectedDeletedModelIds.has(model.model_id) && model.can_restore);
     if (targets.length === 0) {
-      toast('选中的模型文件缺失，无法批量恢复', 'error');
+      toast(t('modelAdminPage.restoreSelectedMissing'), 'error');
       return;
     }
     setRestoringDeletedBatch(true);
@@ -2942,7 +3081,9 @@ function MobileContent() {
         return next;
       });
       toast(
-        failed > 0 ? `已恢复 ${restoredIds.size} 个模型，${failed} 个恢复失败` : `已恢复 ${restoredIds.size} 个模型`,
+        failed > 0
+          ? t('modelAdminPage.restoredWithFailures', { count: restoredIds.size, failed })
+          : t('modelAdminPage.restoredCount', { count: restoredIds.size }),
         failed > 0 ? 'error' : 'success',
       );
       refreshModelAdminData();
@@ -3010,15 +3151,15 @@ function MobileContent() {
     try {
       const result = await modelApi.clearFailed(ids);
       if (result.failed > 0) {
-        toast(`已清理 ${result.cleared} 个，${result.failed} 个清理失败`, 'error');
+        toast(t('modelAdminPage.clearedWithFailures', { cleared: result.cleared, failed: result.failed }), 'error');
       } else {
-        toast(`已清理 ${result.cleared} 个转换失败模型`, 'success');
+        toast(t('modelAdminPage.clearedCount', { count: result.cleared }), 'success');
       }
       clearSelectedFailedModels();
       setClearingFailedId(null);
       refreshModelAdminData();
     } catch {
-      toast('清理转换失败模型失败', 'error');
+      toast(t('modelAdminPage.clearFailedError'), 'error');
     } finally {
       setFailedClearRequest(null);
       setClearingFailed(false);
@@ -3028,24 +3169,24 @@ function MobileContent() {
   const handleClearFailedOne = (model: FailedModelListItem) => {
     setFailedClearRequest({
       ids: [model.model_id],
-      title: '确认清理失败记录',
-      description: `将删除「${model.name}」的失败记录及其残留文件。`,
+      title: t('modelAdminPage.confirmClearOneTitle'),
+      description: t('modelAdminPage.confirmClearOneDesc', { name: model.name }),
     });
   };
 
   const handleClearFailedSelected = () => {
     setFailedClearRequest({
       ids: Array.from(selectedFailedModelIds),
-      title: '确认清理选中记录',
-      description: `将删除选中的 ${selectedFailedModelIds.size} 个转换失败模型及其残留文件。`,
+      title: t('modelAdminPage.confirmClearSelectedTitle'),
+      description: t('modelAdminPage.confirmClearSelectedDesc', { count: selectedFailedModelIds.size }),
     });
   };
 
   const handleClearFailedAll = () => {
     setFailedClearRequest({
       ids: [],
-      title: '一键清理全部失败记录',
-      description: `将删除全部 ${failedModelCount} 个转换失败模型及其残留文件。`,
+      title: t('modelAdminPage.confirmClearAllTitle'),
+      description: t('modelAdminPage.confirmClearAllDesc', { count: failedModelCount }),
     });
   };
 
@@ -3060,23 +3201,29 @@ function MobileContent() {
     setPurgingDeleted(true);
     try {
       const result = await modelApi.purgeDeleted(mode === 'all' ? { all: true } : { modelIds });
-      const warningText = result.warnings > 0 ? `，${result.warnings} 个文件清理警告` : '';
-      toast(`已彻底删除 ${result.deleted} 个模型${warningText}`, result.warnings > 0 ? 'error' : 'success');
+      const warningText = result.warnings > 0 ? t('modelAdminPage.fileWarningInline', { count: result.warnings }) : '';
+      toast(
+        `${t('modelAdminPage.purgedToast', { count: result.deleted })}${warningText}`,
+        result.warnings > 0 ? 'error' : 'success',
+      );
       clearSelectedDeletedModels();
       setPurgeConfirmMode(null);
       refreshModelAdminData();
     } catch {
-      toast('彻底删除失败', 'error');
+      toast(t('modelAdminPage.purgeFailed'), 'error');
     } finally {
       setPurgingDeleted(false);
     }
   };
   const purgeConfirmSelectedCount = purgeConfirmMode === 'all' ? deletedModelCount : selectedDeletedCount;
-  const purgeConfirmTitle = purgeConfirmMode === 'all' ? '确认清空回收站' : '确认彻底删除';
+  const purgeConfirmTitle =
+    purgeConfirmMode === 'all'
+      ? t('modelAdminPage.confirmPurgeAllTitle')
+      : t('modelAdminPage.confirmPurgeSelectedTitle');
   const purgeConfirmDescription =
     purgeConfirmMode === 'all'
-      ? `将彻底删除回收站中的 ${purgeConfirmSelectedCount} 个模型及相关文件，此操作不可恢复。`
-      : `将彻底删除选中的 ${purgeConfirmSelectedCount} 个模型及相关文件，此操作不可恢复。`;
+      ? t('modelAdminPage.confirmPurgeAllDesc', { count: purgeConfirmSelectedCount })
+      : t('modelAdminPage.confirmPurgeSelectedDesc', { count: purgeConfirmSelectedCount });
 
   const toggleSelect = (name: string) => {
     setSelectedNames((prev) => {
@@ -3110,13 +3257,13 @@ function MobileContent() {
           modelIds: s.models.map((m) => m.id),
         }));
       const result = await modelApi.batchMerge(items);
-      toast(`已合并 ${result.merged} 组`, 'success');
+      toast(t('modelAdminPage.mergedToast', { count: result.merged }), 'success');
       setSelectedNames(new Set());
       sugMutate();
       suggestionCountMutate();
       groupMutate();
     } catch {
-      toast('合并失败', 'error');
+      toast(t('modelAdminPage.mergeFailed'), 'error');
     } finally {
       setMerging(false);
     }
@@ -3127,7 +3274,7 @@ function MobileContent() {
     setMerging(true);
     try {
       const result = await modelApi.batchMerge([{ name: group.name, modelIds: group.models.map((m) => m.id) }]);
-      toast(`已合并 ${result.merged} 组`, 'success');
+      toast(t('modelAdminPage.mergedToast', { count: result.merged }), 'success');
       setSelectedNames((prev) => {
         const next = new Set(prev);
         next.delete(group.name);
@@ -3138,7 +3285,7 @@ function MobileContent() {
       groupMutate();
       mutate();
     } catch {
-      toast('合并失败', 'error');
+      toast(t('modelAdminPage.mergeFailed'), 'error');
     } finally {
       setMerging(false);
     }
@@ -3152,18 +3299,18 @@ function MobileContent() {
   const handleSaveGroup = async (group: ModelGroupItem) => {
     const name = groupNameDraft.trim();
     if (!name) {
-      toast('分组名称不能为空', 'error');
+      toast(t('modelAdminPage.groupNameRequired'), 'error');
       return;
     }
     setGroupAction(`rename:${group.id}`);
     try {
       await modelApi.updateModelGroup(group.id, { name });
-      toast('分组已更新', 'success');
+      toast(t('modelAdminPage.groupUpdated'), 'success');
       setEditingGroupId(null);
       groupMutate();
       mutate();
     } catch {
-      toast('更新分组失败', 'error');
+      toast(t('modelAdminPage.groupUpdateFailed'), 'error');
     } finally {
       setGroupAction(null);
     }
@@ -3173,11 +3320,11 @@ function MobileContent() {
     setGroupAction(`primary:${group.id}:${modelId}`);
     try {
       await modelApi.updateModelGroup(group.id, { primaryId: modelId });
-      toast('已设置主版本', 'success');
+      toast(t('modelAdminPage.primarySet'), 'success');
       groupMutate();
       mutate();
     } catch {
-      toast('设置主版本失败', 'error');
+      toast(t('modelAdminPage.primarySetFailed'), 'error');
     } finally {
       setGroupAction(null);
     }
@@ -3188,13 +3335,13 @@ function MobileContent() {
     setGroupAction(`remove:${group.id}:${modelId}`);
     try {
       await modelApi.removeModelFromGroup(group.id, modelId);
-      toast('已移出分组', 'success');
+      toast(t('modelAdminPage.removedFromGroup'), 'success');
       groupMutate();
       sugMutate();
       suggestionCountMutate();
       mutate();
     } catch {
-      toast('移出分组失败', 'error');
+      toast(t('modelAdminPage.removeFromGroupFailed'), 'error');
     } finally {
       setGroupAction(null);
     }
@@ -3206,14 +3353,16 @@ function MobileContent() {
     try {
       const result = await modelApi.deleteModelGroup(group.id);
       const msg =
-        result.dissolvedModels > 1 ? `分组已解散，${result.dissolvedModels} 个模型已恢复独立显示` : '分组已解散';
+        result.dissolvedModels > 1
+          ? t('modelAdminPage.groupDissolvedMulti', { count: result.dissolvedModels })
+          : t('modelAdminPage.groupDissolved');
       toast(msg, 'success');
       groupMutate();
       sugMutate();
       suggestionCountMutate();
       mutate();
     } catch {
-      toast('解散分组失败', 'error');
+      toast(t('modelAdminPage.dissolveGroupFailed'), 'error');
     } finally {
       setGroupAction(null);
     }
@@ -3223,8 +3372,8 @@ function MobileContent() {
     <>
       <UploadModalLoader open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={refreshModelAdminData} />
       <AdminManagementPage
-        title="模型管理"
-        description="维护模型库文件、合并建议和预览运维"
+        title={t('modelAdminPage.pageTitle')}
+        description={t('modelAdminPage.pageDescriptionMobile')}
         contentClassName="gap-3"
         actions={
           <div className="flex items-center gap-2">
@@ -3234,12 +3383,12 @@ function MobileContent() {
               icon="view_in_ar"
               size="sm"
               variant="neutral"
-              aria-label="打开预览运维工作台"
+              aria-label={t('modelAdminPage.openPreviewOpsAria')}
             >
-              运维
+              {t('modelAdminPage.previewOpsShort')}
             </AdminButton>
             <AdminButton onClick={() => setImportModelsOpen(true)} icon="cloud_download" size="sm" variant="neutral">
-              导入
+              {t('modelAdminPage.importShort')}
             </AdminButton>
             <AdminButton
               onClick={() => setUploadOpen(true)}
@@ -3250,7 +3399,7 @@ function MobileContent() {
               size="sm"
               variant="primary"
             >
-              上传
+              {t('modelAdminPage.uploadShort')}
             </AdminButton>
           </div>
         }
@@ -3263,7 +3412,7 @@ function MobileContent() {
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="h-10 rounded-sm border border-outline-variant/30 bg-surface-container-high px-3 text-sm text-on-surface outline-none"
             >
-              <option value={CATEGORY_FILTER_ALL}>全部分类</option>
+              <option value={CATEGORY_FILTER_ALL}>{t('modelAdminPage.allCategories')}</option>
               {categoryOptions.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.label}
@@ -3274,7 +3423,7 @@ function MobileContent() {
               inputProps={searchInputProps}
               value={searchInputValue}
               onClear={() => setSearch('')}
-              placeholder="搜索模型..."
+              placeholder={t('modelAdminPage.searchModelsPlaceholder')}
               className="md:w-full"
             />
           </div>
@@ -3284,7 +3433,7 @@ function MobileContent() {
             inputProps={groupSearchInputProps}
             value={groupSearchInputValue}
             onClear={() => setGroupSearch('')}
-            placeholder="搜索分组..."
+            placeholder={t('modelAdminPage.searchGroupsPlaceholder')}
             className="md:w-full"
           />
         )}
@@ -3294,7 +3443,7 @@ function MobileContent() {
             inputProps={suggestionSearchInputProps}
             value={suggestionSearchInputValue}
             onClear={() => setSuggestionSearch('')}
-            placeholder="搜索建议..."
+            placeholder={t('modelAdminPage.searchSuggestionsPlaceholder')}
             className="md:w-full"
           />
         )}
@@ -3303,7 +3452,7 @@ function MobileContent() {
             inputProps={failedSearchInputProps}
             value={failedSearchInputValue}
             onClear={() => setFailedSearch('')}
-            placeholder="搜索转换失败模型..."
+            placeholder={t('modelAdminPage.searchFailedPlaceholder')}
             className="md:w-full"
           />
         )}
@@ -3312,7 +3461,7 @@ function MobileContent() {
             inputProps={deletedSearchInputProps}
             value={deletedSearchInputValue}
             onClear={() => setDeletedSearch('')}
-            placeholder="搜索已删除模型..."
+            placeholder={t('modelAdminPage.searchDeletedPlaceholder')}
             className="md:w-full"
           />
         )}
@@ -3320,18 +3469,21 @@ function MobileContent() {
           tabs={modelAdminTabs}
           value={activeTab}
           onChange={(value) => startTransition(() => setActiveTab(value as ModelAdminTab))}
-          mobileTitle="模型管理分类"
+          mobileTitle={t('modelAdminPage.mobileTabsTitle')}
         />
 
         {activeTab === 'models' && models.length > 0 && (
           <div className="flex items-center justify-between gap-2 rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2">
             <div className="min-w-0 text-xs text-on-surface-variant">
-              已加载 <span className="font-bold text-primary-container">{visibleModels.length}</span> /{' '}
-              {displayModelTotalM}
+              <Trans
+                i18nKey="modelAdminPage.loadedOfTotalCompact"
+                values={{ loaded: visibleModels.length, total: displayModelTotalM }}
+                components={{ strong: <span className="font-bold text-primary-container" /> }}
+              />
               {selectedAllMatching ? (
-                <span>，已选全部匹配 {selectedModelCount}</span>
+                <Trans i18nKey="modelAdminPage.selectedAllMatchingCompact" values={{ count: selectedModelCount }} />
               ) : selectedModelCount > 0 ? (
-                <span>，已选 {selectedModelCount}</span>
+                <Trans i18nKey="modelAdminPage.selectedCompact" values={{ count: selectedModelCount }} />
               ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -3341,7 +3493,7 @@ function MobileContent() {
                   disabled={displayModelTotalM === 0}
                   className="rounded-sm border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-xs font-bold text-primary disabled:opacity-40"
                 >
-                  选择全部
+                  {t('modelAdminPage.selectAllMatching')}
                 </button>
               )}
               <button
@@ -3349,7 +3501,7 @@ function MobileContent() {
                 disabled={visibleModelIds.length === 0}
                 className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant disabled:opacity-40"
               >
-                {allVisibleModelsSelected ? '取消' : '全选'}
+                {allVisibleModelsSelected ? t('modelAdminPage.deselect') : t('modelAdminPage.selectAll')}
               </button>
               {selectedModelCount > 0 && (
                 <>
@@ -3358,14 +3510,14 @@ function MobileContent() {
                     disabled={batchCategorySaving}
                     className="rounded-sm border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-xs font-bold text-primary disabled:opacity-40"
                   >
-                    改分类
+                    {t('modelAdminPage.changeCategoryShort')}
                   </button>
                   <button
                     onClick={() => setBatchDeleteOpen(true)}
                     disabled={batchDeleting}
                     className="rounded-sm border border-error/20 bg-error/10 px-2.5 py-1.5 text-xs font-bold text-error disabled:opacity-40"
                   >
-                    删除
+                    {t('common.delete')}
                   </button>
                 </>
               )}
@@ -3375,29 +3527,34 @@ function MobileContent() {
 
         {activeTab === 'suggestions' ? (
           sugLoading ? (
-            <AdminLoadingState variant="list" rows={5} label="同名合并建议加载中" />
+            <AdminLoadingState variant="list" rows={5} label={t('modelAdminPage.suggestionLoading')} />
           ) : (
             <div className="admin-tab-panel space-y-3">
               {filteredSuggestions.length > 0 && (
                 <div className="flex items-center justify-between gap-2 rounded-lg bg-surface-container-high px-3 py-2">
                   <div className="min-w-0 text-xs text-on-surface-variant">
-                    已加载 <span className="font-bold text-primary-container">{filteredSuggestions.length}</span> /{' '}
-                    {suggestionCount}
-                    {selectedSuggestionCount > 0 && <span>，已选 {selectedSuggestionCount}</span>}
+                    <Trans
+                      i18nKey="modelAdminPage.loadedOfTotalCompact"
+                      values={{ loaded: filteredSuggestions.length, total: suggestionCount }}
+                      components={{ strong: <span className="font-bold text-primary-container" /> }}
+                    />
+                    {selectedSuggestionCount > 0 && (
+                      <Trans i18nKey="modelAdminPage.selectedCompact" values={{ count: selectedSuggestionCount }} />
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <button
                       onClick={toggleSelectPage}
                       className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant"
                     >
-                      {allSuggestionsSelected ? '取消' : '全选'}
+                      {allSuggestionsSelected ? t('modelAdminPage.deselect') : t('modelAdminPage.selectAll')}
                     </button>
                     <button
                       onClick={handleMerge}
                       disabled={merging || selectedSuggestionCount === 0}
                       className="rounded-sm bg-primary-container px-3 py-1.5 text-xs font-bold text-on-primary disabled:opacity-40"
                     >
-                      {merging ? '合并中' : '合并'}
+                      {merging ? t('modelAdminPage.mergingShort') : t('modelAdminPage.mergeShort')}
                     </button>
                   </div>
                 </div>
@@ -3414,13 +3571,15 @@ function MobileContent() {
                     />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold text-on-surface">{group.name}</p>
-                      <p className="text-[11px] text-on-surface-variant">{group.count} 个同名模型</p>
+                      <p className="text-[11px] text-on-surface-variant">
+                        {t('modelAdminPage.sameNameModelsCount', { count: group.count })}
+                      </p>
                     </div>
                     <button
                       onClick={() => toggleSelect(group.name)}
                       className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant"
                     >
-                      {selectedNames.has(group.name) ? '取消' : '选中'}
+                      {selectedNames.has(group.name) ? t('common.cancel') : t('modelAdminPage.selectShort')}
                     </button>
                   </div>
                   <div className="mt-3 flex gap-2 overflow-x-auto scrollbar-hidden">
@@ -3437,14 +3596,14 @@ function MobileContent() {
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-2 border-t border-outline-variant/10 pt-3">
                     <span className="text-[11px] text-on-surface-variant">
-                      将这 {group.models.length} 个同名模型合并为一组
+                      {t('modelAdminPage.mergeHint', { count: group.models.length })}
                     </span>
                     <button
                       onClick={() => handleMergeSingleSuggestion(group)}
                       disabled={merging || group.models.length < 2}
                       className="shrink-0 rounded-sm bg-primary-container px-3 py-1.5 text-xs font-bold text-on-primary disabled:opacity-40"
                     >
-                      合并本组
+                      {t('modelAdminPage.mergeGroup')}
                     </button>
                   </div>
                 </div>
@@ -3458,14 +3617,14 @@ function MobileContent() {
               )}
               {filteredSuggestions.length === 0 && (
                 <p className="rounded-lg bg-surface-container-high px-4 py-12 text-center text-sm text-on-surface-variant">
-                  没有需要合并的同名模型
+                  {t('modelAdminPage.noSuggestions')}
                 </p>
               )}
             </div>
           )
         ) : activeTab === 'failed' ? (
           failedLoading ? (
-            <AdminLoadingState variant="list" rows={5} label="转换失败模型加载中" />
+            <AdminLoadingState variant="list" rows={5} label={t('modelAdminPage.failedLoading')} />
           ) : (
             <FailedModelsPanel
               compact
@@ -3490,7 +3649,7 @@ function MobileContent() {
           )
         ) : activeTab === 'deleted' ? (
           deletedLoading ? (
-            <AdminLoadingState variant="list" rows={5} label="回收站加载中" />
+            <AdminLoadingState variant="list" rows={5} label={t('modelAdminPage.recycleBinLoading')} />
           ) : (
             <DeletedModelsPanel
               compact
@@ -3517,7 +3676,7 @@ function MobileContent() {
           )
         ) : activeTab === 'groups' ? (
           groupsLoading ? (
-            <AdminLoadingState variant="list" rows={5} label="模型分组加载中" />
+            <AdminLoadingState variant="list" rows={5} label={t('modelAdminPage.groupLoading')} />
           ) : (
             <div className="admin-tab-panel space-y-2">
               {filteredGroups?.map((group) => {
@@ -3561,7 +3720,10 @@ function MobileContent() {
                           <>
                             <p className="truncate text-sm font-bold text-on-surface">{group.name}</p>
                             <p className="mt-0.5 text-[11px] text-on-surface-variant">
-                              {group.model_count} 个版本 · 主版本：{group.primary?.name || '未设置'}
+                              {t('modelAdminPage.groupMeta', {
+                                count: group.model_count,
+                                primary: group.primary?.name || t('modelAdminPage.primaryNotSet'),
+                              })}
                             </p>
                           </>
                         )}
@@ -3575,13 +3737,13 @@ function MobileContent() {
                             disabled={groupAction === `rename:${group.id}`}
                             className="rounded-sm bg-primary-container px-3 py-1.5 text-xs font-bold text-on-primary disabled:opacity-40"
                           >
-                            保存
+                            {t('common.save')}
                           </button>
                           <button
                             onClick={() => setEditingGroupId(null)}
                             className="rounded-sm border border-outline-variant/20 px-3 py-1.5 text-xs text-on-surface-variant"
                           >
-                            取消
+                            {t('common.cancel')}
                           </button>
                         </>
                       ) : (
@@ -3589,7 +3751,7 @@ function MobileContent() {
                           onClick={() => beginEditGroup(group)}
                           className="rounded-sm border border-outline-variant/20 px-3 py-1.5 text-xs text-on-surface-variant"
                         >
-                          重命名
+                          {t('modelAdminPage.rename')}
                         </button>
                       )}
                       <button
@@ -3597,7 +3759,7 @@ function MobileContent() {
                         disabled={groupAction === `delete:${group.id}`}
                         className="rounded-sm border border-error/20 px-3 py-1.5 text-xs text-error disabled:opacity-40"
                       >
-                        解散分组
+                        {t('modelAdminPage.dissolveGroup')}
                       </button>
                     </div>
                     {expanded && (
@@ -3626,7 +3788,7 @@ function MobileContent() {
                                     </p>
                                     {isPrimary && (
                                       <span className="shrink-0 rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                                        主版本
+                                        {t('modelAdminPage.primaryBadge')}
                                       </span>
                                     )}
                                   </div>
@@ -3642,7 +3804,7 @@ function MobileContent() {
                                   rel="noopener"
                                   className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant"
                                 >
-                                  查看
+                                  {t('modelAdminPage.view')}
                                 </Link>
                                 {!isPrimary && (
                                   <button
@@ -3650,7 +3812,7 @@ function MobileContent() {
                                     disabled={groupAction === `primary:${group.id}:${model.id}`}
                                     className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant disabled:opacity-40"
                                   >
-                                    设为主版本
+                                    {t('modelAdminPage.setPrimary')}
                                   </button>
                                 )}
                                 <button
@@ -3658,7 +3820,7 @@ function MobileContent() {
                                   disabled={group.model_count <= 2 || groupAction === `remove:${group.id}:${model.id}`}
                                   className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant disabled:opacity-40"
                                 >
-                                  移出
+                                  {t('modelAdminPage.removeFromGroupShort')}
                                 </button>
                               </div>
                             </div>
@@ -3671,13 +3833,13 @@ function MobileContent() {
               })}
               {groupData?.length === 0 && (
                 <p className="rounded-lg bg-surface-container-high px-4 py-12 text-center text-sm text-on-surface-variant">
-                  还没有已合并的模型分组
+                  {t('modelAdminPage.noGroups')}
                 </p>
               )}
             </div>
           )
         ) : isLoadingInitial ? (
-          <AdminLoadingState variant="list" rows={5} label="模型列表加载中" />
+          <AdminLoadingState variant="list" rows={5} label={t('modelAdminPage.modelListLoading')} />
         ) : (
           <div className="admin-tab-panel flex flex-col gap-3">
             {visibleModels.map((m) => (
@@ -3697,7 +3859,9 @@ function MobileContent() {
                 onLoadMore={hasMoreVisibleModels ? loadMoreVisibleModels : loadMore}
               />
             )}
-            {models.length === 0 && <p className="text-center text-on-surface-variant py-12 text-sm">没有找到模型</p>}
+            {models.length === 0 && (
+              <p className="text-center text-on-surface-variant py-12 text-sm">{t('modelAdminPage.noModelsFound')}</p>
+            )}
           </div>
         )}
       </AdminManagementPage>
@@ -3713,13 +3877,23 @@ function MobileContent() {
           else void handleDeleteGroup(groupConfirm.group);
         }}
         icon={groupConfirm?.type === 'delete' ? 'close' : 'logout'}
-        title={groupConfirm?.type === 'delete' ? '确认解散分组' : '确认移出分组'}
+        title={
+          groupConfirm?.type === 'delete'
+            ? t('modelAdminPage.confirmDissolveTitle')
+            : t('modelAdminPage.confirmRemoveTitle')
+        }
         description={
           groupConfirm?.type === 'delete'
-            ? `确定解散「${groupConfirm.group.name}」吗？模型文件不会删除，只会取消合并关系。`
-            : '确定将该模型移出当前合并分组吗？模型不会被删除。'
+            ? t('modelAdminPage.confirmDissolveDesc', { name: groupConfirm.group.name })
+            : t('modelAdminPage.confirmRemoveDesc')
         }
-        confirmLabel={groupAction ? '处理中...' : groupConfirm?.type === 'delete' ? '确认解散' : '确认移出'}
+        confirmLabel={
+          groupAction
+            ? t('modelAdminPage.processing')
+            : groupConfirm?.type === 'delete'
+              ? t('modelAdminPage.confirmDissolve')
+              : t('modelAdminPage.confirmRemove')
+        }
         confirmDisabled={Boolean(groupAction)}
       />
       <EditDialog
@@ -3754,7 +3928,13 @@ function MobileContent() {
         icon="delete_sweep"
         title={purgeConfirmTitle}
         description={purgeConfirmDescription}
-        confirmLabel={purgingDeleted ? '删除中...' : purgeConfirmMode === 'all' ? '清空回收站' : '彻底删除'}
+        confirmLabel={
+          purgingDeleted
+            ? t('modelAdminPage.deleting')
+            : purgeConfirmMode === 'all'
+              ? t('modelAdminPage.emptyRecycleBin')
+              : t('modelAdminPage.permanentDelete')
+        }
         confirmDisabled={purgingDeleted || purgeConfirmSelectedCount <= 0}
       />
       <ConfirmDialog
@@ -3769,7 +3949,7 @@ function MobileContent() {
         icon="delete_sweep"
         title={failedClearRequest?.title ?? ''}
         description={failedClearRequest?.description ?? ''}
-        confirmLabel={clearingFailed ? '清理中...' : '确认清理'}
+        confirmLabel={clearingFailed ? t('modelAdminPage.clearingEllipsis') : t('modelAdminPage.confirmClear')}
         confirmDisabled={clearingFailed}
       />
       <AnimatePresence>
@@ -3788,20 +3968,22 @@ function MobileContent() {
               onClick={(e) => e.stopPropagation()}
               className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-5 sm:p-6"
             >
-              <h3 className="font-headline text-base font-semibold text-on-surface mb-2">确认删除</h3>
+              <h3 className="font-headline text-base font-semibold text-on-surface mb-2">
+                {t('modelAdminPage.confirmDeleteTitle')}
+              </h3>
               <p className="text-sm text-on-surface-variant mb-5 break-words">
-                确定要删除「{deleteTarget.name}」吗？删除后会从前台隐藏，保留恢复能力。
+                {t('modelAdminPage.confirmDeleteDesc', { name: deleteTarget.name })}
               </p>
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
                 <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 text-sm text-on-surface-variant">
-                  取消
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={handleDelete}
                   disabled={deleting}
                   className="px-4 py-2 bg-error text-white rounded-sm text-sm disabled:opacity-50"
                 >
-                  {deleting ? '删除中...' : '删除'}
+                  {deleting ? t('modelAdminPage.deleting') : t('common.delete')}
                 </button>
               </div>
             </motion.div>
@@ -3824,10 +4006,12 @@ function MobileContent() {
               onClick={(e) => e.stopPropagation()}
               className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-5 sm:p-6"
             >
-              <h3 className="font-headline text-base font-semibold text-on-surface mb-2">确认批量删除</h3>
+              <h3 className="font-headline text-base font-semibold text-on-surface mb-2">
+                {t('modelAdminPage.confirmBatchDeleteTitle')}
+              </h3>
               <p className="text-sm text-on-surface-variant mb-5 break-words">
-                确定要删除已选择的 {selectedModelCount} 个模型吗？删除后会从前台隐藏并进入回收站，可在文件仍存在时恢复。
-                {selectedAllMatching && ' 本次会按当前分类和搜索条件删除全部匹配模型。'}
+                {t('modelAdminPage.confirmBatchDeleteDesc', { count: selectedModelCount })}
+                {selectedAllMatching && ` ${t('modelAdminPage.batchDeleteAllMatchingNote')}`}
               </p>
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
                 <button
@@ -3835,14 +4019,14 @@ function MobileContent() {
                   disabled={batchDeleting}
                   className="px-4 py-2 text-sm text-on-surface-variant disabled:opacity-50"
                 >
-                  取消
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={handleBatchDelete}
                   disabled={batchDeleting}
                   className="px-4 py-2 bg-error text-white rounded-sm text-sm disabled:opacity-50"
                 >
-                  {batchDeleting ? '删除中...' : '确认删除'}
+                  {batchDeleting ? t('modelAdminPage.deleting') : t('modelAdminPage.confirmDeleteLabel')}
                 </button>
               </div>
             </motion.div>
@@ -3865,7 +4049,8 @@ function MobileContent() {
 }
 
 export default function ModelAdminPage() {
-  useDocumentTitle('模型管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('modelAdminPage.pageTitle'));
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   return <AdminPageShell>{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>;

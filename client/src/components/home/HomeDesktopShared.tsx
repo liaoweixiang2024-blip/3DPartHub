@@ -52,16 +52,19 @@ export const HOME_GRID_CARD_CLASS =
 export const HOME_GRID_MEDIA_CLASS =
   'home-model-card-media aspect-square bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
 export const HOME_GRID_BODY_CLASS = 'flex-1 flex flex-col p-2.5';
-export const HOME_GRID_ACTIONS_CLASS = 'flex items-center gap-2 mt-auto pt-2';
+// flex-wrap + min-h-7 + nowrap：日语/德语等长词（ダウンロード/Vorschau）在小卡里
+// 放不下并排时上下堆叠（实测 11px 字号下并排需 ~199px，1280–1440 视口卡片行仅
+// 173–190px，缩字号无解），文字永远单行、不被固定高度压扁
+export const HOME_GRID_ACTIONS_CLASS = 'flex flex-wrap items-center gap-2 mt-auto pt-2';
 export const HOME_GRID_ACTION_BUTTON_CLASS =
-  'flex h-7 flex-1 items-center justify-center gap-1 rounded-sm px-3 text-xs';
+  'flex min-h-7 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-sm px-3 text-xs';
 export const HOME_LIST_CARD_CLASS =
   'home-model-card relative flex group bg-surface-container-high rounded-sm overflow-hidden transition-[box-shadow] duration-200 ease-out hover:shadow-lg';
 export const HOME_LIST_MEDIA_CLASS =
   'home-model-card-media w-32 shrink-0 bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
 export const HOME_LIST_BODY_CLASS = 'flex-1 flex flex-col justify-center p-3 min-w-0';
 export const HOME_LIST_ACTIONS_CLASS = 'flex items-center gap-2';
-export const HOME_LIST_ACTION_BUTTON_CLASS = 'flex items-center gap-1 rounded-sm px-3 py-1 text-xs';
+export const HOME_LIST_ACTION_BUTTON_CLASS = 'flex items-center gap-1 whitespace-nowrap rounded-sm px-3 py-1 text-xs';
 
 export function HomeGridCardContent({
   media,

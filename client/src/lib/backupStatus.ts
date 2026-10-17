@@ -5,22 +5,35 @@
 // 都集中在这里，组件层只负责渲染。数据类型来自 ../api/settings。
 
 import type { BackupHealth, BackupPolicyCheck, BackupScope } from '../api/settings';
+import { i18n } from '../i18n';
 
+// label / desc 存 i18n 键（backupLib 命名空间），渲染处再 t()；getBackupScopeLabel 返回已翻译文案。
 export const BACKUP_SCOPE_OPTIONS: Array<{ value: BackupScope; label: string; desc: string; icon: string }> = [
-  { value: 'full', label: '整站备份', desc: '数据库与全部资源', icon: 'database' },
-  { value: 'models', label: '模型库', desc: '模型产品与 3D 文件', icon: 'view_in_ar' },
-  { value: 'selection', label: '选型', desc: '选型分类、产品与素材', icon: 'tune' },
-  { value: 'product_wall', label: '产品图库', desc: '图库分类、图片与状态', icon: 'photo_library' },
-  { value: 'config', label: '系统配置', desc: '站点设置、模型分类与品牌资产', icon: 'settings' },
-  { value: 'users', label: '用户', desc: '账号资料与权限（合并恢复，不改现有密码）', icon: 'group' },
-  { value: 'tickets', label: '工单', desc: '工单与沟通消息', icon: 'support_agent' },
-  { value: 'inquiries', label: '询价', desc: '询价单、明细与沟通记录', icon: 'request_quote' },
-  { value: 'audit', label: '审计日志', desc: '系统操作审计记录', icon: 'receipt_long' },
+  { value: 'full', label: 'backupLib.scopeFull', desc: 'backupLib.scopeFullDesc', icon: 'database' },
+  { value: 'models', label: 'backupLib.scopeModels', desc: 'backupLib.scopeModelsDesc', icon: 'view_in_ar' },
+  { value: 'selection', label: 'backupLib.scopeSelection', desc: 'backupLib.scopeSelectionDesc', icon: 'tune' },
+  {
+    value: 'product_wall',
+    label: 'backupLib.scopeProductWall',
+    desc: 'backupLib.scopeProductWallDesc',
+    icon: 'photo_library',
+  },
+  { value: 'config', label: 'backupLib.scopeConfig', desc: 'backupLib.scopeConfigDesc', icon: 'settings' },
+  { value: 'users', label: 'backupLib.scopeUsers', desc: 'backupLib.scopeUsersDesc', icon: 'group' },
+  { value: 'tickets', label: 'backupLib.scopeTickets', desc: 'backupLib.scopeTicketsDesc', icon: 'support_agent' },
+  {
+    value: 'inquiries',
+    label: 'backupLib.scopeInquiries',
+    desc: 'backupLib.scopeInquiriesDesc',
+    icon: 'request_quote',
+  },
+  { value: 'audit', label: 'backupLib.scopeAudit', desc: 'backupLib.scopeAuditDesc', icon: 'receipt_long' },
 ];
 
 export function getBackupScopeLabel(scope?: BackupScope, fallback?: string): string {
   if (fallback) return fallback;
-  return BACKUP_SCOPE_OPTIONS.find((option) => option.value === scope)?.label || '整站备份';
+  const labelKey = BACKUP_SCOPE_OPTIONS.find((option) => option.value === scope)?.label || 'backupLib.scopeFull';
+  return i18n.t(labelKey);
 }
 
 export function formatStatNumber(value: unknown): string {
@@ -28,8 +41,8 @@ export function formatStatNumber(value: unknown): string {
   return Number.isFinite(number) ? number.toLocaleString('zh-CN') : '0';
 }
 
-export function formatOptionalStatNumber(value: unknown, fallback = '待刷新'): string {
-  if (value === undefined || value === null) return fallback;
+export function formatOptionalStatNumber(value: unknown, fallback = 'backupLib.statPendingRefresh'): string {
+  if (value === undefined || value === null) return i18n.t(fallback);
   return formatStatNumber(value);
 }
 
@@ -70,10 +83,10 @@ export function getBackupStatusIcon(status: BackupProtectionStatus): string {
 }
 
 export function getBackupStatusText(status: BackupProtectionStatus): string {
-  if (status === 'ok') return '正常';
-  if (status === 'error') return '异常';
-  if (status === 'warning') return '需关注';
-  return '待检查';
+  if (status === 'ok') return i18n.t('backupLib.statusOk');
+  if (status === 'error') return i18n.t('backupLib.statusError');
+  if (status === 'warning') return i18n.t('backupLib.statusWarning');
+  return i18n.t('backupLib.statusMuted');
 }
 
 export function getBackupStatusClasses(status: BackupProtectionStatus): string {
@@ -98,10 +111,10 @@ export function getBackupRiskStatus(report?: BackupPolicyCheck['report']): Backu
 }
 
 export function getBackupRiskLabel(report?: BackupPolicyCheck['report']): string {
-  if (report?.riskLevel === 'high') return '高风险';
-  if (report?.riskLevel === 'medium') return '中风险';
-  if (report?.riskLevel === 'low') return '低风险';
-  return '待检查';
+  if (report?.riskLevel === 'high') return i18n.t('backupLib.riskHigh');
+  if (report?.riskLevel === 'medium') return i18n.t('backupLib.riskMedium');
+  if (report?.riskLevel === 'low') return i18n.t('backupLib.riskLow');
+  return i18n.t('backupLib.statusMuted');
 }
 
 function findBackupPolicyCheck(policyCheck: BackupPolicyCheck | null, key: string) {
@@ -127,7 +140,7 @@ export function buildBackupProtectionCards(
       : 'warning';
   const latestTime = health.latestBackup
     ? new Date(health.latestBackup.createdAt).toLocaleString('zh-CN')
-    : '暂无恢复点';
+    : i18n.t('backupLib.noRecoveryPoint');
 
   const scheduleCheck = findBackupPolicyCheck(policyCheck, 'schedule');
   const autoStatus = scheduleCheck
@@ -161,63 +174,76 @@ export function buildBackupProtectionCards(
     {
       key: 'recovery',
       icon: 'restore',
-      label: '恢复点',
-      value: health.latestBackup ? `${health.backupCount} 份` : '未创建',
+      label: i18n.t('backupLib.cardRecovery'),
+      value: health.latestBackup
+        ? i18n.t('backupLib.unitCopies', { count: health.backupCount })
+        : i18n.t('backupLib.notCreated'),
       detail: health.latestBackup
-        ? `最近一次：${latestTime}，共 ${health.totalSizeText}`
-        : '还没有任何备份，出问题时数据无法找回，建议现在创建一份',
+        ? i18n.t('backupLib.recoveryDetailLatest', { time: latestTime, size: health.totalSizeText })
+        : i18n.t('backupLib.recoveryDetailEmpty'),
       status: latestStatus,
-      action: health.latestBackup ? undefined : { text: '去创建备份', targetTab: '__scroll_create__' },
+      action: health.latestBackup
+        ? undefined
+        : { text: i18n.t('backupLib.actionCreateBackup'), targetTab: '__scroll_create__' },
     },
     {
       key: 'schedule',
       icon: 'schedule',
-      label: '自动化',
-      value: health.enabled ? `每日 ${health.scheduleTime}` : '手动',
+      label: i18n.t('backupLib.cardAutomation'),
+      value: health.enabled
+        ? i18n.t('backupLib.scheduleDailyAt', { time: health.scheduleTime })
+        : i18n.t('backupLib.manualMode'),
       detail: health.enabled
-        ? scheduleCheck?.message || health.lastAutoMessage || `每天 ${health.scheduleTime} 自动备份一次`
-        : '目前需要手动点备份。开启后系统每天定时自动备份，不怕忘记',
+        ? scheduleCheck?.message ||
+          health.lastAutoMessage ||
+          i18n.t('backupLib.scheduleDetailAuto', { time: health.scheduleTime })
+        : i18n.t('backupLib.scheduleDetailManual'),
       status: autoStatus,
-      action: health.enabled ? undefined : { text: '去开启自动备份', targetTab: '系统运维' },
+      action: health.enabled
+        ? undefined
+        : { text: i18n.t('backupLib.actionEnableAutoBackup'), targetTab: 'adminSettings.tabOpsMaintenance' },
     },
     {
       key: 'mirror',
       icon: 'cloud',
-      label: '异地副本',
-      value: health.mirrorEnabled ? '已开启' : '未开启',
+      label: i18n.t('backupLib.cardMirror'),
+      value: health.mirrorEnabled ? i18n.t('backupLib.enabledOn') : i18n.t('backupLib.enabledOff'),
       detail: health.mirrorEnabled
         ? mirrorChecks.find((check) => check.status !== 'ok')?.message ||
           health.lastMirrorMessage ||
           health.mirrorDir ||
-          '备份完成后自动复制一份到外部目录'
-        : '备份文件目前只存在服务器本机，服务器磁盘损坏时备份会一起丢失。开启后会自动复制一份到 NAS 或另一块磁盘',
+          i18n.t('backupLib.mirrorDetailDefault')
+        : i18n.t('backupLib.mirrorDetailOff'),
       status: mirrorStatus,
-      action: health.mirrorEnabled ? undefined : { text: '去配置镜像目录', targetTab: '系统运维' },
+      action: health.mirrorEnabled
+        ? undefined
+        : { text: i18n.t('backupLib.actionConfigureMirror'), targetTab: 'adminSettings.tabOpsMaintenance' },
     },
     {
       key: 'encryption',
       icon: 'lock',
-      label: '加密',
-      value: health.encryption?.enabled ? '已开启' : '未开启',
+      label: i18n.t('backupLib.cardEncryption'),
+      value: health.encryption?.enabled ? i18n.t('backupLib.enabledOn') : i18n.t('backupLib.enabledOff'),
       detail: health.encryption?.enabled
-        ? `${health.encryption.algorithm}，备份包落盘前加密`
-        : `备份文件在磁盘上未加密，拿到文件即可读取内容。在服务器 docker-compose.yml 的 api 服务 environment 段加一条 ${health.encryption?.recommendedEnvName || 'BACKUP_ENCRYPTION_SECRET'}=<自定义密钥> 并重启容器即可开启`,
+        ? i18n.t('backupLib.encryptionDetailOn', { algorithm: health.encryption.algorithm })
+        : i18n.t('backupLib.encryptionDetailOff', {
+            envName: health.encryption?.recommendedEnvName || 'BACKUP_ENCRYPTION_SECRET',
+          }),
       status: encryptionStatus,
     },
   ];
 }
 
 function formatBackupPolicyAdvice(check: BackupPolicyCheck['checks'][number]): string {
-  if (check.key === 'schedule') return '开启每日自动备份，避免只依赖人工操作。';
-  if (check.key === 'retention') return '保留至少 3 份备份，方便回退到更早时间点。';
-  if (check.key === 'mirror') return '配置外部镜像目录，最好指向 NAS 或独立磁盘。';
-  if (check.key === 'mirror_dir') return '修正外部镜像目录，不能为空，也不能指向当前备份目录。';
-  if (check.key === 'latest_backup') return '重新创建并校验一次备份，确认当前版本可恢复。';
-  if (check.key === 'encryption') return '配置 BACKUP_ENCRYPTION_SECRET，让备份包在磁盘上保持加密。';
-  if (check.key === 'download_channel')
-    return '备份下载由 API 直连流式下发，不依赖 nginx 静态目录；若归档缺失请重新创建备份。';
-  if (check.label.includes('磁盘空间')) return `${check.label}不足或不可确认，建议清理空间或换到更大磁盘。`;
-  if (check.label.includes('可写')) return `${check.label}失败，请检查目录权限。`;
+  if (check.key === 'schedule') return i18n.t('backupLib.adviceSchedule');
+  if (check.key === 'retention') return i18n.t('backupLib.adviceRetention');
+  if (check.key === 'mirror') return i18n.t('backupLib.adviceMirror');
+  if (check.key === 'mirror_dir') return i18n.t('backupLib.adviceMirrorDir');
+  if (check.key === 'latest_backup') return i18n.t('backupLib.adviceLatestBackup');
+  if (check.key === 'encryption') return i18n.t('backupLib.adviceEncryption');
+  if (check.key === 'download_channel') return i18n.t('backupLib.adviceDownloadChannel');
+  if (check.label.includes('磁盘空间')) return i18n.t('backupLib.adviceDiskSpace', { label: check.label });
+  if (check.label.includes('可写')) return i18n.t('backupLib.adviceWritable', { label: check.label });
   return `${check.label}：${check.message}`;
 }
 
@@ -229,17 +255,17 @@ export function buildBackupAdviceItems(health: BackupHealth, policyCheck: Backup
   if (policyCheck) {
     const issues = policyCheck.checks.filter((check) => check.status !== 'ok');
     if (issues.length === 0) {
-      return ['体检通过：目录权限、磁盘空间、最近备份校验、自动策略和外部副本都处于可用状态。'];
+      return [i18n.t('backupLib.adviceAllPassed')];
     }
     return issues.map(formatBackupPolicyAdvice).slice(0, 5);
   }
 
   const advice: string[] = [];
-  if (!health.latestBackup) advice.push('先创建一次整站备份，建立可恢复的基线。');
-  if (!health.enabled) advice.push('确认手动备份稳定后，开启每日自动备份。');
-  if (health.retentionCount < 3) advice.push('保留份数建议至少设置为 3 份。');
-  if (!health.mirrorEnabled) advice.push('配置外部镜像目录，把副本同步到 NAS 或独立磁盘。');
-  if (!health.encryption?.enabled) advice.push('配置 BACKUP_ENCRYPTION_SECRET，避免备份包明文落盘。');
-  if (advice.length === 0) advice.push('基础保障看起来正常；点击策略体检可进一步校验目录、空间和备份包完整性。');
+  if (!health.latestBackup) advice.push(i18n.t('backupLib.adviceCreateFirst'));
+  if (!health.enabled) advice.push(i18n.t('backupLib.adviceEnableAuto'));
+  if (health.retentionCount < 3) advice.push(i18n.t('backupLib.adviceKeepThree'));
+  if (!health.mirrorEnabled) advice.push(i18n.t('backupLib.adviceMirrorCopy'));
+  if (!health.encryption?.enabled) advice.push(i18n.t('backupLib.adviceEncryptSecret'));
+  if (advice.length === 0) advice.push(i18n.t('backupLib.adviceBaselineOk'));
   return advice.slice(0, 5);
 }

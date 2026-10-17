@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import type { CategoryItem } from '../../api/categories';
@@ -33,6 +34,7 @@ type ImportResult = {
  */
 export default function ImportModelsDialog({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [stage, setStage] = useState<'pick' | 'map' | 'result'>('pick');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -87,7 +89,7 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
       setCategoryByIndex(mapping);
       setStage('map');
     } catch (err) {
-      toast(err instanceof Error ? err.message : '解析导入包失败', 'error');
+      toast(err instanceof Error ? err.message : t('modelAdminComp.analyzeFail'), 'error');
     } finally {
       setUploading(false);
     }
@@ -105,7 +107,7 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
       setStage('result');
       if (resp.imported > 0) onImported();
     } catch (err) {
-      toast(err instanceof Error ? err.message : '导入失败', 'error');
+      toast(err instanceof Error ? err.message : t('modelAdminComp.importFail'), 'error');
     } finally {
       setImporting(false);
     }
@@ -129,13 +131,13 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-outline-variant/10 px-5 py-4">
-          <h3 className="font-headline text-base font-bold text-on-surface">导入模型</h3>
+          <h3 className="font-headline text-base font-bold text-on-surface">{t('modelAdminComp.importModelsTitle')}</h3>
           <button
             type="button"
             onClick={onClose}
             disabled={uploading || importing}
             className="text-on-surface-variant hover:text-on-surface disabled:opacity-40"
-            aria-label="关闭"
+            aria-label={t('common.close')}
           >
             <Icon name="close" size={18} />
           </button>
@@ -145,9 +147,9 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
           {stage === 'pick' && (
             <>
               <div className="rounded-sm bg-surface-container-high px-3 py-2.5 text-xs leading-relaxed text-on-surface-variant">
-                <p className="mb-1 font-medium text-on-surface">操作步骤</p>
-                <p>1. 在本地站「模型管理 → 全部模型」勾选模型，点「导出选中」得到 zip 包</p>
-                <p>2. 在此处上传该包，导入时可为每个模型指定分类（自动匹配同名分类）</p>
+                <p className="mb-1 font-medium text-on-surface">{t('modelAdminComp.stepsTitle')}</p>
+                <p>{t('modelAdminComp.importStep1')}</p>
+                <p>{t('modelAdminComp.importStep2')}</p>
               </div>
               <button
                 type="button"
@@ -167,7 +169,7 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                 {file ? (
                   <span className="break-all text-sm font-medium text-on-surface">{file.name}</span>
                 ) : (
-                  <span className="text-sm text-on-surface-variant">点击选择模型导出包（zip）</span>
+                  <span className="text-sm text-on-surface-variant">{t('modelAdminComp.chooseZip')}</span>
                 )}
                 <input
                   name="file"
@@ -186,7 +188,9 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                   <div className="h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
                     <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
                   </div>
-                  <p className="mt-1 text-center text-xs text-on-surface-variant">上传解析中 {progress}%...</p>
+                  <p className="mt-1 text-center text-xs text-on-surface-variant">
+                    {t('modelAdminComp.parsingProgress', { progress })}
+                  </p>
                 </div>
               )}
             </>
@@ -196,19 +200,22 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm text-on-surface-variant">
-                  识别到 <strong className="text-primary">{models.length}</strong> 个模型
-                  {dropped > 0 && <span className="ml-1 text-error">（{dropped} 个缺预览已忽略）</span>}
+                  {t('modelAdminComp.detectedPrefix')} <strong className="text-primary">{models.length}</strong>{' '}
+                  {t('modelAdminComp.modelsUnit')}
+                  {dropped > 0 && (
+                    <span className="ml-1 text-error">{t('modelAdminComp.droppedNote', { count: dropped })}</span>
+                  )}
                 </p>
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="text-on-surface-variant">统一归类到：</span>
+                  <span className="text-on-surface-variant">{t('modelAdminComp.unifyCategory')}</span>
                   <select
                     name="select"
                     onChange={(e) => setAllCategories(e.target.value === '__none' ? null : e.target.value || null)}
                     value=""
                     className="max-w-[200px] rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-2 py-1 text-xs text-on-surface"
                   >
-                    <option value="">选择分类…</option>
-                    <option value="__none">不设分类</option>
+                    <option value="">{t('modelAdminComp.selectCategoryPlaceholder')}</option>
+                    <option value="__none">{t('modelAdminComp.noCategory')}</option>
                     {flatCategories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.label}
@@ -230,15 +237,15 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                         <p className="truncate text-sm font-medium text-on-surface">{m.name}</p>
                         <p className="mt-0.5 text-[11px] text-on-surface-variant">
                           {m.original_format.toUpperCase()} · {formatSize(m.original_size)}
-                          {m.drawings > 0 && ` · ${m.drawings} 张图纸`}
-                          {!m.has_original && ' · 无原始文件'}
-                          {m.category_name && ` · 包内分类：${m.category_name}`}
+                          {m.drawings > 0 && ` · ${t('modelAdminComp.drawingsCount', { count: m.drawings })}`}
+                          {!m.has_original && ` · ${t('modelAdminComp.noOriginalFile')}`}
+                          {m.category_name && ` · ${t('modelAdminComp.packageCategory', { name: m.category_name })}`}
                         </p>
                       </div>
                       <div className="flex items-center gap-1.5">
                         {autoMatched && (
                           <span className="rounded-sm bg-primary-container/20 px-1.5 py-0.5 text-[10px] text-primary">
-                            已匹配
+                            {t('modelAdminComp.matched')}
                           </span>
                         )}
                         <select
@@ -250,7 +257,7 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                           disabled={importing}
                           className="max-w-[220px] rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface"
                         >
-                          <option value="">不设分类</option>
+                          <option value="">{t('modelAdminComp.noCategory')}</option>
                           {flatCategories.map((c) => (
                             <option key={c.id} value={c.id}>
                               {c.label}
@@ -273,11 +280,12 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                   size={48}
                   className={result.imported > 0 ? 'text-primary' : 'text-on-surface-variant/40'}
                 />
-                <p className="text-lg font-semibold text-on-surface">导入完成</p>
+                <p className="text-lg font-semibold text-on-surface">{t('modelAdminComp.importDone')}</p>
                 <p className="text-sm text-on-surface-variant">
-                  成功 <strong className="text-primary">{result.imported}</strong> 个
-                  {result.skipped > 0 && `，跳过 ${result.skipped} 个`}
-                  {result.failed > 0 && `，失败 ${result.failed} 个`}
+                  {t('modelAdminComp.successPrefix')} <strong className="text-primary">{result.imported}</strong>{' '}
+                  {t('modelAdminComp.modelsUnit')}
+                  {result.skipped > 0 && t('modelAdminComp.skippedPart', { count: result.skipped })}
+                  {result.failed > 0 && t('modelAdminComp.failedPart', { count: result.failed })}
                 </p>
               </div>
               {result.details && result.details.length > 0 && (
@@ -302,7 +310,7 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                 disabled={uploading}
                 className="flex-1 rounded-sm border border-outline-variant/20 px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -310,7 +318,7 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                 disabled={!file || uploading}
                 className="flex-1 rounded-sm bg-primary-container px-4 py-2 text-sm font-medium text-on-primary hover:opacity-90 disabled:opacity-50"
               >
-                {uploading ? '解析中...' : '上传并解析'}
+                {uploading ? t('modelAdminComp.parsing') : t('modelAdminComp.uploadAndParse')}
               </button>
             </>
           )}
@@ -322,7 +330,7 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                 disabled={importing}
                 className="flex-1 rounded-sm border border-outline-variant/20 px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50"
               >
-                重新选包
+                {t('modelAdminComp.rechoosePackage')}
               </button>
               <button
                 type="button"
@@ -330,7 +338,7 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                 disabled={importing}
                 className="flex-1 rounded-sm bg-primary-container px-4 py-2 text-sm font-medium text-on-primary hover:opacity-90 disabled:opacity-50"
               >
-                {importing ? '导入中...' : `导入 ${models.length} 个模型`}
+                {importing ? t('modelAdminComp.importing') : t('modelAdminComp.importCount', { count: models.length })}
               </button>
             </>
           )}
@@ -340,7 +348,7 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
               onClick={onClose}
               className="flex-1 rounded-sm bg-primary-container px-4 py-2 text-sm font-medium text-on-primary hover:opacity-90"
             >
-              完成
+              {t('modelAdminComp.done')}
             </button>
           )}
         </div>

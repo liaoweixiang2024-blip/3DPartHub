@@ -1,6 +1,6 @@
 import useSWR, { mutate } from 'swr';
 import { getPublicSettings, type SystemSettings } from '../api/settings';
-import { syncI18nSettings } from '../i18n';
+import { i18n, syncI18nSettings } from '../i18n';
 import { applyServerThemeDefaults } from '../stores/useThemeStore';
 import { applyColorScheme } from './colorScheme';
 import { buildPoliceFilingUrl } from './filingNumber';
@@ -384,7 +384,7 @@ export function getFooterPoliceUrl(): string {
 }
 
 export function getModelDetailDisclaimer(): string {
-  return (cache?.model_detail_disclaimer as string)?.trim() || DEFAULT_MODEL_DETAIL_DISCLAIMER;
+  return (cache?.model_detail_disclaimer as string)?.trim() || i18n.t('sharedMisc.defaultModelDisclaimer');
 }
 
 export function getModelDetailCopyright(): string {

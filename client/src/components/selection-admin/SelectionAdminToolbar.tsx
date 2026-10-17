@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import Icon from '../shared/Icon';
 import { SELECTION_TOOLBAR_BUTTON_BASE } from './constants';
 
@@ -22,6 +23,7 @@ export function ToolbarMoreMenu({
   items: { label: string; icon: string; action: () => void; disabled?: boolean }[];
 }) {
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,7 +38,9 @@ export function ToolbarMoreMenu({
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen(!open)} className={MORE_BUTTON_CLASS}>
-        <SelectionToolbarButtonContent icon="settings">更多设置</SelectionToolbarButtonContent>
+        <SelectionToolbarButtonContent icon="settings">
+          {t('selectionAdmin.moreSettings')}
+        </SelectionToolbarButtonContent>
       </button>
       {open && (
         <div className="absolute right-0 top-full z-50 mt-1.5 min-w-[10rem] overflow-hidden rounded-lg border border-outline-variant/15 bg-surface-container-high shadow-lg animate-in fade-in-0 zoom-in-95">

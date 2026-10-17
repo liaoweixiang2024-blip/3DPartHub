@@ -3,6 +3,8 @@
  * `${prefix}_${count}个文件_${YYYYMMDD-HHmm}.zip` —— 一眼可辨日期和数量。
  */
 
+import { i18n } from '../i18n';
+
 function pad(value: number, width = 2): string {
   return String(value).padStart(width, '0');
 }
@@ -21,8 +23,20 @@ const ZIP_PREFIX_LABELS: Record<string, string> = {
   batch: '批量下载',
 };
 
+const ZIP_PREFIX_KEYS: Record<string, string> = {
+  favorites: 'netMisc.zipPrefixFavorites',
+  downloads: 'netMisc.zipPrefixDownloads',
+  batch: 'netMisc.zipPrefixBatch',
+};
+
 export function batchZipName(prefix: string, fileCount: number, date = new Date()): string {
-  const safePrefix = (ZIP_PREFIX_LABELS[prefix] || prefix).replace(/[\s/\\:*?"<>|]+/g, '').trim() || '打包下载';
+  const rawPrefix = ZIP_PREFIX_LABELS[prefix] || prefix;
+  const prefixKey = ZIP_PREFIX_KEYS[prefix];
+  const translatedPrefix = prefixKey ? i18n.t(prefixKey, { defaultValue: rawPrefix }) : rawPrefix;
+  const safePrefix =
+    translatedPrefix.replace(/[\s/\\:*?"<>|]+/g, '').trim() ||
+    i18n.t('netMisc.zipPrefixFallback', { defaultValue: '打包下载' });
   const count = Math.max(1, Math.floor(fileCount) || 1);
-  return `${safePrefix}_${count}个文件_${formatZipStamp(date)}.zip`;
+  const countLabel = i18n.t('netMisc.zipFileCount', { defaultValue: '{{count}}个文件', count });
+  return `${safePrefix}_${countLabel}_${formatZipStamp(date)}.zip`;
 }

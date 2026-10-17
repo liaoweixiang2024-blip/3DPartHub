@@ -4,6 +4,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { threadSizeApi, type ThreadSizeEntry } from '../../api/threadSize';
 import { useImeSafeSearchInput } from '../../hooks/useImeSafeSearchInput';
 import { AdminTableHeadCell, AdminTableHeadRow, ADMIN_TABLE_HEAD_CLASS } from '../shared/AdminDataTable';
@@ -14,6 +15,7 @@ import SearchField from '../shared/SearchField';
 import { useToast } from '../shared/Toast';
 import {
   CATEGORY_FILTERS,
+  categoryFilterLabel,
   categoryIcon,
   type DataTab,
   entryToAdminRow,
@@ -33,6 +35,7 @@ interface ManagementModalProps {
 // ── Component ────────────────────────────────────────────────────────
 
 export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onClose }: ManagementModalProps) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [managementCategory, setManagementCategory] = useState('thread:all');
   const {
@@ -130,22 +133,22 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
       };
       if (editingEntry === 'new') await threadSizeApi.create(payload);
       else if (editingEntry) await threadSizeApi.update(editingEntry.id, payload);
-      toast('规格数据已保存', 'success');
+      toast(t('threadTool.toastSaved'), 'success');
       setEditingEntry(null);
       await refreshThreadSizeData();
     } catch (err) {
-      toast(err instanceof SyntaxError ? '结构化 JSON 格式不正确' : '保存失败', 'error');
+      toast(err instanceof SyntaxError ? t('threadTool.toastJsonInvalid') : t('threadTool.toastSaveFailed'), 'error');
     }
   };
 
   const deleteEntry = async (entry: ThreadSizeEntry) => {
     try {
       await threadSizeApi.remove(entry.id);
-      toast('规格数据已删除', 'success');
+      toast(t('threadTool.toastDeleted'), 'success');
       setDeleteTarget(null);
       await refreshThreadSizeData();
     } catch {
-      toast('删除失败', 'error');
+      toast(t('threadTool.toastDeleteFailed'), 'error');
     }
   };
 
@@ -159,21 +162,19 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
           className="fixed inset-0 flex min-h-0 flex-col bg-surface-container-low shadow-2xl sm:relative sm:inset-auto sm:h-[88dvh] sm:w-[min(96vw,1180px)] sm:overflow-hidden sm:rounded-xl sm:border sm:border-outline-variant/20"
           role="dialog"
           aria-modal="true"
-          aria-label="规格数据管理"
+          aria-label={t('threadTool.manageTitle')}
           onClick={(event) => event.stopPropagation()}
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3">
             <div className="min-w-0">
-              <h2 className="truncate text-base font-bold text-on-surface">规格数据管理</h2>
-              <p className="mt-0.5 line-clamp-1 text-xs text-on-surface-variant">
-                数据已接入数据库，可人工新增、编辑、删除；前台表格只读取数据库记录。
-              </p>
+              <h2 className="truncate text-base font-bold text-on-surface">{t('threadTool.manageTitle')}</h2>
+              <p className="mt-0.5 line-clamp-1 text-xs text-on-surface-variant">{t('threadTool.manageDesc')}</p>
             </div>
             <button
               type="button"
               onClick={onClose}
               className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-              aria-label="关闭"
+              aria-label={t('common.close')}
             >
               <Icon name="close" size={18} />
             </button>
@@ -183,19 +184,19 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
             <ResponsiveSectionTabs
               tabs={CATEGORY_FILTERS.map((tab) => ({
                 value: tab.key,
-                label: tab.label,
+                label: categoryFilterLabel(tab),
                 icon: categoryIcon(tab.key),
                 count: adminCounts[tab.key] || 0,
               }))}
               value={managementCategory}
               onChange={setManagementCategory}
-              mobileTitle="数据分类"
+              mobileTitle={t('threadTool.dataCategoryTitle')}
             />
             <SearchField
               inputProps={managementQueryInputProps}
               value={managementQueryInputValue}
               onClear={() => setManagementQueryInput('')}
-              placeholder="搜索规格、型号、说明..."
+              placeholder={t('threadTool.searchPlaceholder')}
             />
           </div>
 
@@ -203,17 +204,17 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
             <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
                 <p className="text-sm font-bold text-on-surface">
-                  {CATEGORY_FILTERS.find((tab) => tab.key === managementCategory)?.label}
+                  {categoryFilterLabel(
+                    CATEGORY_FILTERS.find((tab) => tab.key === managementCategory) || CATEGORY_FILTERS[0],
+                  )}
                 </p>
                 <p className="mt-0.5 text-xs text-on-surface-variant">
-                  {adminRows.length
-                    ? '当前读取数据库数据，修改后前台立即生效。'
-                    : '数据库暂无规格数据，请新增记录或通过数据库导入。'}
+                  {adminRows.length ? t('threadTool.dbLiveHint') : t('threadTool.dbEmptyHint')}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="rounded-full bg-primary-container/10 px-2.5 py-1 text-xs font-bold text-primary-container">
-                  {visibleAdminRows.length} 项
+                  {t('threadTool.itemCount', { count: visibleAdminRows.length })}
                 </span>
                 <button
                   type="button"
@@ -221,7 +222,7 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
                   className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-2.5 text-xs font-bold text-on-primary transition-opacity hover:opacity-90"
                 >
                   <Icon name="add" size={13} />
-                  新增
+                  {t('threadTool.addEntry')}
                 </button>
               </div>
             </div>
@@ -230,8 +231,8 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
               <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-10 text-center">
                 <div>
                   <Icon name="search_off" size={32} className="mx-auto text-on-surface-variant/30" />
-                  <p className="mt-3 text-sm font-bold text-on-surface">没有匹配数据</p>
-                  <p className="mt-1 text-xs text-on-surface-variant">换一个规格、型号或说明关键词试试。</p>
+                  <p className="mt-3 text-sm font-bold text-on-surface">{t('threadTool.emptyTitle')}</p>
+                  <p className="mt-1 text-xs text-on-surface-variant">{t('threadTool.emptyDesc')}</p>
                 </div>
               </div>
             ) : (
@@ -239,11 +240,11 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
                 <table className="w-full min-w-[760px] border-separate border-spacing-0 text-left text-sm">
                   <thead className={ADMIN_TABLE_HEAD_CLASS}>
                     <AdminTableHeadRow>
-                      <AdminTableHeadCell>规格 / 型号</AdminTableHeadCell>
-                      <AdminTableHeadCell>分类</AdminTableHeadCell>
-                      <AdminTableHeadCell>关键参数</AdminTableHeadCell>
-                      <AdminTableHeadCell>说明</AdminTableHeadCell>
-                      <AdminTableHeadCell className="text-right">操作</AdminTableHeadCell>
+                      <AdminTableHeadCell>{t('threadTool.colSpec')}</AdminTableHeadCell>
+                      <AdminTableHeadCell>{t('threadTool.colCategory')}</AdminTableHeadCell>
+                      <AdminTableHeadCell>{t('threadTool.colKeyParams')}</AdminTableHeadCell>
+                      <AdminTableHeadCell>{t('threadTool.colNote')}</AdminTableHeadCell>
+                      <AdminTableHeadCell className="text-right">{t('threadTool.colActions')}</AdminTableHeadCell>
                     </AdminTableHeadRow>
                   </thead>
                   <tbody className="divide-y divide-outline-variant/8">
@@ -261,7 +262,7 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
                               className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/12 px-2.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
                             >
                               <Icon name="edit" size={13} />
-                              编辑
+                              {t('common.edit')}
                             </button>
                             <button
                               type="button"
@@ -269,7 +270,7 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
                               className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-error/15 px-2.5 text-xs font-medium text-error transition-colors hover:bg-error/8"
                             >
                               <Icon name="delete" size={13} />
-                              删除
+                              {t('common.delete')}
                             </button>
                           </div>
                         </td>
@@ -299,9 +300,9 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
         onConfirm={() => {
           if (deleteTarget) void deleteEntry(deleteTarget);
         }}
-        title="确认删除规格"
-        description={`确定删除「${deleteTarget?.primary || ''}」吗？`}
-        confirmLabel="确认删除"
+        title={t('threadTool.confirmDeleteTitle')}
+        description={t('threadTool.confirmDeleteDesc', { name: deleteTarget?.primary || '' })}
+        confirmLabel={t('threadTool.confirmDeleteLabel')}
       />
     </>
   );
@@ -329,27 +330,28 @@ interface EntryEditorDialogProps {
 }
 
 function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, onClose }: EntryEditorDialogProps) {
+  const { t } = useTranslation();
   return (
     <div className="fixed inset-0 z-[340] flex items-center justify-center bg-black/55 p-3" onClick={onClose}>
       <div
         className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-outline-variant/20 bg-surface shadow-2xl"
         role="dialog"
         aria-modal="true"
-        aria-label="编辑规格数据"
+        aria-label={t('threadTool.editorTitleEdit')}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3">
           <div className="min-w-0">
             <h2 className="text-base font-bold text-on-surface">
-              {editingEntry === 'new' ? '新增规格数据' : '编辑规格数据'}
+              {editingEntry === 'new' ? t('threadTool.editorTitleNew') : t('threadTool.editorTitleEdit')}
             </h2>
-            <p className="mt-0.5 text-xs text-on-surface-variant">结构化 JSON 会用于前台表格精确展示。</p>
+            <p className="mt-0.5 text-xs text-on-surface-variant">{t('threadTool.editorDesc')}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-            aria-label="关闭"
+            aria-label={t('common.close')}
           >
             <Icon name="close" size={18} />
           </button>
@@ -358,7 +360,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 custom-scrollbar">
           <div className="grid gap-3 md:grid-cols-3">
             <label className="block">
-              <span className="text-xs font-bold text-on-surface-variant">类型</span>
+              <span className="text-xs font-bold text-on-surface-variant">{t('threadTool.fieldType')}</span>
               <select
                 name="kind"
                 value={entryDraft.kind}
@@ -367,14 +369,14 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
                 }
                 className="mt-1 h-10 w-full rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none"
               >
-                <option value="thread">螺纹</option>
-                <option value="pipe">管径</option>
-                <option value="hose">油管/气管</option>
-                <option value="fitting">扣压接头</option>
+                <option value="thread">{t('threadTool.kindThread')}</option>
+                <option value="pipe">{t('threadTool.kindPipe')}</option>
+                <option value="hose">{t('threadTool.kindHose')}</option>
+                <option value="fitting">{t('threadTool.kindFitting')}</option>
               </select>
             </label>
             <label className="block">
-              <span className="text-xs font-bold text-on-surface-variant">螺纹分类</span>
+              <span className="text-xs font-bold text-on-surface-variant">{t('threadTool.fieldFamily')}</span>
               <input
                 name="family"
                 value={entryDraft.family}
@@ -386,7 +388,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
               />
             </label>
             <label className="block">
-              <span className="text-xs font-bold text-on-surface-variant">管路分类</span>
+              <span className="text-xs font-bold text-on-surface-variant">{t('threadTool.fieldHoseKind')}</span>
               <input
                 name="hose-kind"
                 value={entryDraft.hoseKind}
@@ -401,7 +403,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
 
           <div className="grid gap-3 md:grid-cols-2">
             <label className="block">
-              <span className="text-xs font-bold text-on-surface-variant">规格 / 型号</span>
+              <span className="text-xs font-bold text-on-surface-variant">{t('threadTool.colSpec')}</span>
               <input
                 name="primary"
                 value={entryDraft.primary}
@@ -412,7 +414,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
               />
             </label>
             <label className="block">
-              <span className="text-xs font-bold text-on-surface-variant">分类显示</span>
+              <span className="text-xs font-bold text-on-surface-variant">{t('threadTool.fieldCategoryDisplay')}</span>
               <input
                 name="secondary"
                 value={entryDraft.secondary}
@@ -425,7 +427,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
           </div>
 
           <label className="block">
-            <span className="text-xs font-bold text-on-surface-variant">关键参数</span>
+            <span className="text-xs font-bold text-on-surface-variant">{t('threadTool.colKeyParams')}</span>
             <input
               name="meta"
               value={entryDraft.meta}
@@ -435,7 +437,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
           </label>
 
           <label className="block">
-            <span className="text-xs font-bold text-on-surface-variant">说明</span>
+            <span className="text-xs font-bold text-on-surface-variant">{t('threadTool.colNote')}</span>
             <textarea
               name="note"
               value={entryDraft.note}
@@ -446,7 +448,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
           </label>
 
           <label className="block">
-            <span className="text-xs font-bold text-on-surface-variant">结构化 JSON</span>
+            <span className="text-xs font-bold text-on-surface-variant">{t('threadTool.fieldJson')}</span>
             <textarea
               name="data-text"
               value={entryDraft.dataText}
@@ -461,7 +463,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
 
           <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
             <label className="block">
-              <span className="text-xs font-bold text-on-surface-variant">排序</span>
+              <span className="text-xs font-bold text-on-surface-variant">{t('threadTool.fieldSortOrder')}</span>
               <input
                 name="sort-order"
                 type="number"
@@ -481,7 +483,7 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
                   setEntryDraft((prev: typeof entryDraft) => ({ ...prev, enabled: event.target.checked }))
                 }
               />
-              启用
+              {t('threadTool.fieldEnabled')}
             </label>
           </div>
         </div>
@@ -492,14 +494,14 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
             onClick={onClose}
             className="h-9 rounded-lg border border-outline-variant/20 px-4 text-sm font-bold text-on-surface-variant"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
             onClick={() => void onSave()}
             className="h-9 rounded-lg bg-primary-container px-4 text-sm font-bold text-on-primary"
           >
-            保存
+            {t('common.save')}
           </button>
         </div>
       </div>

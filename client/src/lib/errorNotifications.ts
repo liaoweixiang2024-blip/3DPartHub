@@ -159,20 +159,23 @@ export function getRateLimitErrorMessage(error: unknown) {
 
 /** 已知冗长/技术性的服务端报错 → 一句话友好提示。
  *  命中规则的原始文案保留在 console（[server-error] 前缀），便于排查。 */
-const VERBOSE_SERVER_MESSAGE_RULES: Array<{ re: RegExp; text: string }> = [
+const VERBOSE_SERVER_MESSAGE_RULES: Array<{ re: RegExp; textKey: string; text: string }> = [
   {
     // 转换子进程 OOM / 内存不足：服务端附带信号名、源文件大小、容器配额、调参建议等诊断信息
     re: /heap out of memory|SIGABRT|SIGSEGV|SIGKILL|OOM|内存不足|内存配额|转换子进程异常退出/i,
+    textKey: 'netMisc.errorServerOom',
     text: '服务器内存不足，转换失败：大文件请拆分上传，或联系管理员调大服务器内存配置',
   },
   {
     // 上传体积超限（nginx / express body 限制返回的原文）
     re: /payload too large|entity too large|request entity|multererror/i,
+    textKey: 'netMisc.errorUploadTooLarge',
     text: '文件过大，超出服务器上传限制',
   },
   {
     // Prisma 内部错误原文（Invalid `prisma.xxx()` …）对用户无意义
     re: /Invalid `prisma\.|prismaclientvalidationerror|prisma client/i,
+    textKey: 'netMisc.errorDataService',
     text: '数据服务异常，请稍后重试；持续出现请联系管理员',
   },
 ];
@@ -195,7 +198,7 @@ function simplifyServerMessage(raw: string): string {
     : original;
 
   for (const rule of VERBOSE_SERVER_MESSAGE_RULES) {
-    if (rule.re.test(stripped)) return rule.text;
+    if (rule.re.test(stripped)) return i18n.t(rule.textKey, { defaultValue: rule.text });
   }
 
   // 兜底：只取第一行（去掉换行携带的堆栈/元信息），超长时截到首个句读或 60 字

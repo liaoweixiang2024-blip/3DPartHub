@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import Icon from '../shared/Icon';
 
@@ -39,6 +40,7 @@ export default function NodeCategoriesModal({
   items: ModalCategoryItem[];
   onModelCategoryClick?: (categoryId: string) => void;
 }) {
+  const { t } = useTranslation();
   // Esc 关闭；打开时锁定背景滚动
   useEffect(() => {
     if (!open) return;
@@ -69,7 +71,7 @@ export default function NodeCategoriesModal({
         <button
           type="button"
           onClick={onClose}
-          aria-label="关闭"
+          aria-label={t('common.close')}
           className="absolute -top-1 right-0 z-10 grid h-10 w-10 place-items-center rounded-full bg-white/25 text-white shadow-md backdrop-blur-sm transition-colors hover:bg-white/40"
         >
           <Icon name="close" size={20} />

@@ -1,3 +1,4 @@
+import { i18n } from '../i18n';
 import { UPLOAD_REQUEST_TIMEOUT_MS } from '../lib/uploadLimits';
 import type { PaginatedResponse, PaginationParams } from '../types';
 import client from './client';
@@ -767,7 +768,7 @@ export const modelApi = {
     const MAX_POLL_MS = 10 * 60 * 1000; // 10 minutes max
     for (;;) {
       if (Date.now() - pollStart > MAX_POLL_MS) {
-        throw new Error('批量上传处理超时，请稍后在模型列表中查看处理结果');
+        throw new Error(i18n.t('apiMisc.batchUploadTimeout'));
       }
       await sleep(800);
       const progressRes = await client.get(`/batch/upload-progress/${jobId}`, { timeout: UPLOAD_REQUEST_TIMEOUT_MS });
@@ -777,7 +778,7 @@ export const modelApi = {
         return progress.result || { total: 0, results: [] };
       }
       if (progress.stage === 'error') {
-        throw new Error(progress.error || progress.message || '批量上传处理失败');
+        throw new Error(progress.error || progress.message || i18n.t('apiMisc.batchUploadFailed'));
       }
     }
   },

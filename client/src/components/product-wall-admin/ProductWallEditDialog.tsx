@@ -1,4 +1,5 @@
 import type { ProductWallItem, ProductWallKind } from '../../api/productWall';
+import { useTranslation } from 'react-i18next';
 import DialogOverlay from '../shared/DialogOverlay';
 import Icon from '../shared/Icon';
 
@@ -30,6 +31,7 @@ export function ProductWallEditDialog({
   onCancel: () => void;
   onSave: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <DialogOverlay
       onClose={onCancel}
@@ -49,13 +51,13 @@ export function ProductWallEditDialog({
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold tracking-[0.18em] text-primary-container">IMAGE SETTINGS</p>
-            <h2 className="mt-1 text-lg font-bold text-on-surface">编辑图片信息</h2>
+            <h2 className="mt-1 text-lg font-bold text-on-surface">{t('productWallAdmin.editTitle')}</h2>
           </div>
           <button
             type="button"
             onClick={onCancel}
             className="inline-flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-            aria-label="关闭"
+            aria-label={t('common.close')}
             data-tooltip-ignore
           >
             <Icon name="close" size={16} />
@@ -63,28 +65,30 @@ export function ProductWallEditDialog({
         </div>
         <div className="space-y-4">
           <label className="block">
-            <span className="text-xs font-medium text-on-surface-variant">标题</span>
+            <span className="text-xs font-medium text-on-surface-variant">{t('productWallAdmin.fieldTitle')}</span>
             <input
               name="edit-title"
               value={editTitle}
               onChange={(event) => setEditTitle(event.target.value)}
               className="mt-1 h-10 w-full border-b border-outline-variant/35 bg-transparent text-sm text-on-surface outline-none transition-colors focus:border-primary-container"
-              placeholder="例如：不锈钢快插接头"
+              placeholder={t('productWallAdmin.titlePlaceholder')}
             />
           </label>
           <label className="block">
-            <span className="text-xs font-medium text-on-surface-variant">描述</span>
+            <span className="text-xs font-medium text-on-surface-variant">
+              {t('productWallAdmin.fieldDescription')}
+            </span>
             <textarea
               name="edit-description"
               value={editDescription}
               onChange={(event) => setEditDescription(event.target.value)}
               rows={3}
               className="mt-1 w-full resize-none border-b border-outline-variant/35 bg-transparent py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary-container"
-              placeholder="补充图片内容、现场信息或使用场景"
+              placeholder={t('productWallAdmin.descriptionPlaceholder')}
             />
           </label>
           <label className="block">
-            <span className="text-xs font-medium text-on-surface-variant">分类</span>
+            <span className="text-xs font-medium text-on-surface-variant">{t('productWallAdmin.fieldCategory')}</span>
             <select
               name="edit-kind"
               value={editKind}
@@ -99,13 +103,13 @@ export function ProductWallEditDialog({
             </select>
           </label>
           <label className="block">
-            <span className="text-xs font-medium text-on-surface-variant">标签</span>
+            <span className="text-xs font-medium text-on-surface-variant">{t('productWallAdmin.fieldTags')}</span>
             <input
               name="edit-tags"
               value={editTags}
               onChange={(event) => setEditTags(event.target.value)}
               className="mt-1 h-10 w-full border-b border-outline-variant/35 bg-transparent text-sm text-on-surface outline-none transition-colors focus:border-primary-container"
-              placeholder="多个标签用逗号隔开"
+              placeholder={t('productWallAdmin.tagsPlaceholder')}
             />
           </label>
         </div>
@@ -115,13 +119,13 @@ export function ProductWallEditDialog({
             onClick={onCancel}
             className="inline-flex h-9 items-center justify-center rounded-sm px-3 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="submit"
             className="inline-flex h-9 items-center justify-center rounded-sm bg-primary-container px-4 text-sm font-semibold text-on-primary-container transition-colors hover:bg-primary-container/90"
           >
-            保存
+            {t('common.save')}
           </button>
         </div>
       </form>

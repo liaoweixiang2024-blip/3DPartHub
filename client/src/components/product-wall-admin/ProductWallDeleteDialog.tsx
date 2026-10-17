@@ -1,4 +1,5 @@
 import type { ProductWallItem } from '../../api/productWall';
+import { useTranslation } from 'react-i18next';
 import Icon from '../shared/Icon';
 import SafeImage from '../shared/SafeImage';
 
@@ -17,6 +18,7 @@ export function ProductWallDeleteDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation();
   if (!deleteDialog) return null;
 
   return (
@@ -37,11 +39,13 @@ export function ProductWallDeleteDialog({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs font-semibold tracking-[0.18em] text-red-600">DELETE IMAGE</p>
-              <h2 className="mt-1 text-lg font-bold tracking-[-0.03em] text-on-surface">确认删除图片？</h2>
+              <h2 className="mt-1 text-lg font-bold tracking-[-0.03em] text-on-surface">
+                {t('productWallAdmin.deleteTitle')}
+              </h2>
               <p className="mt-2 text-sm leading-6 text-on-surface-variant">
                 {deleteDialog.type === 'single'
-                  ? '删除后图片会移入回收站（保留 30 天），可在图片管理的「回收站」里恢复或彻底删除。'
-                  : `将把已选的 ${deleteDialog.ids.length} 张图片移入回收站，可在「回收站」里恢复或彻底删除。`}
+                  ? t('productWallAdmin.deleteSingleHint')
+                  : t('productWallAdmin.deleteBatchHint', { count: deleteDialog.ids.length })}
               </p>
             </div>
           </div>
@@ -63,7 +67,7 @@ export function ProductWallDeleteDialog({
             </div>
           ) : (
             <div className="mt-5 rounded-lg border border-red-500/16 bg-red-500/6 px-4 py-3 text-sm text-red-700">
-              已选择 <span className="font-semibold">{deleteDialog.ids.length}</span> 张图片，请确认是否批量删除。
+              {t('productWallAdmin.deleteBatchConfirm', { count: deleteDialog.ids.length })}
             </div>
           )}
         </div>
@@ -75,7 +79,7 @@ export function ProductWallDeleteDialog({
             onClick={onCancel}
             className="inline-flex h-9 items-center justify-center rounded-sm px-4 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -84,7 +88,7 @@ export function ProductWallDeleteDialog({
             className="inline-flex h-9 items-center justify-center gap-1.5 rounded-sm bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Icon name={deleting ? 'sync' : 'delete'} size={16} className={deleting ? 'animate-spin' : ''} />
-            {deleting ? '删除中' : '确认删除'}
+            {deleting ? t('productWallAdmin.deleting') : t('productWallAdmin.confirmDelete')}
           </button>
         </div>
       </section>

@@ -41,8 +41,8 @@ const slotLimitOf = (groupId: string) => GROUP_SLOT_LIMITS[groupId] ?? DEFAULT_S
 type DraftSection = CategoryNavSection;
 
 export default function CategoryNavAdminPage() {
-  useDocumentTitle('导航管理');
   const { t } = useTranslation();
+  useDocumentTitle(t('categoryNavAdmin.title'));
   const { toast } = useToast();
 
   const {
@@ -257,7 +257,7 @@ export default function CategoryNavAdminPage() {
       await updateSettings({ category_nav_config: JSON.stringify(draft) });
       setSavedSnapshot(JSON.stringify(draft));
       await mutate();
-      toast('设置已保存', 'success');
+      toast(t('categoryNavAdmin.settingsSaved'), 'success');
       // 主动刷新本浏览器的站点配置缓存（localStorage + 模块缓存，默认 2 分钟 TTL）：
       // 让已打开的 /category-nav 等页面约 1 秒内跟随更新，不再等缓存过期
       void refreshSiteConfig();
@@ -283,7 +283,7 @@ export default function CategoryNavAdminPage() {
             >
               <span className={`h-1.5 w-1.5 rounded-full ${changed ? 'bg-amber-500' : 'bg-emerald-500'}`} />
               {/* 两个文案都是 7 个字（CJK 等宽），切换时宽度不变，避免页面抖动 */}
-              {changed ? '有未保存的修改' : '当前配置已保存'}
+              {changed ? t('categoryNavAdmin.unsavedChanges') : t('categoryNavAdmin.allSaved')}
             </span>
             <button
               type="button"
@@ -292,7 +292,7 @@ export default function CategoryNavAdminPage() {
               className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3.5 text-xs font-bold text-on-primary shadow-sm transition-colors hover:opacity-95 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none md:h-8"
             >
               <Icon name={saving ? 'progress_activity' : 'save'} size={14} className={saving ? 'animate-spin' : ''} />
-              {saving ? '保存中...' : '保存设置'}
+              {saving ? t('categoryNavAdmin.saving') : t('categoryNavAdmin.saveSettings')}
             </button>
           </div>
         }

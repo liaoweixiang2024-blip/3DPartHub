@@ -1,5 +1,6 @@
 import type { ColumnDef, SelectionProduct } from '../../api/selections';
 import type { UploadPolicy } from '../../lib/businessConfig';
+import { i18n } from '../../i18n';
 
 export const PRODUCT_IMPORT_BASE_HEADERS = ['名称', '型号编号'];
 export const PRODUCT_IMPORT_EXTRA_HEADERS = ['图片', 'PDF链接', '是否套件', '组件(JSON)'];
@@ -26,12 +27,12 @@ export function rowsToImportObjects(rows: unknown[][], policy: SelectionImportPo
   const nonEmptyRows = rows.filter((row) => row.some((cell) => normalizeImportCell(cell)));
   if (nonEmptyRows.length <= 1) return [];
   if (nonEmptyRows.length - 1 > policy.selectionImportMaxRows) {
-    throw new Error(`最多一次导入 ${policy.selectionImportMaxRows} 行`);
+    throw new Error(i18n.t('selectionAdmin.importMaxRows', { count: policy.selectionImportMaxRows }));
   }
 
   const headers = nonEmptyRows[0].map(normalizeImportCell);
   if (headers.length > policy.selectionImportMaxColumns) {
-    throw new Error(`最多支持 ${policy.selectionImportMaxColumns} 列`);
+    throw new Error(i18n.t('selectionAdmin.importMaxColumns', { count: policy.selectionImportMaxColumns }));
   }
 
   return nonEmptyRows.slice(1).map((row) => {
@@ -90,7 +91,7 @@ export async function readProductImportRows(
 ): Promise<Record<string, string>[]> {
   const maxSizeMb = Math.max(1, Number(policy.selectionImportMaxSizeMb) || 5);
   if (file.size > maxSizeMb * 1024 * 1024) {
-    throw new Error(`导入文件不能超过 ${maxSizeMb}MB`);
+    throw new Error(i18n.t('selectionAdmin.importFileTooLarge', { size: maxSizeMb }));
   }
 
   const lowerName = file.name.toLowerCase();
@@ -101,7 +102,7 @@ export async function readProductImportRows(
     const { readSheet } = await import('read-excel-file/browser');
     return rowsToImportObjects(await readSheet(file), policy);
   }
-  throw new Error('仅支持 .xlsx / .csv 文件');
+  throw new Error(i18n.t('selectionAdmin.onlyXlsxCsv'));
 }
 
 export function safeSpreadsheetText(value: unknown): string {

@@ -1,3 +1,4 @@
+import { i18n } from '../../i18n';
 import { classicThemeManifest } from './classic/manifest';
 import type { InterfaceThemeKey, InterfaceThemeMeta } from './types';
 import { workbenchThemeManifest } from './workbench/manifest';
@@ -11,7 +12,10 @@ export const INTERFACE_THEME_CATALOG: Record<InterfaceThemeKey, InterfaceThemeMe
 
 export const INTERFACE_THEME_OPTIONS = Object.values(INTERFACE_THEME_CATALOG).map((theme) => ({
   value: theme.key,
-  label: theme.settingsLabel,
+  // getter：i18n 语言在模块加载后才就绪，取 label 时才求值
+  get label() {
+    return i18n.t(`themeMeta.${theme.key}.settingsLabel`, { defaultValue: theme.settingsLabel });
+  },
 }));
 
 export function isInterfaceThemeKey(value?: string | null): value is InterfaceThemeKey {

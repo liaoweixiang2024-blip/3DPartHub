@@ -324,9 +324,9 @@ export default function CadViewerPanel({
           final = job;
           break;
         }
-        if (job.stage === 'error') throw new Error(job.error || '重新生成失败');
+        if (job.stage === 'error') throw new Error(job.error || i18n.t('modelAdminComp.regenFail'));
       }
-      if (!final) throw new Error('转换超时');
+      if (!final) throw new Error(i18n.t('modelAdminComp.convertTimeout'));
       setCurrentPreviewMeta((final.result as { preview_meta?: unknown } | undefined)?.preview_meta as never);
       toast(
         final.result?.thumbnail_warning || t('viewer.toasts.previewRegenerated'),

@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import client from '../../api/client';
 import { listProductWallUploadWhitelist, type ProductWallUploadWhitelistUser } from '../../api/productWall';
 import { unwrapResponse } from '../../api/response';
 import Icon from '../shared/Icon';
 
-const PRODUCT_WALL_UPLOAD_ROLE_OPTIONS: { value: string; label: string; hint?: string }[] = [
-  { value: 'ADMIN', label: '管理员', hint: '始终允许' },
-  { value: 'EDITOR', label: '编辑' },
-  { value: 'INTERNAL', label: '内部' },
-  { value: 'VIEWER', label: '普通用户' },
+const PRODUCT_WALL_UPLOAD_ROLE_OPTIONS: { value: string; labelKey: string; hintKey?: string }[] = [
+  { value: 'ADMIN', labelKey: 'productWallAdmin.roleAdmin', hintKey: 'productWallAdmin.roleAdminHint' },
+  { value: 'EDITOR', labelKey: 'productWallAdmin.roleEditor' },
+  { value: 'INTERNAL', labelKey: 'productWallAdmin.roleInternal' },
+  { value: 'VIEWER', labelKey: 'productWallAdmin.roleViewer' },
 ];
 
 /** 图库上传角色白名单编辑器（设置页与图库管理面板权限弹窗共用） */
@@ -20,6 +21,7 @@ export function ProductWallUploadRolesEditor({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   const selected = value
     .split(',')
     .map((item) => item.trim())
@@ -37,7 +39,7 @@ export function ProductWallUploadRolesEditor({
               const next = enabled ? selected.filter((k) => k !== opt.value) : [...selected, opt.value];
               onChange(next.join(','));
             }}
-            title={opt.value === 'ADMIN' ? '管理员始终允许上传，不可关闭' : undefined}
+            title={opt.value === 'ADMIN' ? t('productWallAdmin.roleAdminTitle') : undefined}
             className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
               enabled
                 ? 'border-primary-container/30 bg-primary-container/20 text-primary-container'
@@ -45,8 +47,8 @@ export function ProductWallUploadRolesEditor({
             } ${opt.value === 'ADMIN' ? 'cursor-default' : ''}`}
           >
             <Icon name={enabled ? 'check_circle' : 'circle'} size={14} />
-            {opt.label}
-            {opt.hint ? <span className="text-[10px] opacity-70">（{opt.hint}）</span> : null}
+            {t(opt.labelKey)}
+            {opt.hintKey ? <span className="text-[10px] opacity-70">（{t(opt.hintKey)}）</span> : null}
           </button>
         );
       })}
@@ -72,6 +74,7 @@ export function ProductWallUploadUsersEditor({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   const ids = useMemo(
     () =>
       Array.from(
@@ -139,12 +142,12 @@ export function ProductWallUploadUsersEditor({
               >
                 <Icon name="person" size={13} />
                 {known ? known.username : `${id.slice(0, 8)}…`}
-                {known?.disabled ? <span className="opacity-70">（已禁用）</span> : null}
+                {known?.disabled ? <span className="opacity-70">{t('productWallAdmin.userDisabled')}</span> : null}
                 <button
                   type="button"
                   onClick={() => toggleUser(id)}
                   className="ml-0.5 inline-flex rounded-full p-0.5 transition-colors hover:bg-black/10"
-                  aria-label="移除该用户"
+                  aria-label={t('productWallAdmin.removeUser')}
                 >
                   <Icon name="close" size={12} />
                 </button>
@@ -162,13 +165,13 @@ export function ProductWallUploadUsersEditor({
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          placeholder="搜索用户名 / 邮箱 / 公司，选择要添加的用户"
+          placeholder={t('productWallAdmin.userSearchPlaceholder')}
           className="h-9 w-full rounded-md border border-outline-variant/20 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none transition-colors focus:border-primary-container/60"
         />
         {open && search.trim() ? (
           <div className="absolute left-0 top-10 z-30 w-full overflow-hidden rounded-lg border border-outline-variant/16 bg-surface shadow-panel">
             {searching ? (
-              <p className="px-3 py-2.5 text-xs text-on-surface-variant">搜索中...</p>
+              <p className="px-3 py-2.5 text-xs text-on-surface-variant">{t('productWallAdmin.searchingUsers')}</p>
             ) : results.length ? (
               results.map((user) => {
                 const picked = ids.includes(user.id);
@@ -189,11 +192,13 @@ export function ProductWallUploadUsersEditor({
                       <span className="block truncate text-sm text-on-surface">{user.username}</span>
                       <span className="block truncate text-xs text-on-surface-variant">
                         {user.email} · {user.role}
-                        {user.disabled ? ' · 已禁用' : ''}
+                        {user.disabled ? ` · ${t('productWallAdmin.userDisabledPlain')}` : ''}
                       </span>
                     </span>
                     {picked ? (
-                      <span className="shrink-0 text-xs text-on-surface-variant">已添加</span>
+                      <span className="shrink-0 text-xs text-on-surface-variant">
+                        {t('productWallAdmin.userAdded')}
+                      </span>
                     ) : (
                       <Icon name="add" size={15} className="shrink-0" />
                     )}
@@ -201,14 +206,12 @@ export function ProductWallUploadUsersEditor({
                 );
               })
             ) : (
-              <p className="px-3 py-2.5 text-xs text-on-surface-variant">没有匹配的用户</p>
+              <p className="px-3 py-2.5 text-xs text-on-surface-variant">{t('productWallAdmin.noUserMatch')}</p>
             )}
           </div>
         ) : null}
       </div>
-      <p className="text-xs text-on-surface-variant">
-        白名单为空时仅按角色白名单控制；在此添加的用户不受角色限制，可直接上传（进入待审核）。被删除的用户自动失效。
-      </p>
+      <p className="text-xs text-on-surface-variant">{t('productWallAdmin.userWhitelistHint')}</p>
     </div>
   );
 }

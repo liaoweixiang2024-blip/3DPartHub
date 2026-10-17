@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SystemSettings } from '../../api/settings';
 import { applyColorScheme, generatePaletteFromPrimary } from '../../lib/colorScheme';
 import { COLOR_KEYS, COLOR_PRESETS } from '../../lib/colorSchemes';
@@ -9,9 +10,10 @@ type ColorSchemeSettingsProps = {
   updateSetting: (key: keyof SystemSettings, value: boolean | number | string) => void;
 };
 
+// label 存 settingsWidgets i18n 键，渲染处 t()
 const COLOR_KEY_GROUPS = [
   {
-    label: 'Surface / 页面底色',
+    label: 'settingsWidgets.colorGroupSurface',
     keys: [
       'surface-tint',
       'surface',
@@ -29,24 +31,25 @@ const COLOR_KEY_GROUPS = [
     ],
   },
   {
-    label: 'Primary / 主色',
+    label: 'settingsWidgets.colorGroupPrimary',
     keys: ['primary', 'primary-container', 'on-primary', 'on-primary-container'],
   },
   {
-    label: 'Secondary / 辅助色',
+    label: 'settingsWidgets.colorGroupSecondary',
     keys: ['secondary', 'secondary-container', 'on-secondary', 'on-secondary-container'],
   },
   {
-    label: 'Tertiary / 第三色',
+    label: 'settingsWidgets.colorGroupTertiary',
     keys: ['tertiary', 'tertiary-container', 'on-tertiary', 'on-tertiary-container'],
   },
   {
-    label: 'State / 状态与描边',
+    label: 'settingsWidgets.colorGroupState',
     keys: ['error', 'error-container', 'outline', 'outline-variant'],
   },
 ] satisfies { label: string; keys: (typeof COLOR_KEYS)[number][] }[];
 
 export default function ColorSchemeSettings({ settings, updateSetting }: ColorSchemeSettingsProps) {
+  const { t } = useTranslation();
   const [customMode, setCustomMode] = useState<'generate' | 'advanced'>('generate');
   const [customPrimary, setCustomPrimary] = useState('#3b82f6');
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -98,8 +101,8 @@ export default function ColorSchemeSettings({ settings, updateSetting }: ColorSc
   return (
     <>
       <div>
-        <p className="text-sm font-medium text-on-surface mb-1">配色方案</p>
-        <p className="text-xs text-on-surface-variant mb-3">选择预设配色或自定义主题色，实时预览效果</p>
+        <p className="text-sm font-medium text-on-surface mb-1">{t('settingsWidgets.colorScheme')}</p>
+        <p className="text-xs text-on-surface-variant mb-3">{t('settingsWidgets.colorSchemeDesc')}</p>
 
         <div className="flex flex-wrap gap-3">
           {Object.entries(COLOR_PRESETS).map(([key, preset]) => (
@@ -116,7 +119,9 @@ export default function ColorSchemeSettings({ settings, updateSetting }: ColorSc
                 className="w-8 h-8 rounded-full shadow-inner border border-white/10"
                 style={{ backgroundColor: preset.primary }}
               />
-              <span className="text-[10px] text-on-surface-variant font-medium">{preset.label}</span>
+              <span className="text-[10px] text-on-surface-variant font-medium">
+                {t(preset.label, { defaultValue: preset.label })}
+              </span>
             </button>
           ))}
           <button
@@ -130,7 +135,7 @@ export default function ColorSchemeSettings({ settings, updateSetting }: ColorSc
             <span className="w-8 h-8 rounded-full border-2 border-dashed border-on-surface-variant/40 flex items-center justify-center">
               <Icon name="colorize" size={14} className="text-on-surface-variant/60" />
             </span>
-            <span className="text-[10px] text-on-surface-variant font-medium">自定义</span>
+            <span className="text-[10px] text-on-surface-variant font-medium">{t('settingsWidgets.customOption')}</span>
           </button>
         </div>
       </div>
@@ -146,7 +151,7 @@ export default function ColorSchemeSettings({ settings, updateSetting }: ColorSc
                   : 'bg-surface-container-highest/50 text-on-surface-variant'
               }`}
             >
-              从主色生成
+              {t('settingsWidgets.generateFromPrimary')}
             </button>
             <button
               onClick={() => setCustomMode('advanced')}
@@ -156,14 +161,14 @@ export default function ColorSchemeSettings({ settings, updateSetting }: ColorSc
                   : 'bg-surface-container-highest/50 text-on-surface-variant'
               }`}
             >
-              高级自定义
+              {t('settingsWidgets.advancedCustom')}
             </button>
           </div>
 
           {customMode === 'generate' ? (
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-on-surface-variant">主色调：</span>
+                <span className="text-xs text-on-surface-variant">{t('settingsWidgets.primaryHue')}</span>
                 <input
                   name="custom-primary"
                   type="color"
@@ -177,7 +182,7 @@ export default function ColorSchemeSettings({ settings, updateSetting }: ColorSc
                 onClick={handleGenerate}
                 className="px-4 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 transition-colors"
               >
-                生成色板
+                {t('settingsWidgets.generatePalette')}
               </button>
             </div>
           ) : (
@@ -187,17 +192,15 @@ export default function ColorSchemeSettings({ settings, updateSetting }: ColorSc
                 className="flex items-center gap-1.5 text-xs text-primary-container hover:underline"
               >
                 <Icon name={showAdvanced ? 'expand_less' : 'expand_more'} size={14} />
-                {showAdvanced ? '收起颜色编辑器' : '展开颜色编辑器'}
+                {showAdvanced ? t('settingsWidgets.collapseColorEditor') : t('settingsWidgets.expandColorEditor')}
               </button>
               {showAdvanced && (
                 <div className="space-y-3">
-                  <p className="text-xs text-on-surface-variant">
-                    分别设置暗色和亮色模式下的各颜色变量。留空则使用全局默认值。
-                  </p>
+                  <p className="text-xs text-on-surface-variant">{t('settingsWidgets.advancedEditorDesc')}</p>
                   {(['dark', 'light'] as const).map((mode) => (
                     <div key={mode}>
                       <p className="text-xs font-medium text-on-surface mb-2">
-                        {mode === 'dark' ? '暗色模式' : '亮色模式'}
+                        {mode === 'dark' ? t('settingsWidgets.darkMode') : t('settingsWidgets.lightMode')}
                       </p>
                       <div className="space-y-2">
                         {COLOR_KEY_GROUPS.map((group, groupIndex) => (
@@ -207,7 +210,7 @@ export default function ColorSchemeSettings({ settings, updateSetting }: ColorSc
                             className="rounded-md border border-outline-variant/10 bg-surface-container-lowest/60 px-3 py-2"
                           >
                             <summary className="cursor-pointer select-none text-[11px] font-semibold text-on-surface">
-                              {group.label}
+                              {t(group.label, { defaultValue: group.label })}
                             </summary>
                             <div className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">
                               {group.keys.map((colorKey) => {
@@ -229,7 +232,7 @@ export default function ColorSchemeSettings({ settings, updateSetting }: ColorSc
                                       type="text"
                                       value={value}
                                       onChange={(event) => updateCustomColor(mode, colorKey, event.target.value)}
-                                      placeholder="默认"
+                                      placeholder={t('settingsWidgets.defaultPlaceholder')}
                                       className="min-w-0 flex-1 rounded border border-outline-variant/15 bg-surface-container-lowest px-1.5 py-0.5 font-mono text-[10px] text-on-surface outline-none focus:border-primary"
                                     />
                                   </div>

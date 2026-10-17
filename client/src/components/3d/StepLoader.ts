@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { i18n } from '../../i18n';
 
 interface MeshAttribute {
   array: ArrayLike<number>;
@@ -51,7 +52,7 @@ function ensureOcctScript(): Promise<void> {
   }
 
   if (typeof document === 'undefined') {
-    return Promise.reject(new Error('OCCT WASM 模块仅能在浏览器中加载'));
+    return Promise.reject(new Error(i18n.t('modelAdminComp.occtBrowserOnly')));
   }
 
   globalThis.Module = {
@@ -66,7 +67,7 @@ function ensureOcctScript(): Promise<void> {
     script.onload = () => resolve();
     script.onerror = () => {
       _occtScriptPromise = null;
-      reject(new Error('OCCT WASM 模块加载失败，请检查网络连接后重试。'));
+      reject(new Error(i18n.t('modelAdminComp.occtLoadFail')));
     };
     document.head.appendChild(script);
   });
@@ -89,13 +90,13 @@ async function getOcct(): Promise<OcctInstance> {
     return _occtCache;
   }
 
-  throw new Error('OCCT WASM 模块未加载。请检查网络连接后刷新页面重试。');
+  throw new Error(i18n.t('modelAdminComp.occtNotLoaded'));
 }
 
 export async function loadCadFile(file: File | ArrayBuffer, fileName: string): Promise<THREE.Group> {
   const format = detectFormat(fileName);
   if (!format) {
-    throw new Error(`不支持的格式: ${fileName}`);
+    throw new Error(i18n.t('modelAdminComp.unsupportedFormat', { name: fileName }));
   }
 
   const occt = await getOcct();
@@ -113,7 +114,7 @@ export async function loadCadFile(file: File | ArrayBuffer, fileName: string): P
     format === 'step' ? occt.ReadStepFile(fileBuffer, null) : occt.ReadIgesFile(fileBuffer, null);
 
   if (!result || !result.meshes || result.meshes.length === 0) {
-    throw new Error('无法解析模型文件');
+    throw new Error(i18n.t('modelAdminComp.parseFail'));
   }
 
   return cadResultToThreeGroup(result);
@@ -126,7 +127,7 @@ export async function loadCadFromUrl(
 ): Promise<THREE.Group> {
   onProgress?.(3);
   const response = await fetch(url, { signal });
-  if (!response.ok) throw new Error(`加载失败: ${response.status}`);
+  if (!response.ok) throw new Error(i18n.t('modelAdminComp.loadFail', { status: response.status }));
 
   const total = Number(response.headers.get('Content-Length') || 0);
   let buffer: ArrayBuffer;

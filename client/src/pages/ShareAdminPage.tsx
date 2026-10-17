@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
@@ -79,24 +80,26 @@ function ShareFilterTabs({
   counts: Record<ShareFilter, number>;
   onChange: (value: ShareFilter) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <ResponsiveSectionTabs
       tabs={[
-        { value: 'all', label: '全部', count: counts.all, icon: 'share' },
-        { value: 'model', label: '模型', count: counts.model, icon: 'deployed_code' },
-        { value: 'selection', label: '选型', count: counts.selection, icon: 'checklist' },
-        { value: 'active', label: '活跃', count: counts.active, icon: 'check_circle' },
-        { value: 'expired', label: '已过期', count: counts.expired, icon: 'schedule' },
+        { value: 'all', label: t('shareAdminPage.filterAll'), count: counts.all, icon: 'share' },
+        { value: 'model', label: t('shareAdminPage.filterModel'), count: counts.model, icon: 'deployed_code' },
+        { value: 'selection', label: t('shareAdminPage.filterSelection'), count: counts.selection, icon: 'checklist' },
+        { value: 'active', label: t('shareAdminPage.filterActive'), count: counts.active, icon: 'check_circle' },
+        { value: 'expired', label: t('shareAdminPage.filterExpired'), count: counts.expired, icon: 'schedule' },
       ]}
       value={active}
       onChange={(value) => onChange(value as ShareFilter)}
-      mobileTitle="分享类型"
-      countUnit="条"
+      mobileTitle={t('shareAdminPage.shareType')}
+      countUnit={t('shareAdminPage.countUnit')}
     />
   );
 }
 
 function Content() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const {
@@ -146,16 +149,16 @@ function Content() {
     try {
       await setSize(1);
       await Promise.all([mutate(undefined, { revalidate: true }), mutateStats(undefined, { revalidate: true })]);
-      toast('分享数据已刷新', 'success');
+      toast(t('shareAdminPage.refreshSuccess'), 'success');
     } catch (err: unknown) {
-      toast(getErrorMessage(err, '刷新分享数据失败'), 'error');
+      toast(getErrorMessage(err, t('shareAdminPage.refreshFail')), 'error');
     }
   }
 
   async function handleDelete(id: string) {
     try {
       await client.delete(`/admin/shares/${id}`);
-      toast('已删除', 'success');
+      toast(t('shareAdminPage.deleteSuccess'), 'success');
       setDeleteId(null);
       setSelectedIds((prev) => {
         const next = new Set(prev);
@@ -168,8 +171,8 @@ function Content() {
       const data = typeof detail === 'object' && detail !== null ? (detail as Record<string, unknown>).data : undefined;
       const msg =
         typeof data === 'object' && data !== null
-          ? String((data as Record<string, unknown>).detail) || '删除失败'
-          : '删除失败';
+          ? String((data as Record<string, unknown>).detail) || t('shareAdminPage.deleteFail')
+          : t('shareAdminPage.deleteFail');
       toast(msg, 'error');
     }
   }
@@ -183,7 +186,7 @@ function Content() {
         ids,
       });
       const result = unwrapResponse<{ ok: boolean; deleted: number }>(res);
-      toast(`已删除 ${result.deleted} 条分享`, 'success');
+      toast(t('shareAdminPage.batchDeleted', { count: result.deleted }), 'success');
       setSelectedIds(new Set());
       setSelectMode(false);
       setBatchDeleteOpen(false);
@@ -193,8 +196,8 @@ function Content() {
       const data = typeof detail === 'object' && detail !== null ? (detail as Record<string, unknown>).data : undefined;
       const msg =
         typeof data === 'object' && data !== null
-          ? String((data as Record<string, unknown>).detail) || '批量删除失败'
-          : '批量删除失败';
+          ? String((data as Record<string, unknown>).detail) || t('shareAdminPage.batchDeleteFail')
+          : t('shareAdminPage.batchDeleteFail');
       toast(msg, 'error');
     } finally {
       setBatchDeleting(false);
@@ -223,9 +226,9 @@ function Content() {
     try {
       const path = item.type === 'selection' ? `/selection/s/${item.token}` : `/share/${item.token}`;
       await copyText(`${window.location.origin}${path}`);
-      toast('链接已复制', 'success');
+      toast(t('shareAdminPage.copySuccess'), 'success');
     } catch {
-      toast('复制失败，请手动复制链接', 'error');
+      toast(t('shareAdminPage.copyFail'), 'error');
     }
   }
 
@@ -252,7 +255,7 @@ function Content() {
         inputProps={searchInputProps}
         value={searchInputValue}
         onClear={() => setSearch('')}
-        placeholder="搜索模型、选型、用户名..."
+        placeholder={t('shareAdminPage.searchPlaceholder')}
         className="md:w-72 md:shrink-0"
       />
     </div>
@@ -269,7 +272,13 @@ function Content() {
           size={isDesktop ? 'md' : 'sm'}
           variant="secondary"
         >
-          {isDesktop ? (selectMode ? '取消选择' : '批量管理') : selectMode ? '取消' : '批量'}
+          {isDesktop
+            ? selectMode
+              ? t('shareAdminPage.cancelSelect')
+              : t('shareAdminPage.batchManage')
+            : selectMode
+              ? t('common.cancel')
+              : t('shareAdminPage.batch')}
         </AdminButton>
       ) : null}
     </div>
@@ -277,17 +286,19 @@ function Content() {
 
   return (
     <AdminManagementPage
-      title="分享管理"
-      description="管理模型分享链接、访问权限和下载记录"
+      title={t('shareAdminPage.title')}
+      description={t('shareAdminPage.description')}
       actions={actions}
       toolbar={toolbar}
     >
       {selectMode && selectedCount > 0 ? (
         <div className="mb-4 flex items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-high px-4 py-3 shadow-lg">
-          <span className="text-sm font-medium text-on-surface">已选 {selectedCount} 个</span>
+          <span className="text-sm font-medium text-on-surface">
+            {t('shareAdminPage.selectedCount', { count: selectedCount })}
+          </span>
           <div className="flex-1" />
           <AdminButton onClick={() => setBatchDeleteOpen(true)} icon="delete" size="sm" variant="danger">
-            删除分享
+            {t('shareAdminPage.deleteShares')}
           </AdminButton>
           <AdminIconButton
             onClick={() => {
@@ -297,17 +308,19 @@ function Content() {
             icon="close"
             size="icon-sm"
             variant="ghost"
-            aria-label="取消选择"
+            aria-label={t('shareAdminPage.cancelSelect')}
           />
         </div>
       ) : null}
       {/* List */}
       <div className="space-y-2">
-        {isLoading && items.length === 0 && <AdminLoadingState variant="list" label="分享列表加载中" />}
+        {isLoading && items.length === 0 && (
+          <AdminLoadingState variant="list" label={t('shareAdminPage.listLoading')} />
+        )}
         {items.length === 0 && !isLoading && (
           <div className="text-center py-12 text-on-surface-variant">
             <Icon name="share" size={40} className="mx-auto mb-2 opacity-30" />
-            <p className="text-sm">暂无分享记录</p>
+            <p className="text-sm">{t('shareAdminPage.empty')}</p>
           </div>
         )}
         {items.map((s) => {
@@ -325,7 +338,7 @@ function Content() {
                       type="button"
                       onClick={() => toggleSelected(s.id)}
                       className={`grid h-5 w-5 shrink-0 place-items-center rounded border transition-colors sm:mt-0.5 ${checked ? 'border-primary-container bg-primary-container text-on-primary' : 'border-outline-variant/35 text-transparent hover:border-primary-container/50'}`}
-                      aria-label={checked ? '取消选择分享' : '选择分享'}
+                      aria-label={checked ? t('shareAdminPage.deselectShare') : t('shareAdminPage.selectShare')}
                     >
                       <Icon name="check" size={13} />
                     </button>
@@ -348,24 +361,24 @@ function Content() {
                           s.type === 'selection' ? 'bg-purple-500/15 text-purple-500' : 'bg-cyan-500/15 text-cyan-500'
                         }`}
                       >
-                        {s.type === 'selection' ? '选型' : '模型'}
+                        {s.type === 'selection' ? t('shareAdminPage.badgeSelection') : t('shareAdminPage.badgeModel')}
                       </span>
                       {expired ? (
                         <span className="hidden rounded-sm bg-on-surface-variant/10 px-1.5 py-0.5 text-[10px] font-medium text-on-surface-variant sm:inline-flex">
-                          已过期
+                          {t('shareAdminPage.badgeExpired')}
                         </span>
                       ) : s.expiresAt ? (
                         <span className="hidden rounded-sm bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400 sm:inline-flex">
-                          有效
+                          {t('shareAdminPage.badgeValid')}
                         </span>
                       ) : (
                         <span className="hidden rounded-sm bg-primary-container/15 px-1.5 py-0.5 text-[10px] font-medium text-primary-container sm:inline-flex">
-                          永久
+                          {t('shareAdminPage.badgePermanent')}
                         </span>
                       )}
                       {s.hasPassword && (
                         <span className="hidden rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400 sm:inline-flex">
-                          有密码
+                          {t('shareAdminPage.badgePassword')}
                         </span>
                       )}
                     </div>
@@ -402,7 +415,7 @@ function Content() {
                   <button
                     onClick={() => handleCopy(s)}
                     className="rounded px-1.5 py-1 text-[10px] text-primary-container transition-colors hover:bg-primary-container/10 sm:px-2"
-                    title="复制链接"
+                    title={t('shareAdminPage.copyLink')}
                   >
                     <Icon name="link" size={14} />
                   </button>
@@ -412,20 +425,20 @@ function Content() {
                         onClick={() => handleDelete(s.id)}
                         className="px-2 py-1 text-[10px] font-medium bg-error text-on-error-container rounded"
                       >
-                        确认
+                        {t('common.confirm')}
                       </button>
                       <button
                         onClick={() => setDeleteId(null)}
                         className="hidden px-2 py-1 text-[10px] text-on-surface-variant hover:bg-surface-container-high/50 rounded sm:inline-flex"
                       >
-                        取消
+                        {t('common.cancel')}
                       </button>
                     </>
                   ) : (
                     <button
                       onClick={() => setDeleteId(s.id)}
                       className="rounded px-1.5 py-1 text-[10px] text-error transition-colors hover:bg-error-container/10 sm:px-2"
-                      title="删除"
+                      title={t('common.delete')}
                     >
                       <Icon name="delete" size={14} />
                     </button>
@@ -451,9 +464,9 @@ function Content() {
                 <Icon name="delete" size={20} />
               </span>
               <div className="min-w-0">
-                <h3 className="text-base font-bold text-on-surface">批量删除分享</h3>
+                <h3 className="text-base font-bold text-on-surface">{t('shareAdminPage.batchDeleteTitle')}</h3>
                 <p className="mt-1 text-sm leading-relaxed text-on-surface-variant">
-                  将删除已选的 {selectedCount} 条分享链接。删除后外部链接会立即失效，此操作不可恢复。
+                  {t('shareAdminPage.batchDeleteDesc', { count: selectedCount })}
                 </p>
               </div>
             </div>
@@ -464,7 +477,7 @@ function Content() {
                 disabled={batchDeleting}
                 className="rounded-lg border border-outline-variant/25 px-4 py-2.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:opacity-50"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -472,7 +485,7 @@ function Content() {
                 disabled={batchDeleting}
                 className="rounded-lg bg-error px-4 py-2.5 text-sm font-bold text-on-error-container transition-opacity hover:opacity-90 disabled:opacity-50"
               >
-                {batchDeleting ? '删除中...' : '确认删除'}
+                {batchDeleting ? t('shareAdminPage.deleting') : t('shareAdminPage.confirmDelete')}
               </button>
             </div>
           </div>
@@ -483,7 +496,8 @@ function Content() {
 }
 
 export default function ShareAdminPage() {
-  useDocumentTitle('分享管理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('shareAdminPage.title'));
   return (
     <AdminPageShell>
       <Content />

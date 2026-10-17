@@ -113,7 +113,7 @@ export default function RegionSelect({
             emit(p, '', '', detail);
           }}
         >
-          <option value="">省</option>
+          <option value="">{t('netMisc.regionProvince')}</option>
           {provinces.map(([code, name]) => (
             <option key={code} value={code}>
               {name}
@@ -131,7 +131,7 @@ export default function RegionSelect({
             emit(provinceCode, c, '', detail);
           }}
         >
-          <option value="">市</option>
+          <option value="">{t('netMisc.regionCity')}</option>
           {cities.map(([code, name]) => (
             <option key={code} value={code}>
               {name}
@@ -148,7 +148,7 @@ export default function RegionSelect({
             emit(provinceCode, cityCode, ct, detail);
           }}
         >
-          <option value="">区</option>
+          <option value="">{t('netMisc.regionDistrict')}</option>
           {counties.map(([code, name]) => (
             <option key={code} value={code}>
               {name}

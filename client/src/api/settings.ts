@@ -4,6 +4,7 @@ import {
   prepareBrowserDownload,
   probeRangeDownloadSupport,
 } from '../lib/browserDownload';
+import { i18n } from '../i18n';
 import { BACKUP_CHUNK_SIZE_BYTES, BACKUP_DIRECT_UPLOAD_THRESHOLD_BYTES } from '../lib/uploadLimits';
 import { getAccessToken } from '../stores';
 import client from './client';
@@ -664,7 +665,7 @@ export async function startVerifyBackupJob(id: string): Promise<string> {
   const res = await client.post(`/settings/backup/verify/${id}`, {}, { timeout: 120000 });
   const data = unwrapResponse<JobStartResult>(res);
   const jobId = data.jobId;
-  if (!jobId) throw new Error('启动备份校验失败');
+  if (!jobId) throw new Error(i18n.t('adminSettings.apiStartVerifyFailed'));
   return jobId;
 }
 
@@ -701,10 +702,10 @@ export async function pollVerifyBackupProgress(
         if (d.stage === 'done') {
           clearInterval(poll);
           if (d.result) resolve(d.result);
-          else reject(new Error('备份校验结果异常'));
+          else reject(new Error(i18n.t('adminSettings.apiVerifyResultInvalid')));
         } else if (d.stage === 'error') {
           clearInterval(poll);
-          reject(new Error(d.error || '备份校验失败'));
+          reject(new Error(d.error || i18n.t('adminSettings.backupVerifyFailed')));
         }
       } catch (err: unknown) {
         if (signal?.aborted) {
@@ -717,20 +718,26 @@ export async function pollVerifyBackupProgress(
         const status = httpError.response?.status;
         if (status === 404) {
           clearInterval(poll);
-          reject(new Error('校验任务不存在，服务器可能已重启'));
+          reject(new Error(i18n.t('adminSettings.apiVerifyJobMissing')));
           return;
         }
         const retryable = !status || RETRYABLE_STATUSES.has(status);
         if (retryable) {
-          onProgress?.(lastStage, lastPercent, '后台正在校验或服务正在重连，任务会继续等待...', lastLogs);
+          onProgress?.(lastStage, lastPercent, i18n.t('adminSettings.apiVerifyStillWaiting'), lastLogs);
         } else {
           clearInterval(poll);
-          reject(new Error(getResponseMessage(httpError.response?.data) || httpError.message || '查询校验进度失败'));
+          reject(
+            new Error(
+              getResponseMessage(httpError.response?.data) ||
+                httpError.message ||
+                i18n.t('adminSettings.apiQueryVerifyProgressFailed'),
+            ),
+          );
           return;
         }
         if (consecutiveErrors >= MAX_ERRORS) {
           clearInterval(poll);
-          reject(new Error('校验仍在后台执行，但进度接口暂时无法连接；请稍后刷新页面确认结果'));
+          reject(new Error(i18n.t('adminSettings.apiVerifyPollLost')));
         }
       }
     }, 1500);
@@ -775,7 +782,7 @@ export async function startBackupJob(scope: BackupScope = 'full'): Promise<strin
     const res = await client.post('/settings/backup/create', { scope }, { timeout: 30000 });
     const data = unwrapResponse<JobStartResult>(res);
     const jobId = data.jobId;
-    if (!jobId) throw new Error('启动备份失败');
+    if (!jobId) throw new Error(i18n.t('adminSettings.apiStartBackupFailed'));
     return jobId;
   } catch (err: unknown) {
     const httpError = asHttpError(err);
@@ -783,11 +790,11 @@ export async function startBackupJob(scope: BackupScope = 'full'): Promise<strin
     const responseJob = unwrapApiData<JobStartResult>(responseData);
     const message = getResponseMessage(responseData);
     if (httpError.response?.status === 409) {
-      const conflictError = new Error(message || '已有备份、恢复或校验任务正在进行中，请等待完成后再试');
+      const conflictError = new Error(message || i18n.t('adminSettings.apiBackupConflict'));
       (conflictError as Error & { jobId?: string }).jobId = responseJob.jobId;
       throw conflictError;
     }
-    throw new Error(message || httpError.message || '启动备份失败');
+    throw new Error(message || httpError.message || i18n.t('adminSettings.apiStartBackupFailed'));
   }
 }
 
@@ -826,7 +833,7 @@ export async function pollBackupProgress(
           resolve({ jobId, encrypted: Boolean(d.encrypted) });
         } else if (d.stage === 'error') {
           clearInterval(poll);
-          reject(new Error(d.error || '备份失败'));
+          reject(new Error(d.error || i18n.t('adminSettings.apiBackupFailed')));
         }
       } catch (err: unknown) {
         if (signal?.aborted) {
@@ -840,22 +847,22 @@ export async function pollBackupProgress(
         // Job not found — server restarted or job expired
         if (status === 404) {
           clearInterval(poll);
-          reject(new Error('备份任务不存在，服务器可能已重启'));
+          reject(new Error(i18n.t('adminSettings.apiBackupJobMissing')));
           return;
         }
         const retryable = !status || RETRYABLE_STATUSES.has(status);
         if (retryable) {
-          onProgress?.(lastStage, lastPercent, '后台正在打包或服务正在重连，备份任务会继续等待...', lastLogs);
+          onProgress?.(lastStage, lastPercent, i18n.t('adminSettings.apiBackupStillWaiting'), lastLogs);
         } else {
           clearInterval(poll);
           const message = getResponseMessage(httpError.response?.data);
-          reject(new Error(message || httpError.message || '查询备份进度失败'));
+          reject(new Error(message || httpError.message || i18n.t('adminSettings.queryBackupProgressFailed')));
           return;
         }
         // Transient network errors — keep the workbench informative and wait longer
         if (consecutiveErrors >= MAX_ERRORS) {
           clearInterval(poll);
-          reject(new Error('备份仍在后台执行，但进度接口暂时无法连接；请稍后刷新备份列表确认结果'));
+          reject(new Error(i18n.t('adminSettings.apiBackupPollLost')));
         }
         // Otherwise silently retry on next interval
       }
@@ -882,7 +889,7 @@ export async function downloadBackup(id: string): Promise<{ rangeSupported: bool
       (created.token
         ? `/api/settings/backup/download/${encodeURIComponent(id)}/${encodeURIComponent(created.token)}`
         : '');
-    if (!url) throw new Error('获取下载令牌失败');
+    if (!url) throw new Error(i18n.t('adminSettings.apiGetDownloadTokenFailed'));
     // 先触发下载再探测：探测（1 字节 Range 请求）串行在前会把浏览器下载条的出现
     // 推迟一个 RTT，大文件经代理缓冲时下载条出现得更慢——期间页面零反馈，用户
     // 以为没点上会再点一次，造成两个并行下载（表现为「下载完又下载一遍」）。
@@ -940,7 +947,7 @@ export async function startRestore(id: string, force = false): Promise<string> {
   const res = await client.post(`/settings/backup/restore/${id}`, { confirm: id, force }, { timeout: 30000 });
   const data = unwrapResponse<JobStartResult>(res);
   const jobId = data.jobId;
-  if (!jobId) throw new Error('启动恢复失败');
+  if (!jobId) throw new Error(i18n.t('adminSettings.apiStartRestoreFailed'));
   return jobId;
 }
 
@@ -992,7 +999,13 @@ export async function pollRestoreProgress(
           resolve(d.result ?? { dbRestored: true, modelCount: 0, thumbnailCount: 0 });
         } else if (d.stage === 'error') {
           clearInterval(poll);
-          reject(new Error(d.cancelled ? '恢复已取消' : d.error || '恢复失败'));
+          reject(
+            new Error(
+              d.cancelled
+                ? i18n.t('adminSettings.apiRestoreCancelled')
+                : d.error || i18n.t('adminSettings.restoreFailed'),
+            ),
+          );
         }
       } catch (err: unknown) {
         if (signal?.aborted) {
@@ -1005,23 +1018,29 @@ export async function pollRestoreProgress(
         const status = httpError.response?.status;
         if (status === 404) {
           clearInterval(poll);
-          reject(new Error('恢复任务不存在，服务器可能已重启'));
+          reject(new Error(i18n.t('adminSettings.apiRestoreJobMissing')));
           return;
         }
         const retryable = !status || RETRYABLE_STATUSES.has(status);
         if (retryable) {
-          onProgress?.(lastStage, lastPercent, '后台正在恢复或服务正在重连，任务会继续等待...', lastLogs, {
+          onProgress?.(lastStage, lastPercent, i18n.t('adminSettings.apiRestoreStillWaiting'), lastLogs, {
             cancelled: lastCancelled,
             destructiveStarted: lastDestructive,
           });
         } else {
           clearInterval(poll);
-          reject(new Error(getResponseMessage(httpError.response?.data) || httpError.message || '查询恢复进度失败'));
+          reject(
+            new Error(
+              getResponseMessage(httpError.response?.data) ||
+                httpError.message ||
+                i18n.t('adminSettings.apiQueryRestoreProgressFailed'),
+            ),
+          );
           return;
         }
         if (consecutiveErrors >= MAX_ERRORS) {
           clearInterval(poll);
-          reject(new Error('恢复仍在后台执行，但进度接口暂时无法连接；请稍后刷新页面确认结果'));
+          reject(new Error(i18n.t('adminSettings.apiRestorePollLost')));
         }
       }
     }, 1500);
@@ -1075,21 +1094,21 @@ async function directSaveAsRecordJob(file: File, onUploadProgress?: (percent: nu
           const data = JSON.parse(xhr.responseText);
           const id = unwrapApiData<JobStartResult>(data).jobId;
           if (id) resolve(id);
-          else reject(new Error('导入响应异常'));
+          else reject(new Error(i18n.t('adminSettings.apiImportResponseInvalid')));
         } catch {
-          reject(new Error('解析响应失败'));
+          reject(new Error(i18n.t('adminSettings.apiParseResponseFailed')));
         }
       } else {
         try {
           const err = JSON.parse(xhr.responseText);
-          reject(new Error(err.detail || err.message || '保存失败'));
+          reject(new Error(err.detail || err.message || i18n.t('adminSettings.saveFailed')));
         } catch {
-          reject(new Error(`保存失败 (${xhr.status})`));
+          reject(new Error(i18n.t('adminSettings.apiSaveFailedStatus', { status: xhr.status })));
         }
       }
     };
-    xhr.onerror = () => reject(new Error('网络错误'));
-    xhr.ontimeout = () => reject(new Error('上传超时'));
+    xhr.onerror = () => reject(new Error(i18n.t('adminSettings.apiNetworkError')));
+    xhr.ontimeout = () => reject(new Error(i18n.t('adminSettings.apiUploadTimeout')));
     const token = getAccessToken();
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     const formData = new FormData();
@@ -1132,10 +1151,10 @@ export async function pollImportSaveProgress(
         if (d.stage === 'done') {
           clearInterval(poll);
           if (d.result) resolve(d.result);
-          else reject(new Error('保存备份失败'));
+          else reject(new Error(i18n.t('adminSettings.apiSaveBackupFailed')));
         } else if (d.stage === 'error') {
           clearInterval(poll);
-          reject(new Error(d.error || '保存备份失败'));
+          reject(new Error(d.error || i18n.t('adminSettings.apiSaveBackupFailed')));
         }
       } catch (err: unknown) {
         if (signal?.aborted) {
@@ -1148,20 +1167,26 @@ export async function pollImportSaveProgress(
         const status = httpError.response?.status;
         if (status === 404) {
           clearInterval(poll);
-          reject(new Error('导入保存任务不存在，服务器可能已重启'));
+          reject(new Error(i18n.t('adminSettings.apiImportSaveJobMissing')));
           return;
         }
         const retryable = !status || RETRYABLE_STATUSES.has(status);
         if (retryable) {
-          onProgress?.(lastStage, lastPercent, '后台正在导入或服务正在重连，任务会继续等待...', lastLogs);
+          onProgress?.(lastStage, lastPercent, i18n.t('adminSettings.apiImportStillWaiting'), lastLogs);
         } else {
           clearInterval(poll);
-          reject(new Error(getResponseMessage(httpError.response?.data) || httpError.message || '查询导入进度失败'));
+          reject(
+            new Error(
+              getResponseMessage(httpError.response?.data) ||
+                httpError.message ||
+                i18n.t('adminSettings.apiQueryImportProgressFailed'),
+            ),
+          );
           return;
         }
         if (consecutiveErrors >= MAX_ERRORS) {
           clearInterval(poll);
-          reject(new Error('导入保存仍在后台执行，但进度接口暂时无法连接；请稍后刷新页面确认结果'));
+          reject(new Error(i18n.t('adminSettings.apiImportPollLost')));
         }
       }
     }, 2000);
@@ -1186,7 +1211,7 @@ async function initChunkedUpload(file: File): Promise<string> {
   });
   const initData = unwrapApiData<{ uploadId?: string }>(initResp);
   const uploadId = initData.uploadId;
-  if (!uploadId) throw new Error('初始化上传失败');
+  if (!uploadId) throw new Error(i18n.t('adminSettings.apiInitUploadFailed'));
   return uploadId;
 }
 
@@ -1234,7 +1259,10 @@ async function uploadFileInChunks(
         const httpError = asHttpError(err);
         retries--;
         if (retries === 0) {
-          throw new Error(getResponseMessage(httpError.response?.data) || `分块 ${i + 1}/${totalChunks} 上传失败`);
+          throw new Error(
+            getResponseMessage(httpError.response?.data) ||
+              i18n.t('adminSettings.apiChunkUploadFailed', { current: i + 1, total: totalChunks }),
+          );
         }
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
@@ -1257,7 +1285,7 @@ function countContiguousOrTotal(uploaded: Set<number>, totalChunks: number): num
 async function completeChunkedUpload(uploadId: string): Promise<{ filePath: string }> {
   const { data: completeResp } = await client.post('/upload/complete', { uploadId });
   const completeData = unwrapApiData<{ filePath?: string }>(completeResp);
-  if (!completeData.filePath) throw new Error('合并文件失败');
+  if (!completeData.filePath) throw new Error(i18n.t('adminSettings.apiMergeChunksFailed'));
   return { filePath: completeData.filePath };
 }
 
@@ -1270,7 +1298,7 @@ async function chunkedSaveAsRecordJob(file: File, onProgress?: (percent: number)
   });
   const saveData = unwrapApiData<JobStartResult>(saveResp);
   const jobId = saveData?.jobId;
-  if (!jobId) throw new Error('启动保存任务失败');
+  if (!jobId) throw new Error(i18n.t('adminSettings.apiStartSaveJobFailed'));
   return jobId;
 }
 
@@ -1387,12 +1415,16 @@ export async function importBackup(
     });
     const restoreData = unwrapApiData<JobStartResult>(restoreResp);
     const jobId = restoreData.jobId;
-    if (!jobId) throw new Error('启动恢复失败');
+    if (!jobId) throw new Error(i18n.t('adminSettings.apiStartRestoreFailed'));
 
     return jobId;
   } catch (err: unknown) {
     const httpError = asHttpError(err);
-    throw new Error(getResponseMessage(httpError.response?.data) || httpError.message || '分块上传失败');
+    throw new Error(
+      getResponseMessage(httpError.response?.data) ||
+        httpError.message ||
+        i18n.t('adminSettings.apiChunkUploadFailedGeneric'),
+    );
   }
 }
 
@@ -1413,24 +1445,24 @@ function directUpload(file: File, onProgress?: (percent: number) => void): Promi
           const data = JSON.parse(xhr.responseText);
           const jobId = unwrapApiData<JobStartResult>(data).jobId;
           if (jobId) resolve(jobId);
-          else reject(new Error('导入响应异常'));
+          else reject(new Error(i18n.t('adminSettings.apiImportResponseInvalid')));
         } catch {
-          reject(new Error('解析响应失败'));
+          reject(new Error(i18n.t('adminSettings.apiParseResponseFailed')));
         }
       } else if (xhr.status === 401) {
-        reject(new Error('登录已过期，请刷新页面后重试'));
+        reject(new Error(i18n.t('adminSettings.apiAuthExpired')));
       } else {
         try {
           const err = JSON.parse(xhr.responseText);
-          reject(new Error(err.detail || err.message || '导入失败'));
+          reject(new Error(err.detail || err.message || i18n.t('adminSettings.apiImportFailed')));
         } catch {
-          reject(new Error(`导入失败 (${xhr.status})`));
+          reject(new Error(i18n.t('adminSettings.apiImportFailedStatus', { status: xhr.status })));
         }
       }
     };
 
-    xhr.onerror = () => reject(new Error('网络错误'));
-    xhr.ontimeout = () => reject(new Error('上传超时'));
+    xhr.onerror = () => reject(new Error(i18n.t('adminSettings.apiNetworkError')));
+    xhr.ontimeout = () => reject(new Error(i18n.t('adminSettings.apiUploadTimeout')));
 
     const token = getAccessToken();
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
@@ -1466,7 +1498,7 @@ export async function importBackupFromPath(serverPath: string): Promise<string> 
   });
   const inner = unwrapApiData<JobStartResult>(resp);
   const jobId = inner?.jobId;
-  if (!jobId) throw new Error('启动恢复失败');
+  if (!jobId) throw new Error(i18n.t('adminSettings.apiStartRestoreFailed'));
   return jobId;
 }
 

@@ -439,7 +439,9 @@ function ChatContent({ ticketId }: { ticketId: string }) {
   }
 
   const info = statusInfo(business.ticketStatuses, ticket.status);
-  const classificationLabel = classificationMap.get(ticket.classification) || ticket.classification;
+  const classificationLabel = t(`ticketClassification.${ticket.classification}.label`, {
+    defaultValue: classificationMap.get(ticket.classification) || ticket.classification,
+  });
   const metaSeparator = t('ticketDetail.metaSeparator');
   const ticketDescription = [
     formatDateTime(ticket.createdAt, dateLocale),
@@ -473,7 +475,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
               <span
                 className={`inline-flex h-9 shrink-0 items-center rounded-lg px-2.5 text-xs font-bold md:px-3 ${info.color || ''} ${info.bg || ''}`}
               >
-                {info.label}
+                {t(`ticketStatus.${ticket.status}`, { defaultValue: info.label })}
               </span>
               {isAdmin ? <StatusActions status={ticket.status} onUpdate={handleStatusUpdate} /> : null}
             </>

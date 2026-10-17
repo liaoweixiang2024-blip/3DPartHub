@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { type CategoryItem } from '../../api/categories';
 import { openModelDrawing } from '../../api/downloads';
 import { modelApi, type DrawingRef } from '../../api/models';
@@ -36,6 +37,7 @@ export function DetailEditDialog({
   onDelete?: () => void;
 }) {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [name, setName] = useState(modelName);
   const [catId, setCatId] = useState(initialCat || '');
   const [saving, setSaving] = useState(false);
@@ -78,7 +80,7 @@ export function DetailEditDialog({
     setProgress: (p: { percent: number; message: string } | null) => void,
   ) => {
     const { jobId } = await start();
-    setProgress({ percent: 1, message: '已提交...' });
+    setProgress({ percent: 1, message: t('modelAdminPage.jobSubmitted') });
     // 服务端只在阶段边界上报（5→20→45…），长阶段（如 gmsh 网格化几十秒）数字不动。
     // 本地每秒平滑 +1（封顶到下一阶段前的 95%），收到服务端新值时向上校准——
     // 按钮呈现 1%→100% 连续增长，结束时由 done 精确归位。
@@ -88,23 +90,23 @@ export function DetailEditDialog({
     const ticker = window.setInterval(() => {
       if (finished) return;
       displayed = Math.min(displayed + 1, Math.max(serverPercent + 1, 95));
-      setProgress({ percent: displayed, message: '转换中...' });
+      setProgress({ percent: displayed, message: t('modelAdminPage.jobConverting') });
     }, 1000);
     try {
       for (let i = 0; i < 900; i++) {
         await new Promise((r) => setTimeout(r, 1000));
         const job = await modelApi.reconvertProgress(jobId);
         if (job.stage === 'done') {
-          setProgress({ percent: 100, message: '完成' });
+          setProgress({ percent: 100, message: t('modelAdminPage.jobDone') });
           finished = true;
           return job.result;
         }
-        if (job.stage === 'error') throw new Error(job.error || '转换失败');
+        if (job.stage === 'error') throw new Error(job.error || t('modelAdminPage.convertFailed'));
         serverPercent = job.percent;
         displayed = Math.max(displayed, job.percent);
         setProgress({ percent: Math.min(displayed, 99), message: job.message });
       }
-      throw new Error('转换超时，请稍后在模型列表确认结果');
+      throw new Error(t('modelAdminPage.convertTimeout'));
     } finally {
       window.clearInterval(ticker);
     }
@@ -154,17 +156,17 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
 
   const handleSave = async () => {
     if (!name.trim()) {
-      toast('名称不能为空', 'error');
+      toast(t('modelAdminPage.nameRequired'), 'error');
       return;
     }
     setSaving(true);
     let ok = false;
     try {
       await modelApi.update(modelId, { name: name.trim(), categoryId: catId || null });
-      toast('保存成功', 'success');
+      toast(t('modelAdminPage.savedToast'), 'success');
       ok = true;
     } catch {
-      toast('保存失败', 'error');
+      toast(t('modelAdminPage.saveFailed'), 'error');
     } finally {
       setSaving(false);
     }
@@ -193,13 +195,15 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
             className="bg-surface-container-low rounded-t-lg sm:rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-lg max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom,0px))] sm:max-h-[90vh] flex flex-col overflow-hidden"
           >
             <div className="flex items-center justify-between px-4 py-4 sm:px-6 border-b border-outline-variant/10 shrink-0">
-              <h3 className="font-headline text-lg font-semibold text-on-surface">编辑模型</h3>
-              <AdminIconButton icon="close" onClick={onClose} variant="ghost" aria-label="关闭" />
+              <h3 className="font-headline text-lg font-semibold text-on-surface">
+                {t('modelAdminPage.editModelTitle')}
+              </h3>
+              <AdminIconButton icon="close" onClick={onClose} variant="ghost" aria-label={t('common.close')} />
             </div>
             <div className="px-4 py-4 sm:px-6 space-y-4 overflow-y-auto scrollbar-hidden sm:custom-scrollbar">
               <div className="flex flex-col gap-1.5">
                 <AppFormLabel uppercase className="mb-0">
-                  预览图
+                  {t('modelAdminPage.previewImageLabel')}
                 </AppFormLabel>
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="w-24 h-24 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
@@ -215,12 +219,15 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                         const f = e.target.files?.[0];
                         if (f) {
                           if (!['image/png', 'image/jpeg', 'image/webp'].includes(f.type)) {
-                            toast('仅支持 PNG/JPEG/WebP 图片', 'error');
+                            toast(t('modelAdminPage.imageInvalidType'), 'error');
                             e.target.value = '';
                             return;
                           }
                           if (f.size > imageMaxBytes) {
-                            toast(`图片不能超过 ${uploadPolicy.productWallImageMaxSizeMb}MB`, 'error');
+                            toast(
+                              t('modelAdminPage.imageTooLarge', { size: uploadPolicy.productWallImageMaxSizeMb }),
+                              'error',
+                            );
                             e.target.value = '';
                             return;
                           }
@@ -229,10 +236,10 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                           try {
                             const r = await modelApi.uploadThumbnail(modelId, f);
                             setThumbUrl(r.thumbnail_url);
-                            toast('预览图已更新', 'success');
+                            toast(t('modelAdminPage.thumbnailUpdated'), 'success');
                             ok = true;
                           } catch {
-                            toast('上传失败', 'error');
+                            toast(t('modelAdminPage.uploadFailed'), 'error');
                           } finally {
                             setThumbUploading(false);
                           }
@@ -249,7 +256,7 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                         size="sm"
                         variant="secondary"
                       >
-                        {thumbUploading ? '上传中...' : '上传图片'}
+                        {thumbUploading ? t('modelAdminPage.uploading') : t('modelAdminPage.uploadImage')}
                       </AdminButton>
                       <AdminButton
                         onClick={async () => {
@@ -259,12 +266,18 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                           try {
                             const r = await runReconvertJob(() => modelApi.reconvert(modelId), setStdProgress);
                             if (r?.thumbnail_url) setThumbUrl(r.thumbnail_url);
-                            toast(r?.thumbnail_warning || '标准转换完成', r?.thumbnail_warning ? 'info' : 'success');
+                            toast(
+                              r?.thumbnail_warning || t('modelAdminPage.stdConvertDone'),
+                              r?.thumbnail_warning ? 'info' : 'success',
+                            );
                             ok = true;
                           } catch (err) {
                             const message = (err as { response?: { data?: { detail?: string } } })?.response?.data
                               ?.detail;
-                            toast(message || (err instanceof Error ? err.message : '标准转换失败'), 'error');
+                            toast(
+                              message || (err instanceof Error ? err.message : t('modelAdminPage.stdConvertFailed')),
+                              'error',
+                            );
                           } finally {
                             setRegenerating(false);
                           }
@@ -283,12 +296,14 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                               className="absolute inset-y-0 left-0 z-0 bg-primary/20"
                               style={{ width: `${stdProgress.percent}%` }}
                             />
-                            <span className="relative z-10 tabular-nums">转换中 {stdProgress.percent}%</span>
+                            <span className="relative z-10 tabular-nums">
+                              {t('modelAdminPage.convertingPercent', { percent: stdProgress.percent })}
+                            </span>
                           </>
                         ) : regenerating ? (
-                          '生成中…'
+                          t('modelAdminPage.generating')
                         ) : (
-                          '标准转换'
+                          t('modelAdminPage.stdConvert')
                         )}
                       </AdminButton>
                       <AdminButton
@@ -299,12 +314,15 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                           try {
                             const r = await runReconvertJob(() => modelApi.reconvertGmsh(modelId), setGmshProgress);
                             if (r?.thumbnail_url) setThumbUrl(r.thumbnail_url);
-                            toast('修复转换完成，请检查预览', 'success');
+                            toast(t('modelAdminPage.fixConvertDone'), 'success');
                             ok = true;
                           } catch (err) {
                             const message = (err as { response?: { data?: { detail?: string } } })?.response?.data
                               ?.detail;
-                            toast(message || (err instanceof Error ? err.message : '修复转换失败'), 'error');
+                            toast(
+                              message || (err instanceof Error ? err.message : t('modelAdminPage.fixConvertFailed')),
+                              'error',
+                            );
                           } finally {
                             setGmshBusy(false);
                           }
@@ -323,18 +341,20 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                               className="absolute inset-y-0 left-0 z-0 bg-primary/20"
                               style={{ width: `${gmshProgress.percent}%` }}
                             />
-                            <span className="relative z-10 tabular-nums">转换中 {gmshProgress.percent}%</span>
+                            <span className="relative z-10 tabular-nums">
+                              {t('modelAdminPage.convertingPercent', { percent: gmshProgress.percent })}
+                            </span>
                           </>
                         ) : gmshBusy ? (
-                          '修复中…'
+                          t('modelAdminPage.fixing')
                         ) : (
-                          '修复转换'
+                          t('modelAdminPage.fixConvert')
                         )}
                       </AdminButton>
                       <button
                         type="button"
                         onClick={() => setShowGmshHelp(true)}
-                        aria-label="关于转换引擎"
+                        aria-label={t('modelAdminPage.aboutConvertEngine')}
                         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors ${
                           gmshAvailable === false
                             ? 'bg-error/15 text-error hover:bg-error/25'
@@ -349,19 +369,24 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
               </div>
               <div className="flex flex-col gap-1.5">
                 <AppFormLabel uppercase className="mb-0">
-                  名称
+                  {t('modelAdminPage.nameLabel')}
                 </AppFormLabel>
                 <AppTextInput value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <AppFormLabel uppercase className="mb-0">
-                  分类
+                  {t('modelAdminPage.categoryLabel')}
                 </AppFormLabel>
-                <CategorySelect categories={categories} value={catId} onChange={setCatId} placeholder="选择分类" />
+                <CategorySelect
+                  categories={categories}
+                  value={catId}
+                  onChange={setCatId}
+                  placeholder={t('modelAdminPage.selectCategoryPlaceholder')}
+                />
               </div>
               <div className="flex flex-col gap-1.5">
                 <AppFormLabel uppercase className="mb-0">
-                  产品图纸 (PDF)
+                  {t('modelAdminPage.drawingLabel')}
                 </AppFormLabel>
                 <div className="flex flex-col gap-2">
                   {drawings.map((drawing) => (
@@ -373,26 +398,28 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                       <button
                         type="button"
                         onClick={() =>
-                          void openModelDrawing(modelId, drawing.id).catch(() => toast('打开图纸失败', 'error'))
+                          void openModelDrawing(modelId, drawing.id).catch(() =>
+                            toast(t('modelAdminPage.openDrawingFailed'), 'error'),
+                          )
                         }
                         className="text-xs text-primary hover:underline shrink-0"
                       >
-                        查看
+                        {t('modelAdminPage.view')}
                       </button>
                       <button
                         onClick={async () => {
                           try {
                             const r = await modelApi.deleteDrawing(modelId, drawing.id);
                             setDrawings(r.drawings);
-                            toast('图纸已删除', 'success');
+                            toast(t('modelAdminPage.drawingDeleted'), 'success');
                             onSaved();
                           } catch {
-                            toast('删除失败', 'error');
+                            toast(t('modelAdminPage.deleteFailed'), 'error');
                           }
                         }}
                         className="text-xs text-error hover:underline shrink-0"
                       >
-                        删除
+                        {t('common.delete')}
                       </button>
                     </div>
                   ))}
@@ -405,12 +432,12 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                       const f = e.target.files?.[0];
                       if (!f) return;
                       if (f.type !== 'application/pdf') {
-                        toast('仅支持 PDF 格式', 'error');
+                        toast(t('modelAdminPage.pdfOnly'), 'error');
                         e.target.value = '';
                         return;
                       }
                       if (f.size > drawingMaxBytes) {
-                        toast(`PDF 图纸不能超过 ${uploadPolicy.modelDrawingMaxSizeMb}MB`, 'error');
+                        toast(t('modelAdminPage.pdfTooLarge', { size: uploadPolicy.modelDrawingMaxSizeMb }), 'error');
                         e.target.value = '';
                         return;
                       }
@@ -418,10 +445,10 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                       try {
                         const r = await modelApi.uploadDrawing(modelId, f);
                         setDrawings(r.drawings);
-                        toast('图纸上传成功', 'success');
+                        toast(t('modelAdminPage.drawingUploaded'), 'success');
                         onSaved();
                       } catch {
-                        toast('上传失败', 'error');
+                        toast(t('modelAdminPage.uploadFailed'), 'error');
                       } finally {
                         setDrawingUploading(false);
                       }
@@ -436,13 +463,19 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                     variant="secondary"
                     className="w-full justify-center"
                   >
-                    {drawingUploading ? '上传中...' : drawings.length > 0 ? '继续添加 PDF 图纸' : '上传 PDF 图纸'}
+                    {drawingUploading
+                      ? t('modelAdminPage.uploading')
+                      : drawings.length > 0
+                        ? t('modelAdminPage.addDrawing')
+                        : t('modelAdminPage.uploadDrawing')}
                   </AdminButton>
                 </div>
               </div>
               <div className="border-t border-outline-variant/20 pt-4 mt-1">
-                <AppFormLabel uppercase>替换模型文件</AppFormLabel>
-                <p className="text-[10px] text-on-surface-variant/60 mt-1 mb-2">替换后将重新转换，预计耗时 30 秒</p>
+                <AppFormLabel uppercase>{t('modelAdminPage.replaceFileTitle')}</AppFormLabel>
+                <p className="text-[10px] text-on-surface-variant/60 mt-1 mb-2">
+                  {t('modelAdminPage.replaceFileHint')}
+                </p>
                 <input
                   type="file"
                   accept=".step,.stp,.iges,.igs"
@@ -453,17 +486,17 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                     if (!f) return;
                     const ext = f.name.split('.').pop()?.toLowerCase() || '';
                     if (!['step', 'stp', 'iges', 'igs'].includes(ext)) {
-                      toast('仅支持 STEP/IGES 格式', 'error');
+                      toast(t('modelAdminPage.stepOnly'), 'error');
                       return;
                     }
                     setFileReplacing(true);
                     let ok = false;
                     try {
                       await modelApi.replaceFile(modelId, f);
-                      toast('文件已上传，正在转换中...', 'success');
+                      toast(t('modelAdminPage.fileUploadedConverting'), 'success');
                       ok = true;
                     } catch {
-                      toast('替换文件失败', 'error');
+                      toast(t('modelAdminPage.replaceFileFailed'), 'error');
                     } finally {
                       setFileReplacing(false);
                     }
@@ -482,7 +515,7 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                   variant="secondary"
                   className="w-full justify-center"
                 >
-                  {fileReplacing ? '上传中...' : '选择新模型文件'}
+                  {fileReplacing ? t('modelAdminPage.uploading') : t('modelAdminPage.chooseNewFile')}
                 </AdminButton>
               </div>
             </div>
@@ -490,17 +523,17 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
               {onDelete &&
                 (confirmDelete ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-error">确认删除？</span>
+                    <span className="text-xs text-error">{t('modelAdminPage.confirmDeleteQ')}</span>
                     <AdminButton
                       onClick={async () => {
                         setDeleting(true);
                         let ok = false;
                         try {
                           await onDelete();
-                          toast('已删除', 'success');
+                          toast(t('modelAdminPage.deletedToast'), 'success');
                           ok = true;
                         } catch {
-                          toast('删除失败', 'error');
+                          toast(t('modelAdminPage.deleteFailed'), 'error');
                         } finally {
                           setDeleting(false);
                           setConfirmDelete(false);
@@ -511,23 +544,23 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                       size="sm"
                       variant="danger"
                     >
-                      {deleting ? '删除中...' : '确认'}
+                      {deleting ? t('modelAdminPage.deleting') : t('common.confirm')}
                     </AdminButton>
                     <AdminButton onClick={() => setConfirmDelete(false)} size="sm" variant="ghost">
-                      取消
+                      {t('common.cancel')}
                     </AdminButton>
                   </div>
                 ) : (
                   <AdminButton onClick={() => setConfirmDelete(true)} icon="delete" size="sm" variant="danger">
-                    删除模型
+                    {t('modelAdminPage.deleteModelBtn')}
                   </AdminButton>
                 ))}
               <div className="flex gap-3 ml-auto">
                 <AdminButton onClick={onClose} variant="secondary">
-                  取消
+                  {t('common.cancel')}
                 </AdminButton>
                 <AdminButton onClick={handleSave} disabled={saving} variant="primary">
-                  {saving ? '保存中...' : '保存'}
+                  {saving ? t('modelAdminPage.saving') : t('common.save')}
                 </AdminButton>
               </div>
             </div>
@@ -554,25 +587,29 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                   <Icon name={gmshAvailable === false ? 'priority_high' : 'info'} size={14} />
                 </span>
                 <h3 className="font-headline text-lg font-semibold text-on-surface">
-                  {gmshAvailable === false ? '修复转换未安装' : '关于转换引擎'}
+                  {gmshAvailable === false
+                    ? t('modelAdminPage.fixNotInstalled')
+                    : t('modelAdminPage.aboutConvertEngine')}
                 </h3>
               </div>
-              <AdminIconButton icon="close" onClick={() => setShowGmshHelp(false)} variant="ghost" aria-label="关闭" />
+              <AdminIconButton
+                icon="close"
+                onClick={() => setShowGmshHelp(false)}
+                variant="ghost"
+                aria-label={t('common.close')}
+              />
             </div>
             <div className="px-4 py-4 sm:px-6 space-y-4 overflow-y-auto scrollbar-hidden sm:custom-scrollbar">
               <div>
-                <div className="text-[11px] font-medium text-on-surface">标准转换</div>
+                <div className="text-[11px] font-medium text-on-surface">{t('modelAdminPage.stdConvert')}</div>
                 <p className="mt-1 text-xs text-on-surface-variant leading-relaxed">
-                  默认引擎：从 STEP
-                  源文件重新生成预览与缩略图，速度快、支持多零件分色。个别复杂几何（特定圆弧、斜柱面）可能丢面。
+                  {t('modelAdminPage.stdConvertDesc')}
                 </p>
               </div>
               <div>
-                <div className="text-[11px] font-medium text-on-surface">修复转换</div>
+                <div className="text-[11px] font-medium text-on-surface">{t('modelAdminPage.fixConvert')}</div>
                 <p className="mt-1 text-xs text-on-surface-variant leading-relaxed">
-                  备用 gmsh
-                  引擎：对标准转换丢面的几何有兜底效果，与标准转换互相独立、可分别重转。属重量操作，大模型耗时约 1
-                  分钟。
+                  {t('modelAdminPage.fixConvertDesc')}
                 </p>
               </div>
               {gmshAvailable === false && (
@@ -580,7 +617,7 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                   <div>
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-medium text-on-surface">
-                        第 1 步 · 服务器安装 gmsh（静态版）
+                        {t('modelAdminPage.gmshStep1Title')}
                       </span>
                       <button
                         type="button"
@@ -588,7 +625,7 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                         className="flex items-center gap-1 rounded-sm px-2 py-1 text-[11px] text-primary hover:bg-primary/10"
                       >
                         <Icon name={gmshCmdCopied === 'install' ? 'check' : 'content_copy'} size={12} />
-                        {gmshCmdCopied === 'install' ? '已复制' : '复制'}
+                        {gmshCmdCopied === 'install' ? t('modelAdminPage.copied') : t('modelAdminPage.copy')}
                       </button>
                     </div>
                     <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap rounded-sm bg-surface-container-highest px-3 py-2 font-mono text-xs text-on-surface">
@@ -597,14 +634,16 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                   </div>
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-medium text-on-surface">第 2 步 · 挂载依赖并重启容器</span>
+                      <span className="text-[11px] font-medium text-on-surface">
+                        {t('modelAdminPage.gmshStep2Title')}
+                      </span>
                       <button
                         type="button"
                         onClick={() => void copyGmshCmd(GMSH_MOUNT_STEP, 'mount')}
                         className="flex items-center gap-1 rounded-sm px-2 py-1 text-[11px] text-primary hover:bg-primary/10"
                       >
                         <Icon name={gmshCmdCopied === 'mount' ? 'check' : 'content_copy'} size={12} />
-                        {gmshCmdCopied === 'mount' ? '已复制' : '复制'}
+                        {gmshCmdCopied === 'mount' ? t('modelAdminPage.copied') : t('modelAdminPage.copy')}
                       </button>
                     </div>
                     <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap rounded-sm bg-surface-container-highest px-3 py-2 font-mono text-xs text-on-surface">
@@ -612,15 +651,14 @@ docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`
                     </pre>
                   </div>
                   <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                    完成后重新打开本弹窗，按钮会自动恢复可点击。注意：发行版的 apt/yum 版 gmsh
-                    与容器不兼容，必须用上面的静态版。
+                    {t('modelAdminPage.gmshAfterNote')}
                   </p>
                 </>
               )}
             </div>
             <div className="flex justify-end gap-3 px-4 py-3 sm:px-6 border-t border-outline-variant/10 shrink-0">
               <AdminButton onClick={() => setShowGmshHelp(false)} variant="secondary">
-                我知道了
+                {t('modelAdminPage.gotIt')}
               </AdminButton>
             </div>
           </motion.div>

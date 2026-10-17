@@ -1,3 +1,4 @@
+import { i18n } from '../i18n';
 import { useToast } from '../components/shared/Toast';
 import { getErrorMessage } from './errorNotifications';
 
@@ -14,9 +15,10 @@ import { getErrorMessage } from './errorNotifications';
 export function useCrudToast() {
   const { toast } = useToast();
   return {
-    created: (name: string) => toast(`${name}已创建`, 'success'),
-    updated: (name: string) => toast(`${name}已更新`, 'success'),
-    deleted: (name: string) => toast(`${name}已删除`, 'success'),
-    failed: (err: unknown, fallback = '操作失败') => toast(getErrorMessage(err, fallback), 'error'),
+    created: (name: string) => toast(i18n.t('sharedMisc.crudCreated', { name }), 'success'),
+    updated: (name: string) => toast(i18n.t('sharedMisc.crudUpdated', { name }), 'success'),
+    deleted: (name: string) => toast(i18n.t('sharedMisc.crudDeleted', { name }), 'success'),
+    failed: (err: unknown, fallback = i18n.t('sharedMisc.crudFailedFallback')) =>
+      toast(getErrorMessage(err, fallback), 'error'),
   };
 }

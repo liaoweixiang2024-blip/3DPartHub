@@ -6,12 +6,13 @@ import { getErrorMessage } from '../../lib/errorNotifications';
 import DialogOverlay from '../shared/DialogOverlay';
 import Icon from '../shared/Icon';
 import { useToast } from '../shared/Toast';
+import { useTranslation } from 'react-i18next';
 
 const ROLE_OPTIONS = [
-  { value: 'ADMIN', label: '管理员' },
-  { value: 'EDITOR', label: '编辑者' },
-  { value: 'VIEWER', label: '访客' },
-  { value: 'INTERNAL', label: '内部' },
+  { value: 'ADMIN', labelKey: 'userAdmin.roleLabel.ADMIN' },
+  { value: 'EDITOR', labelKey: 'userAdmin.roleLabel.EDITOR' },
+  { value: 'VIEWER', labelKey: 'userAdmin.roleLabel.VIEWER' },
+  { value: 'INTERNAL', labelKey: 'userAdmin.roleLabel.INTERNAL' },
 ];
 
 const TEMP_PASSWORD_LENGTH = 12;
@@ -28,6 +29,7 @@ const inputClass =
 const labelClass = 'block text-xs font-medium text-on-surface-variant mb-1';
 
 export default function UserCreateDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -56,11 +58,11 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
         mustChangePassword,
       });
       unwrapResponse(res);
-      toast(`已创建用户「${username.trim()}」，请将初始密码转交给对方`, 'success', 6000);
+      toast(t('userAdmin.create.success', { name: username.trim() }), 'success', 6000);
       onCreated();
       onClose();
     } catch (err) {
-      toast(getErrorMessage(err, '创建用户失败'), 'error');
+      toast(getErrorMessage(err, t('userAdmin.create.failed')), 'error');
     } finally {
       setSaving(false);
     }
@@ -76,13 +78,13 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
         <div className="flex items-center justify-between gap-2 border-b border-outline-variant/10 px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
             <Icon name="person_add" size={18} className="text-primary-container" />
-            <span className="truncate text-sm font-semibold text-on-surface">新增用户</span>
+            <span className="truncate text-sm font-semibold text-on-surface">{t('userAdmin.createUser')}</span>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high"
-            aria-label="关闭"
+            aria-label={t('common.close')}
           >
             <Icon name="close" size={18} />
           </button>
@@ -91,19 +93,19 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
         {/* Body */}
         <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
           <div>
-            <span className={labelClass}>用户名 *</span>
+            <span className={labelClass}>{t('userAdmin.create.username')}</span>
             <input
               name="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="字母、数字、下划线、连字符、点"
+              placeholder={t('userAdmin.create.usernamePlaceholder')}
               className={inputClass}
               autoFocus
             />
           </div>
 
           <div>
-            <span className={labelClass}>角色</span>
+            <span className={labelClass}>{t('userAdmin.edit.roleLabel')}</span>
             {/* 分段选择器：4 个固定角色直接点选，省去原生 select 展开步骤；选中态仅中性色填充 */}
             <div className="grid grid-cols-4 gap-1.5">
               {ROLE_OPTIONS.map((o) => (
@@ -117,32 +119,32 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
                       : 'border-outline-variant/20 bg-surface-container-high text-on-surface-variant hover:text-on-surface'
                   }`}
                 >
-                  {o.label}
+                  {t(o.labelKey)}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <span className={labelClass}>邮箱 *</span>
+            <span className={labelClass}>{t('userAdmin.create.email')}</span>
             <input
               name="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@company.com（登录账号）"
+              placeholder={t('userAdmin.create.emailPlaceholder')}
               className={inputClass}
             />
           </div>
 
           <div>
-            <span className={labelClass}>初始密码 *</span>
+            <span className={labelClass}>{t('userAdmin.create.initialPassword')}</span>
             <div className="flex gap-2">
               <input
                 name="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="至少 8 位"
+                placeholder={t('userAdmin.create.passwordPlaceholder')}
                 className={inputClass}
                 type="text"
                 autoComplete="off"
@@ -150,7 +152,7 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
               <button
                 type="button"
                 onClick={() => setPassword(generateTempPassword())}
-                title="随机生成临时密码"
+                title={t('userAdmin.create.randomPasswordTitle')}
                 className="shrink-0 rounded-md border border-outline-variant/20 bg-surface-container-high px-2.5 text-on-surface-variant hover:text-on-surface"
               >
                 <Icon name="refresh" size={15} />
@@ -161,23 +163,23 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
                   if (!password) return;
                   try {
                     await copyText(password);
-                    toast('初始密码已复制', 'success');
+                    toast(t('userAdmin.create.passwordCopied'), 'success');
                   } catch {
-                    toast('复制失败', 'error');
+                    toast(t('userAdmin.create.copyFailed'), 'error');
                   }
                 }}
-                title="复制密码（转交给新用户）"
+                title={t('userAdmin.create.copyPasswordTitle')}
                 className="shrink-0 rounded-md border border-outline-variant/20 bg-surface-container-high px-2.5 text-on-surface-variant hover:text-on-surface"
               >
                 <Icon name="content_copy" size={15} />
               </button>
             </div>
-            <p className="mt-1 text-[11px] text-on-surface-variant/60">建议用随机临时密码，创建后复制转交给对方</p>
+            <p className="mt-1 text-[11px] text-on-surface-variant/60">{t('userAdmin.create.passwordHint')}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <span className={labelClass}>公司</span>
+              <span className={labelClass}>{t('userAdmin.edit.company')}</span>
               <input
                 name="company"
                 value={company}
@@ -186,7 +188,7 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
               />
             </div>
             <div>
-              <span className={labelClass}>部门</span>
+              <span className={labelClass}>{t('userAdmin.edit.department')}</span>
               <input
                 name="department"
                 value={department}
@@ -197,7 +199,7 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
           </div>
 
           <div>
-            <span className={labelClass}>电话</span>
+            <span className={labelClass}>{t('userAdmin.edit.phone')}</span>
             <input name="phone" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
           </div>
 
@@ -209,7 +211,7 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
               onChange={(e) => setMustChangePassword(e.target.checked)}
               className="h-4 w-4"
             />
-            首次登录强制修改密码
+            {t('userAdmin.create.mustChangePassword')}
           </label>
         </div>
 
@@ -220,7 +222,7 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
             onClick={onClose}
             className="rounded-md px-3 py-1.5 text-sm text-on-surface-variant hover:bg-surface-container-high"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -228,7 +230,7 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
             disabled={!canSubmit || saving}
             className="rounded-md bg-primary-container px-4 py-1.5 text-sm font-medium text-on-primary-container disabled:opacity-50"
           >
-            {saving ? '创建中…' : '创建用户'}
+            {saving ? t('userAdmin.create.creating') : t('userAdmin.create.submit')}
           </button>
         </div>
       </div>

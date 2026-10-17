@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { i18n } from '../i18n';
 import { useLocation } from 'react-router-dom';
 import { mutate as mutateSWR } from 'swr';
 import {
@@ -140,7 +142,7 @@ const PUBLIC_APPEARANCE_SETTING_KEYS = [
   'ui_enabled_locales',
   'ui_follow_browser_locale',
 ] as const satisfies readonly (keyof SystemSettings)[];
-const CONTACT_PHONE_FORMAT_MESSAGE = '联系电话格式不正确，请填写中国手机号、带区号座机、400/800 服务电话或国际号码';
+const CONTACT_PHONE_FORMAT_MESSAGE = 'adminSettings.contactPhoneInvalid';
 
 const DEFAULT_SETTINGS: SystemSettings = {
   require_login_download: false,
@@ -175,8 +177,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
   model_detail_disclaimer: DEFAULT_MODEL_DETAIL_DISCLAIMER,
   model_detail_copyright: DEFAULT_MODEL_DETAIL_COPYRIGHT,
   model_detail_copyright_follow_site_title: true,
-  legal_privacy_updated_at: '2026 年 4 月',
-  legal_terms_updated_at: '2026 年 4 月',
+  legal_privacy_updated_at: 'adminSettings.egApril2026',
+  legal_terms_updated_at: 'adminSettings.egApril2026',
   legal_privacy_sections: JSON.stringify(DEFAULT_PRIVACY_SECTIONS, null, 2),
   legal_terms_sections: JSON.stringify(DEFAULT_TERMS_SECTIONS, null, 2),
   announcement_enabled: false,
@@ -186,8 +188,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
   maintenance_enabled: false,
   maintenance_auto_enabled: true,
   maintenance_auto_queue_threshold: 50,
-  maintenance_title: '系统维护中',
-  maintenance_message: '系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。',
+  maintenance_title: 'adminSettings.maintenanceTitleDefault',
+  maintenance_message: 'adminSettings.maintenanceMessageDefault',
   conversion_worker_concurrency: 1,
   smtp_host: '',
   smtp_port: 465,
@@ -272,8 +274,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
   feature_downloads_enabled: true,
   feature_password_reset_enabled: true,
   feature_temp_viewer_enabled: true,
-  selection_page_title: '产品选型',
-  selection_page_desc: '先选产品大类，再按参数逐步缩小范围',
+  selection_page_title: 'adminSettings.featureSelection',
+  selection_page_desc: 'adminSettings.selectionPageDescDefault',
   selection_enable_match: true,
   selection_thread_priority: JSON.stringify(DEFAULT_THREAD_PRIORITY, null, 2),
   // 选型导航：开关 + JSON 配置（真实默认在服务端；此处仅兜底空结构，管理在 /admin/category-nav）
@@ -478,400 +480,490 @@ function isSection(item: SettingItem | { _section: string }): item is { _section
 }
 
 const CACHE_DRIVER_OPTIONS = [
-  { value: 'redis', label: 'Redis 缓存' },
-  { value: 'memory', label: '内存缓存' },
-  { value: 'off', label: '关闭缓存' },
+  { value: 'redis', label: 'adminSettings.cacheDriverRedis' },
+  { value: 'memory', label: 'adminSettings.cacheDriverMemory' },
+  { value: 'off', label: 'adminSettings.cacheDriverOff' },
 ];
 
 const UI_LOCALE_OPTIONS = [
-  { value: 'zh-CN', label: '简体中文' },
-  { value: 'zh-TW', label: '繁體中文' },
+  { value: 'zh-CN', label: 'adminSettings.localeZhCN' },
+  { value: 'zh-TW', label: 'adminSettings.localeZhTW' },
   { value: 'en-US', label: 'English' },
-  { value: 'ja-JP', label: '日本語' },
+  { value: 'ja-JP', label: 'adminSettings.localeJa' },
   { value: 'ko-KR', label: '한국어' },
   { value: 'de-DE', label: 'Deutsch' },
 ];
 
 const STORAGE_PROVIDER_OPTIONS = [
-  { value: 'local', label: '本地存储' },
-  { value: 'minio', label: 'MinIO / 私有 S3' },
-  { value: 'tencent_cos', label: '腾讯云 COS' },
-  { value: 'aliyun_oss', label: '阿里云 OSS' },
-  { value: 'qiniu_kodo', label: '七牛云 Kodo' },
-  { value: 's3_compatible', label: 'S3 兼容存储' },
+  { value: 'local', label: 'adminSettings.providerLocal' },
+  { value: 'minio', label: 'adminSettings.providerMinio' },
+  { value: 'tencent_cos', label: 'adminSettings.providerTencentCos' },
+  { value: 'aliyun_oss', label: 'adminSettings.providerAliyunOss' },
+  { value: 'qiniu_kodo', label: 'adminSettings.providerQiniu' },
+  { value: 's3_compatible', label: 'adminSettings.providerS3Compatible' },
 ];
 
-const CACHE_STORAGE_GROUP_TITLE = '缓存与云存储';
+const CACHE_STORAGE_GROUP_TITLE = 'adminSettings.groupStorage';
 const CACHE_STORAGE_SECTION_TITLES = [
-  'Redis 与页面缓存',
-  '对象存储服务商',
-  '资源目录与访问策略',
-  '本地与云同步',
-  '图片与资源优化',
+  'adminSettings.tabRedisCache',
+  'adminSettings.tabStorageProvider',
+  'adminSettings.tabStoragePolicy',
+  'adminSettings.tabLocalCloudSync',
+  'adminSettings.tabAssetOptimization',
 ] as const;
 const SETTING_SECTION_ICONS: Record<string, string> = {
-  'Redis 与页面缓存': 'memory',
-  对象存储服务商: 'cloud',
-  资源目录与访问策略: 'folder_open',
-  本地与云同步: 'sync_alt',
-  图片与资源优化: 'image',
+  'adminSettings.tabRedisCache': 'memory',
+  'adminSettings.tabStorageProvider': 'cloud',
+  'adminSettings.tabStoragePolicy': 'folder_open',
+  'adminSettings.tabLocalCloudSync': 'sync_alt',
+  'adminSettings.tabAssetOptimization': 'image',
 };
 
 const GROUPS: SettingGroup[] = [
   {
-    title: '站点与品牌',
+    title: 'adminSettings.tabSiteBrand',
     icon: 'domain',
     items: [
-      { key: 'site_title', label: '网站名称', desc: '显示在导航栏、登录页和浏览器标签的站点名称', type: 'text' },
+      { key: 'site_title', label: 'adminSettings.siteTitle', desc: 'adminSettings.siteTitleDesc', type: 'text' },
       {
         key: 'site_browser_title',
-        label: '浏览器标题',
-        desc: '浏览器标签页显示的标题，留空则使用网站名称',
+        label: 'adminSettings.browserTitle',
+        desc: 'adminSettings.browserTitleDesc',
         type: 'text',
       },
       {
         key: 'site_app_name',
-        label: '应用名称',
-        desc: '浏览器「安装应用」和手机主屏图标显示的名称，留空则使用网站名称',
+        label: 'adminSettings.appName',
+        desc: 'adminSettings.appNameDesc',
         type: 'text',
       },
       {
         key: 'site_app_icon',
-        label: '应用图标',
-        desc: 'Chrome「安装应用」和 iPhone「添加到主屏幕」的图标，建议正方形 PNG ≥192×192；留空使用内置图标',
+        label: 'adminSettings.appIcon',
+        desc: 'adminSettings.appIconDesc',
         type: 'image',
       },
       {
         key: 'site_app_desc',
-        label: '应用描述',
-        desc: '浏览器安装应用后的应用备注（如 Chrome 应用列表描述），留空则使用站点描述',
+        label: 'adminSettings.appDescription',
+        desc: 'adminSettings.appDescDesc',
         type: 'text',
       },
       {
         key: 'site_logo',
-        label: '站点 Logo',
-        desc: '用于”仅 Logo”模式，适合横版长条图；导航会按高度自适应，不会拉伸变形',
+        label: 'adminSettings.siteLogo',
+        desc: 'adminSettings.siteLogoDesc',
         type: 'image',
       },
       {
         key: 'site_icon',
-        label: '站点图标',
-        desc: '用于”图标 + 标题”模式，推荐方形图标；若误传横版图，导航也会限制宽高避免挤压标题',
+        label: 'adminSettings.siteIcon',
+        desc: 'adminSettings.siteIconModeDesc',
         type: 'image',
       },
       {
         key: 'site_logo_display',
-        label: 'Logo 显示方式',
-        desc: '图标 + 标题适合大多数站点；仅 Logo 适合已包含文字的横版品牌图',
+        label: 'adminSettings.logoDisplayMode',
+        desc: 'adminSettings.logoModeDesc',
         type: 'select',
         options: [
-          { value: 'logo_and_title', label: '图标 + 标题' },
-          { value: 'logo_only', label: '仅 Logo（长条）' },
-          { value: 'title_only', label: '仅标题' },
+          { value: 'logo_and_title', label: 'adminSettings.logoModeIconTitle' },
+          { value: 'logo_only', label: 'adminSettings.logoModeLogoOnly' },
+          { value: 'title_only', label: 'adminSettings.logoModeTitleOnly' },
         ],
       },
       {
         key: 'site_favicon',
-        label: 'Favicon 图标',
-        desc: '浏览器标签页图标，建议正方形 32×32 或 64×64，支持 ICO/PNG/SVG',
+        label: 'adminSettings.faviconIcon',
+        desc: 'adminSettings.siteIconDesc',
         type: 'image',
       },
-      { key: 'site_description', label: '网站描述', desc: '用于 SEO 和分享链接的站点描述', type: 'text' },
-      { key: 'site_keywords', label: '关键词', desc: 'SEO 关键词，多个用逗号分隔', type: 'text' },
-      { _section: '页脚联系信息' },
       {
-        key: 'contact_phone',
-        label: '联系电话',
-        desc: '支持 13800138000、0755-12345678、400-123-4567、+86 13800138000',
+        key: 'site_description',
+        label: 'adminSettings.siteDescription',
+        desc: 'adminSettings.siteDescriptionDesc',
         type: 'text',
       },
-      { key: 'contact_address', label: '联系地址', desc: '显示在前台页脚底部的公司/办公地址', type: 'text' },
-      { _section: '模型详情页页脚' },
+      { key: 'site_keywords', label: 'adminSettings.keywords', desc: 'adminSettings.seoKeywordsDesc', type: 'text' },
+      { _section: 'adminSettings.sectionFooterContact' },
+      {
+        key: 'contact_phone',
+        label: 'adminSettings.contactPhone',
+        desc: 'adminSettings.contactPhoneEg',
+        type: 'text',
+      },
+      {
+        key: 'contact_address',
+        label: 'adminSettings.footerAddress',
+        desc: 'adminSettings.footerAddressDesc',
+        type: 'text',
+      },
+      { _section: 'adminSettings.sectionModelFooter' },
       {
         key: 'model_detail_disclaimer',
-        label: '模型详情说明',
-        desc: '显示在模型详情页底部，用于说明模型用途、生产依据等注意事项',
+        label: 'adminSettings.modelDetailNotes',
+        desc: 'adminSettings.modelCopyrightDesc',
         type: 'textarea',
       },
       {
         key: 'model_detail_copyright_follow_site_title',
-        label: '模型详情版权跟随网站名称',
-        desc: '开启后根据站点标题自动生成：© 2026 网站名称',
+        label: 'adminSettings.modelCopyrightFollowSite',
+        desc: 'adminSettings.copyrightFollowDesc',
         type: 'switch',
       },
       {
         key: 'model_detail_copyright',
-        label: '模型详情版权',
-        desc: '关闭跟随网站名称后可手动编辑，例如：© 2026 3DPartHub',
+        label: 'adminSettings.modelCopyright',
+        desc: 'adminSettings.footerCopyrightManualDesc',
         type: 'text',
       },
-      { _section: '友情链接与版权' },
+      { _section: 'adminSettings.sectionFooterLinks' },
       {
         key: 'footer_links',
-        label: '友情链接',
-        desc: '显示在前台页脚的相关链接区；保存时会自动过滤空行',
+        label: 'adminSettings.sectionFriendlyLinks',
+        desc: 'adminSettings.footerLinksDesc',
         type: 'textarea',
       },
       {
         key: 'footer_copyright_follow_site_title',
-        label: '页脚版权跟随网站名称',
-        desc: '开启后根据站点标题自动生成：© 2026 网站名称. All rights reserved.',
+        label: 'adminSettings.footerCopyrightFollowSite',
+        desc: 'adminSettings.copyrightFollowEnDesc',
         type: 'switch',
       },
       {
         key: 'footer_copyright',
-        label: '页脚版权',
-        desc: '关闭跟随网站名称后可手动编辑，例如：© 2026 3DPartHub. All rights reserved.',
+        label: 'adminSettings.footerCopyright',
+        desc: 'adminSettings.footerCopyrightManualEnDesc',
         type: 'text',
       },
-      { _section: '网站备案信息（可选）' },
+      { _section: 'adminSettings.sectionFilingInfo' },
       {
         key: 'footer_icp_number',
-        label: 'ICP 备案号',
-        desc: '中国大陆工信部备案号，显示在页脚版权下方，点击跳转工信部查询页。留空不显示。例如：粤ICP备12345678号',
+        label: 'adminSettings.icpNumber',
+        desc: 'adminSettings.icpDesc',
         type: 'text',
       },
       {
         key: 'footer_police_number',
-        label: '公安备案号',
-        desc: '全国互联网安全管理平台备案号，显示在页脚版权下方。系统会自动从号码中提取数字生成公安备案查询链接；号码不含足够数字时仅显示为纯文本。例如：京公网安备 11010102000101号',
+        label: 'adminSettings.policeNumber',
+        desc: 'adminSettings.policeNumberDesc',
         type: 'text',
       },
     ],
   },
   {
-    title: '外观与主题',
+    title: 'adminSettings.tabAppearance',
     icon: 'palette',
     items: [
       {
         key: 'interface_theme',
-        label: '界面主题',
-        desc: '选择前台界面风格，会影响导航、首页、登录页和部分页面模板的展示效果。',
+        label: 'adminSettings.interfaceTheme',
+        desc: 'adminSettings.defaultThemePickerDesc',
         type: 'select',
         options: INTERFACE_THEME_OPTIONS,
       },
       {
         key: 'mobile_interface_theme',
-        label: '移动端主题',
-        desc: '移动端独立主题入口；当前默认沿用旧版移动端样式，后续可单独开发和切换移动端主题。',
+        label: 'adminSettings.mobileTheme',
+        desc: 'adminSettings.mobileThemeDesc',
         type: 'select',
         options: MOBILE_THEME_OPTIONS,
       },
       {
         key: 'user_interface_theme_enabled',
-        label: '允许用户自定义前台界面风格',
-        desc: '开启后用户可在前台用户菜单里选择“跟随网站默认 / 经典主题 / 工作台主题”，仅影响公开前台桌面页面。',
+        label: 'adminSettings.allowCustomThemeDesc',
+        desc: 'adminSettings.allowCustomThemeMenuDesc',
         type: 'switch',
       },
       {
         key: 'home_desktop_list_loading_mode',
-        label: 'PC 首页加载方式',
-        desc: '控制 PC 端首页模型列表使用下拉自动加载还是分页；经典主题和工作台主题共用此设置。',
+        label: 'adminSettings.pcHomeLoadMode',
+        desc: 'adminSettings.pcHomeLoadDesc',
         type: 'select',
         options: [
-          { value: 'infinite', label: '下拉自动加载' },
-          { value: 'pagination', label: '分页' },
+          { value: 'infinite', label: 'adminSettings.loadModeInfinite' },
+          { value: 'pagination', label: 'adminSettings.loadModePaged' },
         ],
       },
       {
         key: 'home_mobile_list_loading_mode',
-        label: '移动端首页加载方式',
-        desc: '控制手机端首页模型列表使用下拉自动加载还是分页；移动端主题共用此设置。',
+        label: 'adminSettings.mobileHomeLoadMode',
+        desc: 'adminSettings.mobileHomeLoadDesc',
         type: 'select',
         options: [
-          { value: 'infinite', label: '下拉自动加载' },
-          { value: 'pagination', label: '分页' },
+          { value: 'infinite', label: 'adminSettings.loadModeInfinite' },
+          { value: 'pagination', label: 'adminSettings.loadModePaged' },
         ],
       },
-      { _section: '界面语言' },
+      { _section: 'adminSettings.sectionUiLanguage' },
       {
         key: 'ui_default_locale',
-        label: '默认界面语言',
-        desc: '新访客首次打开网站时使用的语言；已有用户会优先使用自己选择的语言。',
+        label: 'adminSettings.defaultLocale',
+        desc: 'adminSettings.defaultLocaleDesc',
         type: 'select',
         options: UI_LOCALE_OPTIONS,
       },
       {
         key: 'ui_enabled_locales',
-        label: '可切换语言',
-        desc: '勾选要在前台语言切换器中向用户开放的语言（默认全部开放；至少保留 1 个）。',
+        label: 'adminSettings.enabledLocales',
+        desc: 'adminSettings.enabledLocalesDesc',
         type: 'text',
       },
       {
         key: 'ui_follow_browser_locale',
-        label: '首次访问跟随浏览器语言',
-        desc: '开启后，未手动选择语言的新访客会优先使用浏览器语言；不支持时回到默认语言。',
+        label: 'adminSettings.followBrowserLocale',
+        desc: 'adminSettings.followBrowserLocaleDesc',
         type: 'switch',
       },
       {
         key: 'color_scheme',
-        label: '配色方案',
-        desc: '预设:orange/blue/green/purple/red/teal 或 custom',
+        label: 'adminSettings.colorScheme',
+        desc: 'adminSettings.presetEg',
         type: 'color-scheme',
       },
       {
         key: 'default_theme',
-        label: '默认主题',
-        desc: '新用户首次访问时看到的默认外观',
+        label: 'adminSettings.defaultTheme',
+        desc: 'adminSettings.defaultThemeDesc',
         type: 'select',
         options: [
-          { value: 'dark', label: '暗色模式' },
-          { value: 'light', label: '亮色模式' },
-          { value: 'system', label: '跟随系统' },
+          { value: 'dark', label: 'adminSettings.themeDark' },
+          { value: 'light', label: 'adminSettings.themeLight' },
+          { value: 'system', label: 'adminSettings.themeFollowSystem' },
         ],
       },
-      { key: 'auto_theme_enabled', label: '定时切换', desc: '按时间段自动在亮色和暗色之间切换', type: 'switch' },
-      { key: 'auto_theme_dark_hour', label: '暗色开始', desc: '几点切换为暗色模式（24小时制）', type: 'number' },
-      { key: 'auto_theme_light_hour', label: '亮色开始', desc: '几点切换为亮色模式（24小时制）', type: 'number' },
+      {
+        key: 'auto_theme_enabled',
+        label: 'adminSettings.themeSchedule',
+        desc: 'adminSettings.themeScheduleDesc',
+        type: 'switch',
+      },
+      {
+        key: 'auto_theme_dark_hour',
+        label: 'adminSettings.scheduleDarkStart',
+        desc: 'adminSettings.scheduleDarkStartDesc',
+        type: 'number',
+      },
+      {
+        key: 'auto_theme_light_hour',
+        label: 'adminSettings.scheduleLightStart',
+        desc: 'adminSettings.scheduleLightStartDesc',
+        type: 'number',
+      },
     ],
   },
   {
-    title: '系统公告',
+    title: 'adminSettings.tabAnnouncement',
     icon: 'campaign',
     items: [
-      { key: 'announcement_enabled', label: '启用公告', desc: '在首页顶部显示系统公告横幅', type: 'switch' },
+      {
+        key: 'announcement_enabled',
+        label: 'adminSettings.enableAnnouncement',
+        desc: 'adminSettings.announcementDesc',
+        type: 'switch',
+      },
       {
         key: 'announcement_text',
-        label: '公告内容',
-        desc: '支持 HTML，如输入 <a href=”https://...” >链接</a> 可插入超链接',
+        label: 'adminSettings.announcementContent',
+        desc: 'adminSettings.announcementHtmlDesc',
         type: 'textarea',
       },
       {
         key: 'announcement_type',
-        label: '公告样式',
-        desc: '选择公告横幅的预设配色方案',
+        label: 'adminSettings.announcementStyle',
+        desc: 'adminSettings.announcementStyleDesc',
         type: 'select',
         options: [
-          { value: 'info', label: '信息 (蓝色)' },
-          { value: 'warning', label: '警告 (黄色)' },
-          { value: 'error', label: '紧急 (红色)' },
+          { value: 'info', label: 'adminSettings.noticeStyleInfo' },
+          { value: 'warning', label: 'adminSettings.noticeStyleWarning' },
+          { value: 'error', label: 'adminSettings.noticeStyleCritical' },
         ],
       },
       {
         key: 'announcement_color',
-        label: '自定义颜色',
-        desc: '填入十六进制色值（如 #FF6600）覆盖预设配色，留空则使用上方预设样式',
+        label: 'adminSettings.customColor',
+        desc: 'adminSettings.watermarkColorHint',
         type: 'color',
       },
     ],
   },
   {
-    title: '菜单配置',
+    title: 'adminSettings.tabMenuConfig',
     icon: 'menu',
     items: [
       {
         key: 'nav_items',
-        label: '侧边栏菜单',
-        desc: '统一配置侧边栏菜单，管理员项仅管理员可见',
+        label: 'adminSettings.menuSidebar',
+        desc: 'adminSettings.menuConfigDesc',
         type: 'textarea',
       },
-      { key: 'nav_mobile_items', label: '移动端底部菜单', desc: '配置移动端底部导航，建议最多 5 项', type: 'textarea' },
+      {
+        key: 'nav_mobile_items',
+        label: 'adminSettings.mobileBottomMenu',
+        desc: 'adminSettings.mobileMenuDesc',
+        type: 'textarea',
+      },
     ],
   },
   {
-    title: '访问控制',
+    title: 'adminSettings.tabAccessControl',
     icon: 'lock',
     items: [
-      { key: 'require_login_browse', label: '登录浏览', desc: '用户必须登录后才能浏览模型列表', type: 'switch' },
-      { key: 'require_login_selection', label: '登录浏览选型', desc: '用户必须登录后才能浏览选型页面', type: 'switch' },
-      { key: 'require_login_download', label: '登录下载', desc: '用户必须登录后才能下载模型文件', type: 'switch' },
+      {
+        key: 'require_login_browse',
+        label: 'adminSettings.loginToBrowse',
+        desc: 'adminSettings.loginToBrowseDesc',
+        type: 'switch',
+      },
+      {
+        key: 'require_login_selection',
+        label: 'adminSettings.loginToBrowseSelection',
+        desc: 'adminSettings.loginToBrowseSelectionDesc',
+        type: 'switch',
+      },
+      {
+        key: 'require_login_download',
+        label: 'adminSettings.loginToDownload',
+        desc: 'adminSettings.loginToDownloadDesc',
+        type: 'switch',
+      },
       {
         key: 'auth_modal_enabled',
-        label: '登录/注册表单弹窗',
-        desc: '开启后登录和注册在当前页面弹窗完成；关闭后跳转到独立登录/注册页面',
+        label: 'adminSettings.authModal',
+        desc: 'adminSettings.authModalDesc',
         type: 'switch',
       },
       {
         key: 'login_dialog_enabled',
-        label: '登录提示弹窗',
-        desc: '开启后访问受保护页面时先显示“需要登录”的提示弹窗；关闭后按登录/注册表单设置直接登录或跳转',
+        label: 'adminSettings.browsePromptModal',
+        desc: 'adminSettings.browsePromptDesc',
         type: 'switch',
       },
-      { _section: '按页面控制登录提示（仅“登录提示弹窗”开启时生效）' },
-      { key: 'login_dialog_favorites', label: '查看收藏', desc: '访问收藏页面时弹出登录确认', type: 'switch' },
-      { key: 'login_dialog_downloads', label: '下载历史', desc: '访问下载历史页面时弹出登录确认', type: 'switch' },
-      { key: 'login_dialog_my_shares', label: '我的分享', desc: '访问我的分享页面时弹出登录确认', type: 'switch' },
-      { key: 'login_dialog_profile', label: '个人设置', desc: '访问个人设置页面时弹出登录确认', type: 'switch' },
-      { key: 'login_dialog_support', label: '技术支持', desc: '访问技术支持页面时弹出登录确认', type: 'switch' },
-      { key: 'login_dialog_my_tickets', label: '我的工单', desc: '访问我的工单页面时弹出登录确认', type: 'switch' },
-      { key: 'login_dialog_my_inquiries', label: '我的询价', desc: '访问我的询价页面时弹出登录确认', type: 'switch' },
-      { key: 'login_dialog_projects', label: '我的项目', desc: '访问我的项目页面时弹出登录确认', type: 'switch' },
+      { _section: 'adminSettings.sectionPerPageGates' },
+      {
+        key: 'login_dialog_favorites',
+        label: 'adminSettings.viewFavorites',
+        desc: 'adminSettings.gateFavoritesPrompt',
+        type: 'switch',
+      },
+      {
+        key: 'login_dialog_downloads',
+        label: 'adminSettings.gateDownloads',
+        desc: 'adminSettings.gateDownloadsPrompt',
+        type: 'switch',
+      },
+      {
+        key: 'login_dialog_my_shares',
+        label: 'adminSettings.gateMySharesPage',
+        desc: 'adminSettings.gateMySharesPrompt',
+        type: 'switch',
+      },
+      {
+        key: 'login_dialog_profile',
+        label: 'adminSettings.gateProfile',
+        desc: 'adminSettings.gateProfilePrompt',
+        type: 'switch',
+      },
+      {
+        key: 'login_dialog_support',
+        label: 'adminSettings.gateSupport',
+        desc: 'adminSettings.gateSupportPrompt',
+        type: 'switch',
+      },
+      {
+        key: 'login_dialog_my_tickets',
+        label: 'adminSettings.gateMyTicketsPage',
+        desc: 'adminSettings.gateMyTicketsPrompt',
+        type: 'switch',
+      },
+      {
+        key: 'login_dialog_my_inquiries',
+        label: 'adminSettings.gateMyInquiries',
+        desc: 'adminSettings.gateMyInquiriesPrompt',
+        type: 'switch',
+      },
+      {
+        key: 'login_dialog_projects',
+        label: 'adminSettings.gateMyProjects',
+        desc: 'adminSettings.gateMyProjectsPrompt',
+        type: 'switch',
+      },
     ],
   },
   {
-    title: '功能开关',
+    title: 'adminSettings.sectionFeatureToggles',
     icon: 'power_settings_new',
     items: [
       {
         key: 'feature_selection_enabled',
-        label: '产品选型',
-        desc: '关闭后用户无法使用选型功能，导航隐藏选型入口',
+        label: 'adminSettings.featureSelection',
+        desc: 'adminSettings.selectionOffDesc',
         type: 'switch',
       },
       {
         key: 'feature_inquiry_enabled',
-        label: '询价功能',
-        desc: '关闭后用户无法提交询价，导航隐藏询价入口',
+        label: 'adminSettings.featureInquiries',
+        desc: 'adminSettings.inquiriesOffDesc',
         type: 'switch',
       },
       {
         key: 'feature_product_wall_enabled',
-        label: '产品图库',
-        desc: '关闭后用户无法访问产品图库，导航隐藏入口',
+        label: 'adminSettings.scopeProductWall',
+        desc: 'adminSettings.galleryOffDesc',
         type: 'switch',
       },
       {
         key: 'feature_tickets_enabled',
-        label: '工单支持',
-        desc: '关闭后用户无法提交工单和访问技术支持，导航隐藏入口',
+        label: 'adminSettings.ticketSupport',
+        desc: 'adminSettings.ticketsOffDesc',
         type: 'switch',
       },
       {
         key: 'feature_favorites_enabled',
-        label: '收藏功能',
-        desc: '关闭后用户无法收藏模型和查看收藏列表，导航隐藏入口',
+        label: 'adminSettings.featureFavorites',
+        desc: 'adminSettings.favoritesOffDesc',
         type: 'switch',
       },
       {
         key: 'feature_shares_enabled',
-        label: '分享功能',
-        desc: '关闭后用户无法创建分享链接，已有分享链接也将失效',
+        label: 'adminSettings.featureShares',
+        desc: 'adminSettings.sharesOffDesc',
         type: 'switch',
       },
       {
         key: 'feature_downloads_enabled',
-        label: '下载功能',
-        desc: '关闭后用户无法下载模型文件，导航隐藏下载历史入口',
+        label: 'adminSettings.featureDownloads',
+        desc: 'adminSettings.downloadsOffDesc',
         type: 'switch',
       },
       {
         key: 'feature_password_reset_enabled',
-        label: '找回密码',
-        desc: '关闭后用户无法通过邮箱自助重置密码，只能联系管理员',
+        label: 'adminSettings.gatePasswordReset',
+        desc: 'adminSettings.passwordResetOffDesc',
         type: 'switch',
       },
       {
         key: 'allow_register',
-        label: '用户注册',
-        desc: '关闭后新用户无法注册账号',
+        label: 'adminSettings.featureRegistration',
+        desc: 'adminSettings.registrationDisabledDesc',
         type: 'switch',
       },
       {
         key: 'feature_temp_viewer_enabled',
-        label: '临时看图',
-        desc: '关闭后用户无法使用临时看图上传 STEP/STP 模型预览，导航隐藏入口',
+        label: 'adminSettings.featureTempViewer',
+        desc: 'adminSettings.tempViewerOffDesc',
         type: 'switch',
       },
       {
         key: 'require_invite_code',
-        label: '邀请码注册',
-        desc: '开启后被授权用户可在「我的邀请码」生成一次性邀请码 / 链接；新用户注册必须填写有效邀请码。关闭则完全开放注册',
+        label: 'adminSettings.inviteCodeRegistration',
+        desc: 'adminSettings.inviteCodeDesc',
         type: 'switch',
       },
       {
         key: 'invite_max_active_per_user',
-        label: '邀请码待使用上限',
-        desc: '每个被授权用户最多持有的待使用（未使用）邀请码数量，超出需先吊销；0 表示不限',
+        label: 'adminSettings.inviteHoldingLimit',
+        desc: 'adminSettings.inviteHoldingLimitDesc',
         type: 'number',
         min: 0,
         max: 100,
@@ -879,77 +971,77 @@ const GROUPS: SettingGroup[] = [
     ],
   },
   {
-    title: '安全防护',
+    title: 'adminSettings.tabSecurity',
     icon: 'shield',
     items: [
       {
         key: 'anti_proxy_enabled',
-        label: '反向代理防护',
-        desc: '启用后，通过非授权域名访问将显示警告页面，防止恶意反向代理',
+        label: 'adminSettings.sectionAntiProxy',
+        desc: 'adminSettings.antiProxyDesc',
         type: 'switch',
       },
       {
         key: 'allowed_hosts',
-        label: '授权域名',
-        desc: '允许访问的域名列表，逗号或换行分隔。如：mysite.com, www.mysite.com。填写您部署的正式域名',
+        label: 'adminSettings.authorizedDomains',
+        desc: 'adminSettings.allowedDomainsDesc',
         type: 'textarea',
       },
       {
         key: 'hotlink_protection_enabled',
-        label: '防盗链保护',
-        desc: '阻止外部网站直接引用本站静态资源（图片、模型文件等）',
+        label: 'adminSettings.hotlinkProtection',
+        desc: 'adminSettings.hotlinkProtectionDesc',
         type: 'switch',
       },
       {
         key: 'allowed_referers',
-        label: '允许的来源域名',
-        desc: '允许引用资源的域名列表，逗号分隔。如：mysite.com, www.mysite.com',
+        label: 'adminSettings.allowedReferers',
+        desc: 'adminSettings.allowedReferersDesc',
         type: 'textarea',
       },
       {
         key: 'security_email_code_cooldown_seconds',
-        label: '邮箱验证码间隔',
-        desc: '同一邮箱两次发送验证码的最小间隔，单位秒',
+        label: 'adminSettings.emailCodeInterval',
+        desc: 'adminSettings.emailCodeIntervalDesc',
         type: 'number',
         min: 10,
         max: 3600,
       },
       {
         key: 'security_email_code_ttl_seconds',
-        label: '邮箱验证码有效期',
-        desc: '邮箱验证码过期时间，单位秒',
+        label: 'adminSettings.emailCodeTtl',
+        desc: 'adminSettings.emailCodeTtlDesc',
         type: 'number',
         min: 60,
         max: 86400,
       },
       {
         key: 'security_captcha_ttl_seconds',
-        label: '图形验证码有效期',
-        desc: '图形验证码过期时间，单位秒',
+        label: 'adminSettings.captchaTtl',
+        desc: 'adminSettings.captchaTtlDesc',
         type: 'number',
         min: 60,
         max: 3600,
       },
       {
         key: 'security_password_min_length',
-        label: '注册密码最小长度',
-        desc: '新用户注册时密码最少位数',
+        label: 'adminSettings.passwordMinLength',
+        desc: 'adminSettings.passwordMinLengthDesc',
         type: 'number',
         min: 6,
         max: 64,
       },
       {
         key: 'security_username_min_length',
-        label: '用户名最小长度',
-        desc: '注册用户名允许的最小长度',
+        label: 'adminSettings.usernameMin',
+        desc: 'adminSettings.usernameMinLength',
         type: 'number',
         min: 1,
         max: 32,
       },
       {
         key: 'security_username_max_length',
-        label: '用户名最大长度',
-        desc: '注册用户名允许的最大长度',
+        label: 'adminSettings.usernameMax',
+        desc: 'adminSettings.usernameMaxLength',
         type: 'number',
         min: 1,
         max: 64,
@@ -957,194 +1049,214 @@ const GROUPS: SettingGroup[] = [
     ],
   },
   {
-    title: '下载与分享',
+    title: 'adminSettings.tabDownloadShare',
     icon: 'download',
     items: [
       {
         key: 'daily_download_limit',
-        label: '每日下载上限',
-        desc: '每个用户每天最多下载次数，0 表示不限制',
+        label: 'adminSettings.dailyDownloadLimit',
+        desc: 'adminSettings.dailyDownloadLimitDesc',
         type: 'number',
       },
       {
         key: 'download_token_ttl_minutes',
-        label: '下载令牌有效期 (分钟)',
-        desc: '下载令牌的有效时间，过期后需重新获取',
+        label: 'adminSettings.downloadTokenTtl',
+        desc: 'adminSettings.downloadTokenTtlDesc',
         type: 'number',
         min: 1,
         max: 60,
       },
       {
         key: 'share_default_expire_days',
-        label: '分享默认有效期',
-        desc: '用户创建分享时的默认有效期天数，0 表示永久有效',
+        label: 'adminSettings.shareDefaultExpiry',
+        desc: 'adminSettings.shareDefaultExpiryDesc',
         type: 'number',
       },
       {
         key: 'share_max_expire_days',
-        label: '分享最大有效期',
-        desc: '分享链接最大有效期天数，0 表示不限制',
+        label: 'adminSettings.shareMaxExpiry',
+        desc: 'adminSettings.shareMaxExpiryDesc',
         type: 'number',
       },
       {
         key: 'share_default_download_limit',
-        label: '分享默认下载上限',
-        desc: '用户创建分享时的默认下载次数限制，0 表示不限制',
+        label: 'adminSettings.shareDefaultDownloads',
+        desc: 'adminSettings.shareDefaultDownloadsDesc',
         type: 'number',
       },
       {
         key: 'share_max_download_limit',
-        label: '分享最大下载上限',
-        desc: '分享链接最大下载次数，0 表示不限制',
+        label: 'adminSettings.shareMaxDownloads',
+        desc: 'adminSettings.shareMaxDownloadsDesc',
         type: 'number',
       },
       {
         key: 'share_allow_password',
-        label: '允许设置密码',
-        desc: '用户创建分享时是否可以设置访问密码',
+        label: 'adminSettings.allowSetPassword',
+        desc: 'adminSettings.shareAllowPasswordDesc',
         type: 'switch',
       },
       {
         key: 'share_allow_custom_expiry',
-        label: '允许自定义有效期',
-        desc: '用户创建分享时是否可以自行设置有效期',
+        label: 'adminSettings.allowCustomExpiry',
+        desc: 'adminSettings.shareAllowCustomExpiryDesc',
         type: 'switch',
       },
       {
         key: 'share_allow_preview',
-        label: '默认允许预览',
-        desc: '新创建的分享链接默认是否允许 3D 预览',
+        label: 'adminSettings.shareDefaultPreview',
+        desc: 'adminSettings.shareDefaultPreviewDesc',
         type: 'switch',
       },
       {
         key: 'show_watermark',
-        label: '查看器水印',
-        desc: '在 3D 模型查看器界面叠加水印显示，仅查看页可见，不会写入下载的文件',
+        label: 'adminSettings.viewerWatermark',
+        desc: 'adminSettings.viewerWatermarkDesc',
         type: 'switch',
       },
       {
         key: 'watermark_text',
-        label: '水印文字',
-        desc: '查看器水印显示的文字内容，如公司名或品牌名（仅查看页显示）',
+        label: 'adminSettings.watermarkText',
+        desc: 'adminSettings.watermarkTextDesc',
         type: 'text',
       },
       {
         key: 'watermark_image',
-        label: '水印图片',
-        desc: '查看器水印图片，上传透明背景 PNG，留空则使用文字水印（仅查看页显示）',
+        label: 'adminSettings.watermarkImage',
+        desc: 'adminSettings.watermarkImageDesc',
         type: 'image',
       },
     ],
   },
   {
-    title: '3D 预览',
+    title: 'adminSettings.tab3dPreview',
     icon: 'view_in_ar',
     items: [],
   },
   {
-    title: '选型设置',
+    title: 'adminSettings.tabSelection',
     icon: 'checklist',
     items: [
-      { key: 'selection_page_title', label: '选型页标题', desc: '选型页顶部显示的标题文字', type: 'text' },
-      { key: 'selection_page_desc', label: '选型页描述', desc: '显示在选型页标题下方，引导用户开始筛选', type: 'text' },
-      { key: 'selection_enable_match', label: '模型匹配', desc: '在选型结果中自动匹配3D模型', type: 'switch' },
+      {
+        key: 'selection_page_title',
+        label: 'adminSettings.selectionPageTitle',
+        desc: 'adminSettings.selectionPageTitleDesc',
+        type: 'text',
+      },
+      {
+        key: 'selection_page_desc',
+        label: 'adminSettings.selectionPageDesc',
+        desc: 'adminSettings.selectionPageDescDesc',
+        type: 'text',
+      },
+      {
+        key: 'selection_enable_match',
+        label: 'adminSettings.selectionModelMatch',
+        desc: 'adminSettings.selectionMatchModels',
+        type: 'switch',
+      },
       {
         key: 'selection_thread_priority',
-        label: '螺纹排序优先级',
-        desc: '配置螺纹前缀的排序权重，数值越小越靠前',
+        label: 'adminSettings.threadSortPriority',
+        desc: 'adminSettings.threadSortDesc',
         type: 'textarea',
       },
     ],
   },
   {
-    title: '业务字典',
+    title: 'adminSettings.tabBizDict',
     icon: 'tune',
     items: [
       {
         key: 'inquiry_statuses',
-        label: '询价状态',
-        desc: '用于筛选、标签和通知文案，可配置颜色、标签页展示和终态',
+        label: 'adminSettings.inquiryStatuses',
+        desc: 'adminSettings.ticketCategoryDesc',
         type: 'textarea',
       },
-      { key: 'ticket_statuses', label: '工单状态', desc: '用于状态流转、筛选标签和状态徽标', type: 'textarea' },
+      {
+        key: 'ticket_statuses',
+        label: 'adminSettings.ticketStatuses',
+        desc: 'adminSettings.ticketStatusDesc',
+        type: 'textarea',
+      },
       {
         key: 'ticket_classifications',
-        label: '工单分类',
-        desc: '用于技术支持提交入口，可配置图标、说明和启用状态',
+        label: 'adminSettings.ticketCategories',
+        desc: 'adminSettings.supportEntryDesc',
         type: 'textarea',
       },
       {
         key: 'support_process_steps',
-        label: '支持流程',
-        desc: '用于技术支持页流程展示，可配置图标、标题和说明',
+        label: 'adminSettings.supportSteps',
+        desc: 'adminSettings.supportStepsDesc',
         type: 'textarea',
       },
     ],
   },
   {
-    title: '上传与限制',
+    title: 'adminSettings.tabUploadLimits',
     icon: 'upload_file',
     items: [
       {
         key: 'upload_policy',
-        label: '文件上传与导入限制',
-        desc: '配置模型上传、选型图片、选型 Excel 导入、产品图库上传和工单附件限制',
+        label: 'adminSettings.sectionUploadLimits',
+        desc: 'adminSettings.tabUploadLimitsDesc',
         type: 'textarea',
       },
       {
         key: 'product_wall_max_image_mb',
-        label: '产品图库单张上限 (MB)',
-        desc: '单张图片文件的最大体积，超出会被拒绝',
+        label: 'adminSettings.galleryPerImageMaxMb',
+        desc: 'adminSettings.galleryPerImageMaxDesc',
         type: 'number',
         min: 1,
         max: 200,
       },
       {
         key: 'product_wall_max_batch_count',
-        label: '产品图库批量上限',
-        desc: '单次上传（含压缩包内图片）的最大数量',
+        label: 'adminSettings.galleryBatchMax',
+        desc: 'adminSettings.galleryBatchMaxDesc',
         type: 'number',
         min: 1,
         max: 200,
       },
       {
         key: 'product_wall_max_zip_extract',
-        label: '压缩包提取上限',
-        desc: '从单个 zip/rar 压缩包中最多提取的图片数量',
+        label: 'adminSettings.galleryArchiveMax',
+        desc: 'adminSettings.galleryArchiveMaxDesc',
         type: 'number',
         min: 1,
         max: 500,
       },
       {
         key: 'product_wall_upload_roles',
-        label: '图库允许上传的角色',
-        desc: '勾选的角色登录后可上传图片（进入待审核）；管理员始终允许上传',
+        label: 'adminSettings.galleryUploadRolesFull',
+        desc: 'adminSettings.galleryRolesDesc',
         type: 'text',
       },
       {
         key: 'product_wall_upload_allowed_user_ids',
-        label: '图库指定可上传用户',
-        desc: '角色白名单之外，可在此添加指定用户获得上传权限（如外部摄影师）',
+        label: 'adminSettings.galleryAllowedUsers',
+        desc: 'adminSettings.galleryAllowedUsersDesc',
         type: 'text',
       },
       {
         key: 'ticket_attachment_max_mb',
-        label: '工单附件上限 (MB)',
-        desc: '工单消息中单个附件的最大体积',
+        label: 'adminSettings.ticketAttachmentMaxMb',
+        desc: 'adminSettings.ticketAttachmentMaxDesc',
         type: 'number',
         min: 1,
         max: 200,
       },
       {
         key: 'ticket_attachment_types',
-        label: '工单附件类型',
-        desc: '用逗号分隔的文件扩展名，如：jpg,png,pdf,step,zip',
+        label: 'adminSettings.ticketAttachmentTypes',
+        desc: 'adminSettings.attachmentTypesDesc',
         type: 'text',
       },
       {
         key: 'page_size_policy',
-        label: '列表分页与批量上限',
-        desc: '配置选型、通知、用户、分享、日志等列表分页，以及用户/后台批量下载数量',
+        label: 'adminSettings.tabListPaging',
+        desc: 'adminSettings.tabListPagingDesc',
         type: 'textarea',
       },
     ],
@@ -1153,463 +1265,483 @@ const GROUPS: SettingGroup[] = [
     title: CACHE_STORAGE_GROUP_TITLE,
     icon: 'storage',
     items: [
-      { _section: 'Redis 与页面缓存' },
+      { _section: 'adminSettings.tabRedisCache' },
       {
         key: 'redis_url',
-        label: 'Redis 地址（只读）',
-        desc: '⚠ 实际连接由环境变量 REDIS_URL 控制，此处仅显示当前值，修改不生效；如需更换请在 .env 配置',
+        label: 'adminSettings.redisHostReadonly',
+        desc: 'adminSettings.redisHostNote',
         type: 'text',
       },
       {
         key: 'redis_password',
-        label: 'Redis 密码（只读）',
-        desc: '⚠ 实际密码由环境变量 REDIS_URL 内置，此处仅显示，修改不生效',
+        label: 'adminSettings.redisPasswordReadonly',
+        desc: 'adminSettings.redisPasswordNote',
         type: 'text',
       },
       {
         key: 'redis_db',
-        label: 'Redis 数据库（只读）',
-        desc: '⚠ 实际数据库编号由环境变量 REDIS_URL 内置，此处仅显示，修改不生效',
+        label: 'adminSettings.redisDbReadonly',
+        desc: 'adminSettings.redisDbNote',
         type: 'number',
         min: 0,
         max: 15,
       },
       {
         key: 'redis_key_prefix',
-        label: '缓存键前缀（只读）',
-        desc: '⚠ 实际键前缀由环境变量 REDIS_KEY_PREFIX 控制，此处仅显示，修改不生效',
+        label: 'adminSettings.redisKeyPrefixReadonly',
+        desc: 'adminSettings.redisKeyPrefixNote',
         type: 'text',
       },
       {
         key: 'redis_tls_enabled',
-        label: 'Redis TLS（只读）',
-        desc: '⚠ TLS 由环境变量 REDIS_URL 协议（rediss://）决定，此处仅显示，修改不生效',
+        label: 'adminSettings.redisTlsReadonly',
+        desc: 'adminSettings.redisTlsNote',
         type: 'switch',
       },
       {
         key: 'cache_test',
-        label: 'Redis 连接测试',
-        desc: '保存当前缓存配置后，执行 PING、写入、读取和删除测试键',
+        label: 'adminSettings.redisConnectionTest',
+        desc: 'adminSettings.cacheTestSaveDesc',
         type: 'cache-test',
       },
       {
         key: 'cache_public_settings_ttl_seconds',
-        label: '公共设置缓存',
-        desc: '站点名称、主题、导航等公共设置缓存时间；越短越快生效',
+        label: 'adminSettings.cachePublicSettings',
+        desc: 'adminSettings.publicSettingsCacheDesc',
         type: 'number',
         min: 0,
         max: 86400,
       },
       {
         key: 'cache_model_list_ttl_seconds',
-        label: '模型列表缓存',
-        desc: '首页、模型列表和分类结果的缓存时间；模型频繁更新时建议缩短',
+        label: 'adminSettings.cacheModelList',
+        desc: 'adminSettings.homeCacheDesc',
         type: 'number',
         min: 0,
         max: 86400,
       },
       {
         key: 'cache_model_detail_ttl_seconds',
-        label: '模型详情缓存',
-        desc: '模型详情、规格、下载项等数据缓存时间',
+        label: 'adminSettings.modelDetailCache',
+        desc: 'adminSettings.modelDetailCacheDesc',
         type: 'number',
         min: 0,
         max: 86400,
       },
       {
         key: 'cache_search_ttl_seconds',
-        label: '搜索缓存',
-        desc: '顶部搜索、后台搜索、模型搜索的结果缓存时间',
+        label: 'adminSettings.cacheSearch',
+        desc: 'adminSettings.searchCacheDesc',
         type: 'number',
         min: 0,
         max: 86400,
       },
       {
         key: 'cache_selection_ttl_seconds',
-        label: '选型数据缓存',
-        desc: '选型分类、参数和产品数据缓存时间；批量导入后可清理缓存',
+        label: 'adminSettings.selectionCache',
+        desc: 'adminSettings.selectionCacheDesc',
         type: 'number',
         min: 0,
         max: 86400,
       },
       {
         key: 'cache_static_asset_max_age_days',
-        label: '静态资源缓存',
-        desc: '图片、缩略图、模型资源等浏览器缓存天数；配合 CDN 使用效果更好',
+        label: 'adminSettings.cacheStaticAssets',
+        desc: 'adminSettings.assetCacheDaysCdnDesc',
         type: 'number',
         min: 0,
         max: 365,
       },
-      { _section: '对象存储服务商' },
+      { _section: 'adminSettings.tabStorageProvider' },
       {
         key: 'storage_provider',
-        label: '存储类型',
-        desc: '选择图片、模型文件、附件、备份等资源的存储后端；切换到云存储后需配置访问参数',
+        label: 'adminSettings.storageProvider',
+        desc: 'adminSettings.storageProviderDesc',
         type: 'select',
         options: STORAGE_PROVIDER_OPTIONS,
       },
       {
         key: 'storage_endpoint',
         label: 'Endpoint',
-        desc: 'COS/OSS/S3/MinIO 服务地址，例如 cos.ap-guangzhou.myqcloud.com 或 oss-cn-hangzhou.aliyuncs.com',
+        desc: 'adminSettings.storageEndpointDesc',
         type: 'text',
       },
       {
         key: 'storage_region',
-        label: '地域 Region',
-        desc: '云存储地域，如 ap-guangzhou、oss-cn-hangzhou；本地存储可留空',
+        label: 'adminSettings.storageRegion',
+        desc: 'adminSettings.storageRegionDesc',
         type: 'text',
       },
       {
         key: 'storage_bucket',
         label: 'Bucket',
-        desc: '用于保存图片、模型、附件和备份文件的 Bucket 名称',
+        desc: 'adminSettings.bucketNameDesc',
         type: 'text',
       },
       {
         key: 'storage_access_key_id',
         label: 'Access Key ID',
-        desc: '云存储访问密钥 ID；建议使用最小权限账号',
+        desc: 'adminSettings.storageKeyIdDesc',
         type: 'text',
       },
       {
         key: 'storage_access_key_secret',
         label: 'Access Key Secret',
-        desc: '云存储访问密钥 Secret；保存后会自动隐藏',
+        desc: 'adminSettings.storageKeySecretDesc',
         type: 'text',
       },
       {
         key: 'storage_use_ssl',
-        label: 'HTTPS 访问',
-        desc: '生产环境建议开启；本地 MinIO 调试可按实际情况关闭',
+        label: 'adminSettings.httpsAccess',
+        desc: 'adminSettings.httpsRequiredDesc',
         type: 'switch',
       },
       {
         key: 'storage_force_path_style',
-        label: '路径风格访问',
-        desc: 'MinIO 或部分 S3 兼容服务需要开启；腾讯云 COS、阿里云 OSS 通常关闭',
+        label: 'adminSettings.pathStyleAccess',
+        desc: 'adminSettings.pathStyleDesc',
         type: 'switch',
       },
       {
         key: 'storage_public_base_url',
-        label: '公开访问域名',
-        desc: '资源公开访问基础地址，例如对象存储外网域名；留空则由后端生成默认地址',
+        label: 'adminSettings.publicBaseUrl',
+        desc: 'adminSettings.publicBaseUrlDesc',
         type: 'text',
       },
       {
         key: 'storage_cdn_base_url',
-        label: 'CDN 加速域名',
-        desc: '图片和资源使用的 CDN 域名；开启下方 CDN 开关后优先使用',
+        label: 'adminSettings.cdnDomain',
+        desc: 'adminSettings.cdnDomainDesc',
         type: 'text',
       },
       {
         key: 'storage_test',
-        label: '存储读写测试',
-        desc: '保存当前存储配置后，向临时目录写入、读取并删除一个测试对象',
+        label: 'adminSettings.storageReadWriteTest',
+        desc: 'adminSettings.storageTestSaveDesc',
         type: 'storage-test',
       },
-      { _section: '资源目录与访问策略' },
+      { _section: 'adminSettings.tabStoragePolicy' },
       {
         key: 'storage_policy_info',
-        label: '目录说明',
-        desc: '按资源类型说明本地目录、云端对象前缀和访问策略',
+        label: 'adminSettings.storagePolicyIntro',
+        desc: 'adminSettings.storagePolicyDesc',
         type: 'storage-policy-info',
       },
       {
         key: 'storage_image_prefix',
-        label: '图片目录',
-        desc: '模型图片、站点图片等原图目录前缀；本地对应 static/{前缀}，云端对象也使用同一前缀',
+        label: 'adminSettings.dirImages',
+        desc: 'adminSettings.dirImagePrefixDesc',
         type: 'text',
       },
       {
         key: 'storage_thumbnail_prefix',
-        label: '缩略图目录',
-        desc: '首页列表、模型卡片、产品图库缩略图目录前缀；建议公开缓存，适合 CDN 加速',
+        label: 'adminSettings.dirThumbDir',
+        desc: 'adminSettings.dirThumbPrefixDesc',
         type: 'text',
       },
       {
         key: 'storage_model_prefix',
-        label: '模型文件目录',
-        desc: 'STEP/STP/IGES 等可下载模型文件目录前缀；私有下载时会走签名链接策略',
+        label: 'adminSettings.dirModelFilesDir',
+        desc: 'adminSettings.dirStepPrefixDesc',
         type: 'text',
       },
       {
         key: 'storage_original_prefix',
-        label: '原始文件目录',
-        desc: '上传后的原始资源、未转换源文件目录前缀；通常不直接公开访问',
+        label: 'adminSettings.dirOriginal',
+        desc: 'adminSettings.dirRawPrefixDesc',
         type: 'text',
       },
       {
         key: 'storage_drawing_prefix',
-        label: '图纸目录',
-        desc: 'PDF、工程图、说明文档等图纸资源目录前缀；模型详情下载图纸时优先读取这里',
+        label: 'adminSettings.dirDrawingsDir',
+        desc: 'adminSettings.dirDrawingPrefixDesc',
         type: 'text',
       },
       {
         key: 'storage_product_wall_prefix',
-        label: '产品图库目录',
-        desc: '产品图库批量上传、压缩包提取后的图片目录前缀；会配合缩略图优化降低列表卡顿',
+        label: 'adminSettings.dirGallery',
+        desc: 'adminSettings.dirGalleryPrefixDesc',
         type: 'text',
       },
       {
         key: 'storage_attachment_prefix',
-        label: '附件目录',
-        desc: '工单、询价沟通、用户上传附件目录前缀；建议开启私有签名访问',
+        label: 'adminSettings.dirAttachments',
+        desc: 'adminSettings.dirTicketPrefixDesc',
         type: 'text',
       },
       {
         key: 'storage_backup_prefix',
-        label: '备份目录',
-        desc: '数据库备份、资源备份、镜像更新包目录前缀；可参与本地与云存储同步',
+        label: 'adminSettings.dirBackups',
+        desc: 'adminSettings.dirBackupPrefixDesc',
         type: 'text',
       },
       {
         key: 'storage_temp_prefix',
-        label: '临时目录',
-        desc: '分片上传、转换过程和临时导入文件目录前缀；不会参与同步，避免未完成文件被发布',
+        label: 'adminSettings.dirTemp',
+        desc: 'adminSettings.dirConversionPrefixDesc',
         type: 'text',
       },
       {
         key: 'storage_signed_url_enabled',
-        label: '私有签名访问（未启用）',
-        desc: '⚠ 该功能暂未在业务流量启用——签名 URL 仅用于存储连通性诊断，资源访问不受此项影响',
+        label: 'adminSettings.accessSignedDisabled',
+        desc: 'adminSettings.signedUrlFeatureNote',
         type: 'switch',
       },
       {
         key: 'storage_signed_url_ttl_seconds',
-        label: '签名链接有效期（仅诊断）',
-        desc: '⚠ 仅用于存储连通性诊断的签名 URL 有效期；业务下载不生成签名 URL，修改不影响资源访问',
+        label: 'adminSettings.signedUrlTtl',
+        desc: 'adminSettings.signedUrlTtlNote',
         type: 'number',
         min: 60,
         max: 86400,
       },
       {
         key: 'storage_upload_multipart_mb',
-        label: '分片大小（只读）',
-        desc: '⚠ 由云存储客户端内部控制，当前无法通过此项配置，仅作记录，修改不生效',
+        label: 'adminSettings.chunkSizeReadonly',
+        desc: 'adminSettings.storageClientControlledNote',
         type: 'number',
         min: 5,
         max: 512,
       },
       {
         key: 'storage_upload_concurrency',
-        label: '上传并发',
-        desc: '大文件分片上传并发数；带宽较小时建议 2-4',
+        label: 'adminSettings.uploadConcurrency',
+        desc: 'adminSettings.uploadConcurrencyDesc',
         type: 'number',
         min: 1,
         max: 16,
       },
-      { _section: '本地与云同步' },
+      { _section: 'adminSettings.tabLocalCloudSync' },
       {
         key: 'storage_sync_enabled',
-        label: '启用同步工具',
-        desc: '开启后允许管理员手动执行本地 static 资源与云存储 Bucket 的同步任务',
+        label: 'adminSettings.enableSyncTool',
+        desc: 'adminSettings.syncToolDesc2',
         type: 'switch',
       },
       {
         key: 'storage_sync_delete_extra_enabled',
-        label: '允许删除目标端多余文件',
-        desc: '开启后同步面板才允许选择“删除目标端多余文件”；默认关闭，避免误删',
+        label: 'adminSettings.syncAllowDeleteExtra',
+        desc: 'adminSettings.allowDeleteExtraDesc',
         type: 'switch',
       },
       {
         key: 'storage_sync',
-        label: '同步任务',
-        desc: '按资源目录执行本地到云端或云端到本地同步，支持进度、停止和记录删除',
+        label: 'adminSettings.syncJobs',
+        desc: 'adminSettings.syncDesc',
         type: 'storage-sync',
       },
-      { _section: '图片与资源优化' },
+      { _section: 'adminSettings.tabAssetOptimization' },
       {
         key: 'image_cdn_enabled',
-        label: '图片走 CDN',
-        desc: '首页缩略图、模型图片、产品图库图片优先使用 CDN 域名',
+        label: 'adminSettings.cdnImages',
+        desc: 'adminSettings.cdnGalleryDesc',
         type: 'switch',
       },
       {
         key: 'image_optimize_enabled',
-        label: '图片压缩优化',
-        desc: '上传后生成轻量缩略图，减少产品墙和模型列表首屏加载压力',
+        label: 'adminSettings.imageCompression',
+        desc: 'adminSettings.thumbGenDesc',
         type: 'switch',
       },
       {
         key: 'image_webp_enabled',
-        label: '生成 WebP',
-        desc: '支持浏览器优先返回 WebP 缩略图；原图仍保留',
+        label: 'adminSettings.generateWebp',
+        desc: 'adminSettings.webpDesc',
         type: 'switch',
       },
       {
         key: 'image_thumbnail_quality',
-        label: '缩略图质量',
-        desc: '图片缩略图压缩质量，建议 75-88；数值越高体积越大',
+        label: 'adminSettings.thumbQuality',
+        desc: 'adminSettings.thumbQualityDesc',
         type: 'number',
         min: 1,
         max: 100,
       },
       {
         key: 'image_large_max_width',
-        label: '大图最大宽度',
-        desc: '图片预览大图的最大宽度，超出后按比例压缩',
+        label: 'adminSettings.previewMaxWidth',
+        desc: 'adminSettings.previewMaxWidthDesc',
         type: 'number',
         min: 320,
         max: 12000,
       },
       {
         key: 'image_cache_max_age_days',
-        label: '图片缓存天数',
-        desc: '图片、缩略图、WebP 等资源的浏览器/CDN 缓存天数',
+        label: 'adminSettings.imageCacheDays',
+        desc: 'adminSettings.assetCacheDaysDesc',
         type: 'number',
         min: 0,
         max: 365,
       },
       {
         key: 'resource_cdn_enabled',
-        label: '模型资源走 CDN',
-        desc: 'STEP、图纸、附件等静态资源优先使用 CDN 域名；私有下载仍会走签名策略',
+        label: 'adminSettings.cdnModelAssets',
+        desc: 'adminSettings.cdnForModelsDesc',
         type: 'switch',
       },
       {
         key: 'resource_cache_max_age_days',
-        label: '资源缓存天数',
-        desc: '模型文件、图纸、附件等资源的浏览器/CDN 缓存天数',
+        label: 'adminSettings.assetCacheDays',
+        desc: 'adminSettings.modelAssetCacheDaysDesc',
         type: 'number',
         min: 0,
         max: 365,
       },
       {
         key: 'resource_download_acceleration_enabled',
-        label: '下载加速（只读）',
-        desc: '⚠ 实际由 Nginx X-Accel 头驱动，此项仅显示，修改不影响下载加速行为',
+        label: 'adminSettings.downloadAccelerationReadonly',
+        desc: 'adminSettings.xaccelNote',
         type: 'switch',
       },
     ],
   },
   {
-    title: '邮件服务',
+    title: 'adminSettings.tabEmail',
     icon: 'mail',
     items: [
-      { key: 'smtp_host', label: 'SMTP 服务器', desc: '邮件服务器地址，如 smtp.qq.com', type: 'text' },
-      { key: 'smtp_port', label: '端口', desc: 'SMTP 端口，通常 465(SSL) 或 587(TLS)', type: 'number' },
-      { key: 'smtp_user', label: '用户名', desc: 'SMTP 登录用户名', type: 'text' },
-      { key: 'smtp_pass', label: '密码', desc: 'SMTP 登录密码或授权码', type: 'text' },
-      { key: 'smtp_from', label: '发件人', desc: '发件人邮箱地址', type: 'text' },
+      { key: 'smtp_host', label: 'adminSettings.smtpHost', desc: 'adminSettings.smtpHostDesc', type: 'text' },
+      { key: 'smtp_port', label: 'adminSettings.unitPort', desc: 'adminSettings.smtpPortDesc', type: 'number' },
       {
-        key: 'contact_email',
-        label: '联系邮箱',
-        desc: '用于邮件模板底部的帮助联系邮箱；留空时使用发件人邮箱',
+        key: 'smtp_user',
+        label: 'adminSettings.placeholderUsername',
+        desc: 'adminSettings.smtpUsername',
         type: 'text',
       },
-      { key: 'smtp_secure', label: 'SSL/TLS', desc: '使用安全连接', type: 'switch' },
-      { key: 'smtp_test', label: '测试发送', desc: '保存当前 SMTP 配置和模板后发送一封测试邮件', type: 'email-test' },
+      {
+        key: 'smtp_pass',
+        label: 'adminSettings.placeholderPassword',
+        desc: 'adminSettings.smtpPassword',
+        type: 'text',
+      },
+      { key: 'smtp_from', label: 'adminSettings.smtpSenderName', desc: 'adminSettings.smtpSenderEmail', type: 'text' },
+      {
+        key: 'contact_email',
+        label: 'adminSettings.contactEmail',
+        desc: 'adminSettings.supportEmailDesc',
+        type: 'text',
+      },
+      { key: 'smtp_secure', label: 'SSL/TLS', desc: 'adminSettings.useSecureConnection', type: 'switch' },
+      { key: 'smtp_test', label: 'adminSettings.testSend', desc: 'adminSettings.smtpTestDesc', type: 'email-test' },
       {
         key: 'email_templates',
-        label: '邮件模板',
-        desc: '注册验证码、测试邮件和业务通知模板',
+        label: 'adminSettings.emailTemplates',
+        desc: 'adminSettings.sectionEmailTemplates',
         type: 'textarea',
       },
     ],
   },
   {
-    title: '法律条款',
+    title: 'adminSettings.tabLegal',
     icon: 'description',
     items: [
       {
         key: 'legal_privacy_updated_at',
-        label: '隐私声明更新时间',
-        desc: '显示在隐私声明标题下方，如：2026 年 4 月',
+        label: 'adminSettings.privacyUpdatedAt',
+        desc: 'adminSettings.privacyDateDesc',
         type: 'text',
       },
       {
         key: 'legal_privacy_sections',
-        label: '隐私声明正文',
-        desc: '维护 /legal/privacy 页面的正式条款章节，前台按书面文档格式展示',
+        label: 'adminSettings.privacyBody',
+        desc: 'adminSettings.privacySectionsDesc',
         type: 'textarea',
       },
       {
         key: 'legal_terms_updated_at',
-        label: '用户协议更新时间',
-        desc: '显示在用户协议标题下方，如：2026 年 4 月',
+        label: 'adminSettings.termsUpdatedAt',
+        desc: 'adminSettings.termsDateDesc',
         type: 'text',
       },
       {
         key: 'legal_terms_sections',
-        label: '用户协议正文',
-        desc: '维护 /legal/terms 页面的正式协议章节，适合放账号、权限、资料使用等规则',
+        label: 'adminSettings.termsBody',
+        desc: 'adminSettings.termsSectionsDesc',
         type: 'textarea',
       },
     ],
   },
   {
-    title: '系统运维',
+    title: 'adminSettings.tabOpsMaintenance',
     icon: 'build',
     items: [
       {
         key: 'maintenance_enabled',
-        label: '手动维护页',
-        desc: '用于数据恢复、系统升级、资源重建等全站维护场景，管理员和后台不受影响',
+        label: 'adminSettings.manualMaintenance',
+        desc: 'adminSettings.maintenanceModeDesc',
         type: 'switch',
       },
       {
         key: 'maintenance_auto_enabled',
-        label: '重建自动维护',
-        desc: '转换队列待处理数量达到阈值时自动显示维护页',
+        label: 'adminSettings.rebuildAutoMaintenance',
+        desc: 'adminSettings.maintenanceAutoDesc',
         type: 'switch',
       },
       {
         key: 'maintenance_auto_queue_threshold',
-        label: '自动触发阈值',
-        desc: '待处理转换任务达到该数量后显示维护页',
+        label: 'adminSettings.maintenanceThreshold',
+        desc: 'adminSettings.maintenanceThresholdDesc',
         type: 'number',
         min: 1,
         max: 100000,
       },
-      { key: 'maintenance_title', label: '维护标题', desc: '维护页主标题', type: 'text' },
-      { key: 'maintenance_message', label: '维护说明', desc: '维护页说明文字', type: 'textarea' },
+      {
+        key: 'maintenance_title',
+        label: 'adminSettings.maintenanceTitle',
+        desc: 'adminSettings.maintenanceHeading',
+        type: 'text',
+      },
+      {
+        key: 'maintenance_message',
+        label: 'adminSettings.maintenanceDescription',
+        desc: 'adminSettings.maintenanceBody',
+        type: 'textarea',
+      },
       {
         key: 'conversion_worker_concurrency',
-        label: '转换并发数',
-        desc: '同时处理的模型转换任务数量，建议先设为 2；大模型较多时过高会占满 CPU 和内存',
+        label: 'adminSettings.convertConcurrency',
+        desc: 'adminSettings.convertConcurrencyDesc',
         type: 'number',
         min: 1,
         max: 8,
       },
       {
         key: 'api_rate_limit',
-        label: 'API 限速 (15分钟)',
-        desc: '每个 IP 在 15 分钟内允许的最大请求数，修改后需重启服务生效',
+        label: 'adminSettings.apiRateLimit',
+        desc: 'adminSettings.apiRateLimitDesc',
         type: 'number',
         min: 100,
         max: 100000,
       },
       {
         key: 'backup_auto_enabled',
-        label: '自动每日备份',
-        desc: '开启后服务端每天按设定时间自动创建一次企业级校验备份',
+        label: 'adminSettings.autoDailyBackup',
+        desc: 'adminSettings.autoBackupDesc',
         type: 'switch',
       },
       {
         key: 'backup_schedule_time',
-        label: '自动备份时间',
-        desc: '24小时制，例如 03:00。建议选择业务低峰期',
+        label: 'adminSettings.autoBackupTime',
+        desc: 'adminSettings.autoBackupTimeHint',
         type: 'text',
       },
       {
         key: 'backup_retention_count',
-        label: '保留备份份数',
-        desc: '自动清理更早的备份，建议至少保留 7 份',
+        label: 'adminSettings.backupRetention',
+        desc: 'adminSettings.backupRetentionDesc',
         type: 'number',
         min: 1,
         max: 60,
       },
       {
         key: 'backup_mirror_enabled',
-        label: '外部镜像备份',
-        desc: '备份成功后自动复制一份到外部目录，建议挂载到独立磁盘或 NAS',
+        label: 'adminSettings.mirrorBackup',
+        desc: 'adminSettings.mirrorDirDesc',
         type: 'switch',
       },
       {
         key: 'backup_mirror_dir',
-        label: '外部镜像目录',
-        desc: '服务器上的绝对路径，如 /mnt/backup/3dparthub 或 /Volumes/Backup/3dparthub',
+        label: 'adminSettings.mirrorDir',
+        desc: 'adminSettings.mirrorDirPathEg',
         type: 'text',
       },
     ],
@@ -1618,29 +1750,42 @@ const GROUPS: SettingGroup[] = [
 
 const SETTINGS_NAV_GROUPS = [
   {
-    title: '基础设置',
+    title: 'adminSettings.groupBasic',
     icon: 'tune',
-    sections: ['站点与品牌', '外观与主题', '系统公告', '菜单配置', '法律条款'],
+    sections: [
+      'adminSettings.tabSiteBrand',
+      'adminSettings.tabAppearance',
+      'adminSettings.tabAnnouncement',
+      'adminSettings.tabMenuConfig',
+      'adminSettings.tabLegal',
+    ],
   },
   {
-    title: '访问与安全',
+    title: 'adminSettings.groupAccess',
     icon: 'shield',
-    sections: ['访问控制', '功能开关', '安全防护'],
+    sections: ['adminSettings.tabAccessControl', 'adminSettings.sectionFeatureToggles', 'adminSettings.tabSecurity'],
   },
   {
-    title: '业务内容',
+    title: 'adminSettings.groupBusiness',
     icon: 'inventory_2',
-    sections: ['下载与分享', '3D 预览', '选型设置', '业务字典', '上传与限制', '邮件服务'],
+    sections: [
+      'adminSettings.tabDownloadShare',
+      'adminSettings.tab3dPreview',
+      'adminSettings.tabSelection',
+      'adminSettings.tabBizDict',
+      'adminSettings.tabUploadLimits',
+      'adminSettings.tabEmail',
+    ],
   },
   {
-    title: '缓存与云存储',
+    title: 'adminSettings.groupStorage',
     icon: 'database',
-    sections: [...CACHE_STORAGE_SECTION_TITLES, '缓存清理'],
+    sections: [...CACHE_STORAGE_SECTION_TITLES, 'adminSettings.tabCacheCleanup'],
   },
   {
-    title: '运维维护',
+    title: 'adminSettings.groupOperations',
     icon: 'build',
-    sections: ['系统运维', '数据备份', '关于系统'],
+    sections: ['adminSettings.tabOpsMaintenance', 'adminSettings.tabBackup', 'adminSettings.tabAboutSystem'],
   },
 ] as const;
 
@@ -1651,7 +1796,7 @@ type SettingItemSection = {
 
 function splitSettingGroupSections(group: SettingGroup): SettingItemSection[] {
   const sections: SettingItemSection[] = [];
-  let current: SettingItemSection = { title: '基础设置', items: [] };
+  let current: SettingItemSection = { title: 'adminSettings.groupBasic', items: [] };
   for (const item of group.items) {
     if (isSection(item)) {
       if (current.items.length > 0) sections.push(current);
@@ -1669,38 +1814,43 @@ type PreviewSubtab = 'general' | 'edge' | 'measure' | 'light' | 'material';
 type MaterialPresetKey = 'original' | 'default' | 'metal' | 'plastic' | 'glass';
 
 const PREVIEW_SUBTABS: { key: PreviewSubtab; label: string; icon: string }[] = [
-  { key: 'general', label: '通用', icon: 'tune' },
-  { key: 'edge', label: '边线', icon: 'content_cut' },
-  { key: 'measure', label: '测量', icon: 'straighten' },
-  { key: 'light', label: '灯光', icon: 'light_mode' },
-  { key: 'material', label: '材质', icon: 'palette' },
+  { key: 'general', label: 'adminSettings.previewTabGeneral', icon: 'tune' },
+  { key: 'edge', label: 'adminSettings.viewerEdges', icon: 'content_cut' },
+  { key: 'measure', label: 'adminSettings.previewTabMeasure', icon: 'straighten' },
+  { key: 'light', label: 'adminSettings.previewTabLight', icon: 'light_mode' },
+  { key: 'material', label: 'adminSettings.previewTabMaterial', icon: 'palette' },
 ];
 
 const MAT_PRESET_OPTIONS: { value: MaterialPresetKey; label: string }[] = [
-  { value: 'original', label: '原色' },
-  { value: 'default', label: '智能灰' },
-  { value: 'metal', label: '金属' },
-  { value: 'plastic', label: '塑料' },
-  { value: 'glass', label: '玻璃' },
+  { value: 'original', label: 'adminSettings.matPresetOriginal' },
+  { value: 'default', label: 'adminSettings.colorSmartGray' },
+  { value: 'metal', label: 'adminSettings.matPresetMetal' },
+  { value: 'plastic', label: 'adminSettings.matPresetPlastic' },
+  { value: 'glass', label: 'adminSettings.matPresetGlass' },
 ];
 
 const PREVIEW_TAB_ITEMS: Record<Exclude<PreviewSubtab, 'material'>, SystemSettingItem[]> = {
   general: [
     {
       key: 'viewer_default_preset',
-      label: '默认材质预设',
-      desc: '打开模型详情页时默认使用的材质风格',
+      label: 'adminSettings.defaultMatPreset',
+      desc: 'adminSettings.defaultMatPresetDesc',
       type: 'select',
       options: MAT_PRESET_OPTIONS,
     },
     { key: 'viewer_visible_presets', label: '__preset_checkboxes__', desc: '', type: 'text' },
   ],
   edge: [
-    { key: 'viewer_edge_enabled', label: '显示边线', desc: '关闭后模型默认不叠加实体边线', type: 'switch' },
+    {
+      key: 'viewer_edge_enabled',
+      label: 'adminSettings.showEdges',
+      desc: 'adminSettings.showEdgesOffDesc',
+      type: 'switch',
+    },
     {
       key: 'viewer_edge_threshold_angle',
-      label: '边线角度',
-      desc: '数值越小边线越多，模型更清晰但更耗性能',
+      label: 'adminSettings.edgeAngle',
+      desc: 'adminSettings.edgeAngleDesc',
       type: 'range',
       min: 1,
       max: 89,
@@ -1708,17 +1858,17 @@ const PREVIEW_TAB_ITEMS: Record<Exclude<PreviewSubtab, 'material'>, SystemSettin
     },
     {
       key: 'viewer_edge_vertex_limit',
-      label: '边线顶点上限',
-      desc: '顶点超过该数量时跳过边线叠加，0 表示不限制',
+      label: 'adminSettings.edgeVertexLimit',
+      desc: 'adminSettings.edgeVertexLimitDesc',
       type: 'number',
       min: 0,
       max: 5000000,
     },
-    { key: 'viewer_edge_color', label: '边线颜色', desc: '3D 模型边线叠加的颜色', type: 'color' },
+    { key: 'viewer_edge_color', label: 'adminSettings.edgeColor', desc: 'adminSettings.edgeColorDesc', type: 'color' },
     {
       key: 'viewer_edge_opacity',
-      label: '边线透明度',
-      desc: '1.0 = 完全不透明，0.1 = 几乎透明',
+      label: 'adminSettings.edgeOpacity',
+      desc: 'adminSettings.edgeOpacityHint',
       type: 'range',
       min: 0.1,
       max: 1.0,
@@ -1726,8 +1876,8 @@ const PREVIEW_TAB_ITEMS: Record<Exclude<PreviewSubtab, 'material'>, SystemSettin
     },
     {
       key: 'viewer_edge_width',
-      label: '边线宽度',
-      desc: '1 = 标准细线，数值越大线越粗',
+      label: 'adminSettings.edgeWidth',
+      desc: 'adminSettings.edgeWidthHint',
       type: 'range',
       min: 1,
       max: 5,
@@ -1737,20 +1887,20 @@ const PREVIEW_TAB_ITEMS: Record<Exclude<PreviewSubtab, 'material'>, SystemSettin
   measure: [
     {
       key: 'viewer_measure_default_unit',
-      label: '测量默认单位',
-      desc: '测量工具打开时默认使用的单位',
+      label: 'adminSettings.measureDefaultUnit',
+      desc: 'adminSettings.measureUnitDesc',
       type: 'select',
       options: [
-        { value: 'auto', label: '自动' },
-        { value: 'mm', label: '毫米 mm' },
-        { value: 'cm', label: '厘米 cm' },
-        { value: 'm', label: '米 m' },
+        { value: 'auto', label: 'adminSettings.themeAuto' },
+        { value: 'mm', label: 'adminSettings.unitMillimeter' },
+        { value: 'cm', label: 'adminSettings.unitCentimeter' },
+        { value: 'm', label: 'adminSettings.unitMeter' },
       ],
     },
     {
       key: 'viewer_measure_record_limit',
-      label: '测量记录数量',
-      desc: '测量面板最多保留最近多少条记录',
+      label: 'adminSettings.measureHistoryLimit',
+      desc: 'adminSettings.measureHistoryDesc',
       type: 'range',
       min: 1,
       max: 100,
@@ -1760,8 +1910,8 @@ const PREVIEW_TAB_ITEMS: Record<Exclude<PreviewSubtab, 'material'>, SystemSettin
   light: [
     {
       key: 'viewer_exposure',
-      label: '曝光度',
-      desc: '场景整体亮度，1.0 为标准曝光',
+      label: 'adminSettings.exposure',
+      desc: 'adminSettings.exposureDesc',
       type: 'range',
       min: 0.1,
       max: 3.0,
@@ -1769,8 +1919,8 @@ const PREVIEW_TAB_ITEMS: Record<Exclude<PreviewSubtab, 'material'>, SystemSettin
     },
     {
       key: 'viewer_ambient_intensity',
-      label: '环境光强度',
-      desc: '场景全局填充光，影响整体基础亮度',
+      label: 'adminSettings.lightAmbientIntensity',
+      desc: 'adminSettings.lightAmbientDesc',
       type: 'range',
       min: 0,
       max: 2.0,
@@ -1778,8 +1928,8 @@ const PREVIEW_TAB_ITEMS: Record<Exclude<PreviewSubtab, 'material'>, SystemSettin
     },
     {
       key: 'viewer_main_light_intensity',
-      label: '主灯强度',
-      desc: '主要定向光源，决定模型主体明暗对比',
+      label: 'adminSettings.lightMainIntensity',
+      desc: 'adminSettings.lightMainDesc',
       type: 'range',
       min: 0,
       max: 3.0,
@@ -1787,8 +1937,8 @@ const PREVIEW_TAB_ITEMS: Record<Exclude<PreviewSubtab, 'material'>, SystemSettin
     },
     {
       key: 'viewer_fill_light_intensity',
-      label: '补光强度',
-      desc: '对侧柔光，减轻主灯产生的阴影',
+      label: 'adminSettings.lightFillIntensity',
+      desc: 'adminSettings.lightFillDesc',
       type: 'range',
       min: 0,
       max: 2.0,
@@ -1796,14 +1946,14 @@ const PREVIEW_TAB_ITEMS: Record<Exclude<PreviewSubtab, 'material'>, SystemSettin
     },
     {
       key: 'viewer_hemisphere_intensity',
-      label: '半球光强度',
-      desc: '天地渐变光，模拟自然天空散射',
+      label: 'adminSettings.lightHemiIntensity',
+      desc: 'adminSettings.lightHemiDesc',
       type: 'range',
       min: 0,
       max: 2.0,
       step: 0.05,
     },
-    { key: 'viewer_bg_color', label: '背景色', desc: '3D 视图背景，支持纯色或 CSS 渐变', type: 'text' },
+    { key: 'viewer_bg_color', label: 'adminSettings.bgColor', desc: 'adminSettings.viewerBgDesc', type: 'text' },
   ],
 };
 
@@ -1820,11 +1970,17 @@ interface MatPresetField {
 
 const MAT_PRESET_FIELDS: Record<MaterialPresetKey, MatPresetField[]> = {
   original: [
-    { key: 'mat_original_color', label: '颜色', desc: '留空使用模型自带颜色', type: 'color', canEmpty: true },
+    {
+      key: 'mat_original_color',
+      label: 'adminSettings.colorLabel',
+      desc: 'adminSettings.emptyUseModelColor',
+      type: 'color',
+      canEmpty: true,
+    },
     {
       key: 'mat_original_metalness',
-      label: '金属度',
-      desc: '留空使用模型原始值',
+      label: 'adminSettings.matMetalness',
+      desc: 'adminSettings.emptyUseOriginal',
       type: 'range',
       min: 0,
       max: 1,
@@ -1833,8 +1989,8 @@ const MAT_PRESET_FIELDS: Record<MaterialPresetKey, MatPresetField[]> = {
     },
     {
       key: 'mat_original_roughness',
-      label: '粗糙度',
-      desc: '留空使用模型原始值',
+      label: 'adminSettings.matRoughness',
+      desc: 'adminSettings.emptyUseOriginal',
       type: 'range',
       min: 0,
       max: 1,
@@ -1843,8 +1999,8 @@ const MAT_PRESET_FIELDS: Record<MaterialPresetKey, MatPresetField[]> = {
     },
     {
       key: 'mat_original_envMapIntensity',
-      label: '环境反射',
-      desc: '留空使用模型原始值',
+      label: 'adminSettings.matEnvMap',
+      desc: 'adminSettings.emptyUseOriginal',
       type: 'range',
       min: 0,
       max: 3,
@@ -1853,31 +2009,151 @@ const MAT_PRESET_FIELDS: Record<MaterialPresetKey, MatPresetField[]> = {
     },
   ],
   default: [
-    { key: 'mat_default_color', label: '颜色', desc: '', type: 'color' },
-    { key: 'mat_default_metalness', label: '金属度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
-    { key: 'mat_default_roughness', label: '粗糙度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
-    { key: 'mat_default_envMapIntensity', label: '环境反射', desc: '', type: 'range', min: 0, max: 3, step: 0.01 },
+    { key: 'mat_default_color', label: 'adminSettings.colorLabel', desc: '', type: 'color' },
+    {
+      key: 'mat_default_metalness',
+      label: 'adminSettings.matMetalness',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    },
+    {
+      key: 'mat_default_roughness',
+      label: 'adminSettings.matRoughness',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    },
+    {
+      key: 'mat_default_envMapIntensity',
+      label: 'adminSettings.matEnvMap',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 3,
+      step: 0.01,
+    },
   ],
   metal: [
-    { key: 'mat_metal_color', label: '颜色', desc: '', type: 'color' },
-    { key: 'mat_metal_metalness', label: '金属度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
-    { key: 'mat_metal_roughness', label: '粗糙度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
-    { key: 'mat_metal_envMapIntensity', label: '环境反射', desc: '', type: 'range', min: 0, max: 3, step: 0.01 },
+    { key: 'mat_metal_color', label: 'adminSettings.colorLabel', desc: '', type: 'color' },
+    {
+      key: 'mat_metal_metalness',
+      label: 'adminSettings.matMetalness',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    },
+    {
+      key: 'mat_metal_roughness',
+      label: 'adminSettings.matRoughness',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    },
+    {
+      key: 'mat_metal_envMapIntensity',
+      label: 'adminSettings.matEnvMap',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 3,
+      step: 0.01,
+    },
   ],
   plastic: [
-    { key: 'mat_plastic_color', label: '颜色', desc: '', type: 'color' },
-    { key: 'mat_plastic_metalness', label: '金属度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
-    { key: 'mat_plastic_roughness', label: '粗糙度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
-    { key: 'mat_plastic_envMapIntensity', label: '环境反射', desc: '', type: 'range', min: 0, max: 3, step: 0.01 },
+    { key: 'mat_plastic_color', label: 'adminSettings.colorLabel', desc: '', type: 'color' },
+    {
+      key: 'mat_plastic_metalness',
+      label: 'adminSettings.matMetalness',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    },
+    {
+      key: 'mat_plastic_roughness',
+      label: 'adminSettings.matRoughness',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    },
+    {
+      key: 'mat_plastic_envMapIntensity',
+      label: 'adminSettings.matEnvMap',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 3,
+      step: 0.01,
+    },
   ],
   glass: [
-    { key: 'mat_glass_color', label: '颜色', desc: '', type: 'color' },
-    { key: 'mat_glass_metalness', label: '金属度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
-    { key: 'mat_glass_roughness', label: '粗糙度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
-    { key: 'mat_glass_envMapIntensity', label: '环境反射', desc: '', type: 'range', min: 0, max: 3, step: 0.01 },
-    { key: 'mat_glass_transmission', label: '透射率', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
-    { key: 'mat_glass_ior', label: '折射率', desc: '', type: 'range', min: 1, max: 2.5, step: 0.01 },
-    { key: 'mat_glass_thickness', label: '厚度', desc: '', type: 'range', min: 0, max: 5, step: 0.01 },
+    { key: 'mat_glass_color', label: 'adminSettings.colorLabel', desc: '', type: 'color' },
+    {
+      key: 'mat_glass_metalness',
+      label: 'adminSettings.matMetalness',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    },
+    {
+      key: 'mat_glass_roughness',
+      label: 'adminSettings.matRoughness',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    },
+    {
+      key: 'mat_glass_envMapIntensity',
+      label: 'adminSettings.matEnvMap',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 3,
+      step: 0.01,
+    },
+    {
+      key: 'mat_glass_transmission',
+      label: 'adminSettings.matTransmission',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 1,
+      step: 0.01,
+    },
+    {
+      key: 'mat_glass_ior',
+      label: 'adminSettings.matRefraction',
+      desc: '',
+      type: 'range',
+      min: 1,
+      max: 2.5,
+      step: 0.01,
+    },
+    {
+      key: 'mat_glass_thickness',
+      label: 'adminSettings.paramThickness',
+      desc: '',
+      type: 'range',
+      min: 0,
+      max: 5,
+      step: 0.01,
+    },
   ],
 };
 
@@ -1939,13 +2215,14 @@ function TaskProgressCard({
   progress: { message: string; percent: number; logs?: string[] };
   color?: string;
 }) {
+  const { t } = useTranslation();
   const MAX_DISPLAY_LOGS = 200;
   const displayLogs = (progress.logs || []).slice(-MAX_DISPLAY_LOGS);
   const barColor = PROGRESS_COLORS[color] || color;
   return (
     <div className="mt-3">
       <div className="flex items-center justify-between text-xs text-on-surface-variant mb-1">
-        <span>{progress.message || '处理中...'}</span>
+        <span>{progress.message || t('adminSettings.processing')}</span>
         <span>{progress.percent}%</span>
       </div>
       <div className="w-full h-2 bg-surface-container-highest rounded-full overflow-hidden">
@@ -1966,10 +2243,11 @@ function TaskProgressCard({
 }
 
 function SettingsLoadingState() {
+  const { t } = useTranslation();
   return (
-    <AdminManagementPage title="系统设置" description="配置平台的全局行为和访问策略">
+    <AdminManagementPage title={t('adminSettings.pageTitle')} description={t('adminSettings.tabAccessControlDesc')}>
       <div className="flex min-h-[360px] flex-1">
-        <PageRefreshIndicator label="系统设置刷新中" />
+        <PageRefreshIndicator label={t('adminSettings.settingsRefreshing')} />
       </div>
     </AdminManagementPage>
   );
@@ -1992,6 +2270,7 @@ function Switch({
  * 用状态徽章/等宽文本呈现，而非可点的开关/下拉/输入框，避免「能点不能改」的误导。
  */
 function ReadonlySettingValue({ item, value }: { item: SettingItem; value: unknown }) {
+  const { t } = useTranslation();
   if (item.type === 'switch') {
     const on = Boolean(value);
     return (
@@ -2001,7 +2280,7 @@ function ReadonlySettingValue({ item, value }: { item: SettingItem; value: unkno
         }`}
       >
         <Icon name={on ? 'check_circle' : 'remove_circle'} size={13} />
-        {on ? '已启用' : '未启用'}
+        {on ? t('adminSettings.statusEnabled') : t('adminSettings.statusDisabled')}
       </span>
     );
   }
@@ -2026,6 +2305,7 @@ function ReadonlySettingValue({ item, value }: { item: SettingItem; value: unkno
 }
 
 function InterfaceThemePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const { t } = useTranslation();
   const themes = Object.values(INTERFACE_THEME_CATALOG);
   return (
     <div className="grid w-full max-w-3xl gap-2 md:grid-cols-2">
@@ -2047,7 +2327,7 @@ function InterfaceThemePicker({ value, onChange }: { value: string; onChange: (v
               {theme.screenshot ? (
                 <SafeImage
                   src={theme.screenshot}
-                  alt={`${theme.label} 预览`}
+                  alt={t('themeMeta.themePreviewAlt', { defaultValue: '{{name}} 预览', name: theme.label })}
                   className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                   fallbackIcon="palette"
                 />
@@ -2059,10 +2339,14 @@ function InterfaceThemePicker({ value, onChange }: { value: string; onChange: (v
             </div>
             <div className="min-w-0 flex-1 space-y-0.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm font-semibold text-on-surface">{theme.label}</span>
+                <span className="truncate text-sm font-semibold text-on-surface">
+                  {t(`themeMeta.${theme.key}.label`, { defaultValue: theme.label })}
+                </span>
                 {selected ? <Icon name="check_circle" size={18} className="text-primary" /> : null}
               </div>
-              <p className="line-clamp-2 text-xs leading-5 text-on-surface-variant">{theme.description}</p>
+              <p className="line-clamp-2 text-xs leading-5 text-on-surface-variant">
+                {t(`themeMeta.${theme.key}.description`, { defaultValue: theme.description })}
+              </p>
             </div>
           </button>
         );
@@ -2138,9 +2422,9 @@ const commonEmailTokens = [
 
 const DEFAULT_EMAIL_TEMPLATES: Record<string, EmailTemplateConfig> = {
   register_verify: {
-    label: '注册邮箱验证码',
-    description: '用户注册账号时发送验证码',
-    subject: '{{siteTitle}} 注册验证码',
+    label: 'adminSettings.featureRegisterEmailCode',
+    description: 'adminSettings.registerEmailCodeDesc',
+    subject: 'adminSettings.notifyRegisterCode',
     html: `${emailShellStart}
   <h2 style="margin:0 0 18px;color:#111827;">注册验证码</h2>
   <p style="margin:0 0 12px;font-size:15px;">您的注册验证码为：</p>
@@ -2150,9 +2434,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'code', 'expireMinutes'],
   },
   smtp_test: {
-    label: '邮件服务测试',
-    description: '管理员在系统设置中测试 SMTP 配置',
-    subject: '{{siteTitle}} 邮件测试',
+    label: 'adminSettings.emailTestPanel',
+    description: 'adminSettings.testEmailPurpose',
+    subject: 'adminSettings.notifyTestEmail',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;color:#f97316;">邮件服务测试成功</h2>
   <p style="margin:0 0 10px;">这是一封来自 {{siteTitle}} 的测试邮件。</p>
@@ -2161,9 +2445,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'testTime'],
   },
   inquiry_submitted: {
-    label: '询价提交通知',
-    description: '用户提交询价后发送确认或通知',
-    subject: '{{siteTitle}} 已收到您的询价 {{inquiryNo}}',
+    label: 'adminSettings.notifyPrefInquiryCreated',
+    description: 'adminSettings.inquiryConfirmEmailDesc',
+    subject: 'adminSettings.notifyInquiryReceived',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">询价已提交</h2>
   <p style="margin:0 0 10px;">您好 {{username}}，我们已收到您的询价。</p>
@@ -2173,9 +2457,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'username', 'inquiryNo'],
   },
   inquiry_status_changed: {
-    label: '询价状态变更',
-    description: '询价状态更新时通知用户',
-    subject: '{{siteTitle}} 询价 {{inquiryNo}} 状态已更新',
+    label: 'adminSettings.notifyPrefInquiryStatus',
+    description: 'adminSettings.notifyInquiryStatusDesc',
+    subject: 'adminSettings.notifyInquiryStatusUpdated',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">询价状态已更新</h2>
   <p style="margin:0 0 10px;">询价编号：<strong>{{inquiryNo}}</strong></p>
@@ -2185,9 +2469,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'inquiryNo', 'statusLabel'],
   },
   ticket_created: {
-    label: '工单创建通知',
-    description: '用户提交技术支持工单后发送确认',
-    subject: '{{siteTitle}} 已收到您的工单',
+    label: 'adminSettings.notifyPrefTicketCreated',
+    description: 'adminSettings.ticketConfirmEmailDesc',
+    subject: 'adminSettings.notifyTicketReceived',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">工单已创建</h2>
   <p style="margin:0 0 10px;">您好 {{username}}，您的工单已进入处理队列。</p>
@@ -2197,9 +2481,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'username', 'ticketTitle'],
   },
   ticket_replied: {
-    label: '工单回复通知',
-    description: '管理员回复工单时通知用户',
-    subject: '{{siteTitle}} 您的工单有新回复',
+    label: 'adminSettings.notifyPrefTicketReply',
+    description: 'adminSettings.notifyUserAdminTicketReplyDesc',
+    subject: 'adminSettings.notifyTicketNewReply',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">工单有新回复</h2>
   <p style="margin:0 0 10px;">工单标题：<strong>{{ticketTitle}}</strong></p>
@@ -2209,9 +2493,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'ticketTitle', 'replyPreview'],
   },
   ticket_status_changed: {
-    label: '工单状态变更',
-    description: '工单状态更新时通知用户',
-    subject: '{{siteTitle}} 工单状态已更新',
+    label: 'adminSettings.notifyPrefTicketStatus',
+    description: 'adminSettings.notifyTicketStatusDesc',
+    subject: 'adminSettings.notifyTicketStatusUpdated',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">工单状态已更新</h2>
   <p style="margin:0 0 10px;">工单标题：<strong>{{ticketTitle}}</strong></p>
@@ -2221,9 +2505,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'ticketTitle', 'statusLabel'],
   },
   ticket_admin_new: {
-    label: '新工单提醒',
-    description: '用户创建工单时通知管理员',
-    subject: '{{siteTitle}} 有新的工单需要处理',
+    label: 'adminSettings.notifyNewTicket',
+    description: 'adminSettings.notifyAdminTicketCreatedDesc',
+    subject: 'adminSettings.notifyNewTicketPending',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">有新的工单需要处理</h2>
   <p style="margin:0 0 10px;">提交用户：<strong>{{username}}</strong></p>
@@ -2233,9 +2517,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'username', 'ticketTitle'],
   },
   ticket_admin_replied: {
-    label: '工单用户回复提醒',
-    description: '用户回复工单时通知管理员',
-    subject: '{{siteTitle}} 工单有新的用户回复',
+    label: 'adminSettings.notifyUserTicketReply',
+    description: 'adminSettings.notifyAdminUserTicketReplyDesc',
+    subject: 'adminSettings.notifyTicketNewUserReply',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">工单有新的用户回复</h2>
   <p style="margin:0 0 10px;">提交用户：<strong>{{username}}</strong></p>
@@ -2245,9 +2529,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'username', 'ticketTitle', 'replyPreview'],
   },
   inquiry_replied: {
-    label: '询价回复通知',
-    description: '管理员回复询价时通知用户',
-    subject: '{{siteTitle}} 询价 {{inquiryNo}} 有新回复',
+    label: 'adminSettings.notifyPrefInquiryReply',
+    description: 'adminSettings.notifyUserAdminInquiryReplyDesc',
+    subject: 'adminSettings.notifyInquiryNewReply',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">询价有新回复</h2>
   <p style="margin:0 0 10px;">询价编号：<strong>{{inquiryNo}}</strong></p>
@@ -2257,9 +2541,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'inquiryNo', 'replyPreview'],
   },
   inquiry_admin_new: {
-    label: '新询价提醒',
-    description: '用户提交询价时通知管理员',
-    subject: '{{siteTitle}} 有新的询价单 {{inquiryNo}}',
+    label: 'adminSettings.notifyNewInquiry',
+    description: 'adminSettings.notifyAdminInquiryCreatedDesc',
+    subject: 'adminSettings.notifyNewInquiry',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">有新的询价单</h2>
   <p style="margin:0 0 10px;">提交用户：<strong>{{username}}</strong></p>
@@ -2269,9 +2553,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'username', 'inquiryNo', 'itemCount'],
   },
   inquiry_admin_replied: {
-    label: '询价用户回复提醒',
-    description: '用户回复询价时通知管理员',
-    subject: '{{siteTitle}} 询价 {{inquiryNo}} 有新的用户回复',
+    label: 'adminSettings.notifyUserInquiryReply',
+    description: 'adminSettings.notifyAdminUserInquiryReplyDesc',
+    subject: 'adminSettings.notifyInquiryNewUserReply',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">询价有新的用户回复</h2>
   <p style="margin:0 0 10px;">提交用户：<strong>{{username}}</strong></p>
@@ -2281,9 +2565,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'username', 'inquiryNo', 'replyPreview'],
   },
   inquiry_assigned: {
-    label: '询价转交通知',
-    description: '询价转交销售时通知用户或销售',
-    subject: '{{siteTitle}} 询价 {{inquiryNo}} 已转交处理',
+    label: 'adminSettings.notifyPrefInquiryTransfer',
+    description: 'adminSettings.notifyInquiryTransferDesc',
+    subject: 'adminSettings.notifyInquiryTransferred',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">询价已转交处理</h2>
   <p style="margin:0 0 10px;">询价编号：<strong>{{inquiryNo}}</strong></p>
@@ -2293,9 +2577,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'inquiryNo', 'assigneeName'],
   },
   favorite_notice: {
-    label: '模型收藏提醒',
-    description: '模型被收藏时通知上传者',
-    subject: '{{siteTitle}} 您的模型被收藏',
+    label: 'adminSettings.notifyModelFavorites',
+    description: 'adminSettings.notifyOnFavoriteDesc',
+    subject: 'adminSettings.notifyModelFavorited',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">您的模型被收藏</h2>
   <p style="margin:0 0 10px;">模型名称：<strong>{{modelName}}</strong></p>
@@ -2304,9 +2588,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'modelName'],
   },
   model_conversion_completed: {
-    label: '模型转换完成',
-    description: '模型转换成功后通知上传者',
-    subject: '{{siteTitle}} 模型转换完成',
+    label: 'adminSettings.convertCompleted',
+    description: 'adminSettings.notifyOnConvertDoneDesc',
+    subject: 'adminSettings.notifyConvertDone',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">模型转换完成</h2>
   <p style="margin:0 0 10px;">模型文件：<strong>{{modelName}}</strong></p>
@@ -2315,9 +2599,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'modelName'],
   },
   model_conversion_failed: {
-    label: '模型转换失败',
-    description: '模型转换失败后通知上传者',
-    subject: '{{siteTitle}} 模型转换失败',
+    label: 'adminSettings.convertFailed',
+    description: 'adminSettings.notifyOnConvertFailDesc',
+    subject: 'adminSettings.notifyConvertFailed',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;color:#dc2626;">模型转换失败</h2>
   <p style="margin:0 0 10px;">模型文件：<strong>{{modelName}}</strong></p>
@@ -2326,9 +2610,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'modelName', 'errorMessage'],
   },
   backup_policy_alert: {
-    label: '备份体检提醒',
-    description: '备份体检发现风险时通知管理员',
-    subject: '{{siteTitle}} 备份体检需要关注',
+    label: 'adminSettings.backupCheckNotify',
+    description: 'adminSettings.backupCheckNotifyDesc',
+    subject: 'adminSettings.notifyBackupCheckAttention',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;color:#f97316;">备份体检需要关注</h2>
   <p style="margin:0 0 10px;">风险等级：<strong>{{riskLevel}}</strong></p>
@@ -2337,9 +2621,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'riskLevel', 'summary'],
   },
   download_notice: {
-    label: '模型下载提醒',
-    description: '模型被下载时通知上传者',
-    subject: '{{siteTitle}} 您的模型被下载',
+    label: 'adminSettings.notifyModelDownloads',
+    description: 'adminSettings.notifyOnDownloadDesc',
+    subject: 'adminSettings.notifyModelDownloaded',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">您的模型被下载</h2>
   <p style="margin:0 0 10px;">模型名称：<strong>{{modelName}}</strong></p>
@@ -2516,17 +2800,18 @@ function clampNumber(value: unknown, fallback: number, min: number, max = Number
 function numberSettingUnit(key: keyof SystemSettings) {
   if (key === 'redis_db') return 'DB';
   if (key === 'storage_upload_multipart_mb' || key.includes('_mb')) return 'MB';
-  if (key === 'storage_upload_concurrency') return '并发';
+  if (key === 'storage_upload_concurrency') return i18n.t('adminSettings.unitConcurrency');
   if (key === 'image_thumbnail_quality') return '%';
   if (key === 'image_large_max_width') return 'px';
-  if (key.includes('_seconds')) return '秒';
-  if (key.includes('_days')) return '天';
-  if (key.includes('_hour')) return '点';
-  if (key.includes('_limit') || key.includes('_count')) return key === 'daily_download_limit' ? '次/天' : '个';
-  if (key.includes('_length')) return '位';
-  if (key === 'viewer_edge_threshold_angle') return '度';
-  if (key === 'viewer_edge_vertex_limit') return '顶点';
-  if (key === 'smtp_port') return '端口';
+  if (key.includes('_seconds')) return i18n.t('adminSettings.unitSeconds');
+  if (key.includes('_days')) return i18n.t('adminSettings.unitDays');
+  if (key.includes('_hour')) return i18n.t('adminSettings.unitPoints');
+  if (key.includes('_limit') || key.includes('_count'))
+    return key === 'daily_download_limit' ? i18n.t('adminSettings.unitPerDay') : i18n.t('adminSettings.unitItems');
+  if (key.includes('_length')) return i18n.t('adminSettings.unitDigits');
+  if (key === 'viewer_edge_threshold_angle') return i18n.t('adminSettings.unitDegrees');
+  if (key === 'viewer_edge_vertex_limit') return i18n.t('adminSettings.unitVertex');
+  if (key === 'smtp_port') return i18n.t('adminSettings.unitPort');
   return '';
 }
 
@@ -2879,11 +3164,12 @@ function ListActions({
   onMove: (direction: -1 | 1) => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-1 shrink-0">
       <button
         type="button"
-        title="上移"
+        title={t('adminSettings.moveUp')}
         disabled={index === 0}
         onClick={() => onMove(-1)}
         className="w-7 h-7 inline-flex items-center justify-center rounded-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
@@ -2892,7 +3178,7 @@ function ListActions({
       </button>
       <button
         type="button"
-        title="下移"
+        title={t('adminSettings.moveDown')}
         disabled={index === total - 1}
         onClick={() => onMove(1)}
         className="w-7 h-7 inline-flex items-center justify-center rounded-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
@@ -2901,7 +3187,7 @@ function ListActions({
       </button>
       <button
         type="button"
-        title="删除"
+        title={t('adminSettings.remove')}
         onClick={onDelete}
         className="w-7 h-7 inline-flex items-center justify-center rounded-md text-error hover:bg-error-container/10 transition-colors"
       >
@@ -2935,6 +3221,7 @@ function StatusListEditor({
   updateSetting: SettingUpdater;
   fallback: StatusConfig[];
 }) {
+  const { t } = useTranslation();
   const items = parseSetting<StatusConfig[]>(settings[itemKey], fallback);
   const update = (next: StatusConfig[]) => setJsonSetting(updateSetting, itemKey, next);
   const patch = (index: number, changes: Partial<StatusConfig>) =>
@@ -2951,28 +3238,28 @@ function StatusListEditor({
             name="value"
             value={item.value}
             onChange={(e) => patch(index, { value: e.target.value })}
-            placeholder="状态值，如 submitted"
+            placeholder={t('adminSettings.statusValueEg')}
             className={inputClass}
           />
           <input
             name="label"
             value={item.label}
             onChange={(e) => patch(index, { label: e.target.value })}
-            placeholder="显示名称"
+            placeholder={t('adminSettings.displayName')}
             className={inputClass}
           />
           <input
             name="color"
             value={item.color || ''}
             onChange={(e) => patch(index, { color: e.target.value })}
-            placeholder="文字色 class"
+            placeholder={t('adminSettings.noticeTextColorClass')}
             className={inputClass}
           />
           <input
             name="bg"
             value={item.bg || ''}
             onChange={(e) => patch(index, { bg: e.target.value })}
-            placeholder="背景色 class"
+            placeholder={t('adminSettings.bgColorClass')}
             className={inputClass}
           />
           <div className="flex items-center gap-3 px-1">
@@ -2984,7 +3271,7 @@ function StatusListEditor({
                 onChange={(e) => patch(index, { tab: e.target.checked })}
                 className="accent-[var(--color-primary-container)]"
               />
-              标签页
+              {t('adminSettings.tabDisplayTab')}
             </label>
             <label className="flex items-center gap-1.5 text-xs text-on-surface-variant">
               <input
@@ -2994,7 +3281,7 @@ function StatusListEditor({
                 onChange={(e) => patch(index, { terminal: e.target.checked })}
                 className="accent-[var(--color-primary-container)]"
               />
-              终态
+              {t('adminSettings.isFinalState')}
             </label>
           </div>
           <ListActions
@@ -3006,7 +3293,7 @@ function StatusListEditor({
         </div>
       ))}
       <AddRowButton
-        label="添加状态"
+        label={t('adminSettings.addStatus')}
         onClick={() => update([...items, { value: '', label: '', color: '', bg: '', tab: true }])}
       />
     </div>
@@ -3020,6 +3307,7 @@ function ClassificationEditor({
   settings: SystemSettings;
   updateSetting: SettingUpdater;
 }) {
+  const { t } = useTranslation();
   const items = parseSetting<TicketClassificationConfig[]>(
     settings.ticket_classifications,
     DEFAULT_TICKET_CLASSIFICATIONS,
@@ -3039,28 +3327,28 @@ function ClassificationEditor({
             name="value"
             value={item.value}
             onChange={(e) => patch(index, { value: e.target.value })}
-            placeholder="分类值"
+            placeholder={t('adminSettings.categoryValue')}
             className={inputClass}
           />
           <input
             name="label"
             value={item.label}
             onChange={(e) => patch(index, { label: e.target.value })}
-            placeholder="显示名称"
+            placeholder={t('adminSettings.displayName')}
             className={inputClass}
           />
           <input
             name="icon"
             value={item.icon}
             onChange={(e) => patch(index, { icon: e.target.value })}
-            placeholder="图标名"
+            placeholder={t('adminSettings.iconName')}
             className={inputClass}
           />
           <input
             name="desc"
             value={item.desc}
             onChange={(e) => patch(index, { desc: e.target.value })}
-            placeholder="说明"
+            placeholder={t('adminSettings.fieldDescription')}
             className={inputClass}
           />
           <label className="flex items-center gap-1.5 text-xs text-on-surface-variant px-1">
@@ -3071,7 +3359,7 @@ function ClassificationEditor({
               onChange={(e) => patch(index, { enabled: e.target.checked })}
               className="accent-[var(--color-primary-container)]"
             />
-            启用
+            {t('adminSettings.enabledToggle')}
           </label>
           <ListActions
             index={index}
@@ -3082,7 +3370,7 @@ function ClassificationEditor({
         </div>
       ))}
       <AddRowButton
-        label="添加分类"
+        label={t('adminSettings.addCategory')}
         onClick={() => update([...items, { value: '', label: '', icon: 'category', desc: '', enabled: true }])}
       />
     </div>
@@ -3090,6 +3378,7 @@ function ClassificationEditor({
 }
 
 function SupportStepsEditor({ settings, updateSetting }: { settings: SystemSettings; updateSetting: SettingUpdater }) {
+  const { t } = useTranslation();
   const items = parseSetting<SupportStepConfig[]>(settings.support_process_steps, DEFAULT_SUPPORT_STEPS);
   const update = (next: SupportStepConfig[]) => setJsonSetting(updateSetting, 'support_process_steps', next);
   const patch = (index: number, changes: Partial<SupportStepConfig>) =>
@@ -3106,21 +3395,21 @@ function SupportStepsEditor({ settings, updateSetting }: { settings: SystemSetti
             name="icon"
             value={item.icon}
             onChange={(e) => patch(index, { icon: e.target.value })}
-            placeholder="图标名"
+            placeholder={t('adminSettings.iconName')}
             className={inputClass}
           />
           <input
             name="title"
             value={item.title}
             onChange={(e) => patch(index, { title: e.target.value })}
-            placeholder="标题"
+            placeholder={t('adminSettings.fieldTitle')}
             className={inputClass}
           />
           <input
             name="desc"
             value={item.desc}
             onChange={(e) => patch(index, { desc: e.target.value })}
-            placeholder="说明"
+            placeholder={t('adminSettings.fieldDescription')}
             className={inputClass}
           />
           <ListActions
@@ -3132,7 +3421,7 @@ function SupportStepsEditor({ settings, updateSetting }: { settings: SystemSetti
         </div>
       ))}
       <AddRowButton
-        label="添加流程"
+        label={t('adminSettings.addStep')}
         onClick={() => update([...items, { icon: 'check_circle', title: '', desc: '' }])}
       />
     </div>
@@ -3141,33 +3430,33 @@ function SupportStepsEditor({ settings, updateSetting }: { settings: SystemSetti
 
 const NAV_PRESETS: Record<string, { label: string; icon: string; path: string; roles?: ('USER' | 'ADMIN')[] }[]> = {
   all: [
-    { label: '模型库', icon: 'dashboard', path: '/' },
-    { label: '产品选型', icon: 'tune', path: '/selection' },
-    { label: '产品图库', icon: 'image', path: '/product-wall' },
-    { label: '规格查询', icon: 'straighten', path: '/thread-size' },
-    { label: '我的收藏', icon: 'star', path: '/favorites' },
-    { label: '我的分享', icon: 'share', path: '/my-shares' },
-    { label: '下载历史', icon: 'download', path: '/downloads' },
-    { label: '我的询价', icon: 'request_quote', path: '/my-inquiries' },
-    { label: '我的工单', icon: 'assignment_add', path: '/my-tickets' },
-    { label: '技术支持', icon: 'support_agent', path: '/support' },
-    { label: '模型管理', icon: 'view_in_ar', path: '/admin/models', roles: ['ADMIN'] },
-    { label: '分类管理', icon: 'folder', path: '/admin/categories', roles: ['ADMIN'] },
-    { label: '选型管理', icon: 'tune', path: '/admin/selections', roles: ['ADMIN'] },
-    { label: '询价管理', icon: 'receipt_long', path: '/admin/inquiries', roles: ['ADMIN'] },
-    { label: '工单处理', icon: 'build', path: '/admin/tickets', roles: ['ADMIN'] },
-    { label: '用户管理', icon: 'group', path: '/admin/users', roles: ['ADMIN'] },
-    { label: '分享管理', icon: 'share', path: '/admin/shares', roles: ['ADMIN'] },
-    { label: '下载统计', icon: 'download', path: '/admin/downloads', roles: ['ADMIN'] },
-    { label: '操作日志', icon: 'schedule', path: '/admin/audit', roles: ['ADMIN'] },
-    { label: '系统设置', icon: 'settings', path: '/admin/settings', roles: ['ADMIN'] },
+    { label: 'adminSettings.scopeModels', icon: 'dashboard', path: '/' },
+    { label: 'adminSettings.featureSelection', icon: 'tune', path: '/selection' },
+    { label: 'adminSettings.scopeProductWall', icon: 'image', path: '/product-wall' },
+    { label: 'adminSettings.ticketTypeSpecQuery', icon: 'straighten', path: '/thread-size' },
+    { label: 'adminSettings.gateMyFavorites', icon: 'star', path: '/favorites' },
+    { label: 'adminSettings.gateMySharesPage', icon: 'share', path: '/my-shares' },
+    { label: 'adminSettings.gateDownloads', icon: 'download', path: '/downloads' },
+    { label: 'adminSettings.gateMyInquiries', icon: 'request_quote', path: '/my-inquiries' },
+    { label: 'adminSettings.gateMyTicketsPage', icon: 'assignment_add', path: '/my-tickets' },
+    { label: 'adminSettings.gateSupport', icon: 'support_agent', path: '/support' },
+    { label: 'adminSettings.scopeModelManage', icon: 'view_in_ar', path: '/admin/models', roles: ['ADMIN'] },
+    { label: 'adminSettings.tabCategoryManage', icon: 'folder', path: '/admin/categories', roles: ['ADMIN'] },
+    { label: 'adminSettings.gateSelectionManage', icon: 'tune', path: '/admin/selections', roles: ['ADMIN'] },
+    { label: 'adminSettings.gateInquiryManage', icon: 'receipt_long', path: '/admin/inquiries', roles: ['ADMIN'] },
+    { label: 'adminSettings.gateMyTickets', icon: 'build', path: '/admin/tickets', roles: ['ADMIN'] },
+    { label: 'adminSettings.scopeUserManage', icon: 'group', path: '/admin/users', roles: ['ADMIN'] },
+    { label: 'adminSettings.gateMyShares', icon: 'share', path: '/admin/shares', roles: ['ADMIN'] },
+    { label: 'adminSettings.downloadStats', icon: 'download', path: '/admin/downloads', roles: ['ADMIN'] },
+    { label: 'adminSettings.scopeAuditLog', icon: 'schedule', path: '/admin/audit', roles: ['ADMIN'] },
+    { label: 'adminSettings.pageTitle', icon: 'settings', path: '/admin/settings', roles: ['ADMIN'] },
   ],
   mobile: [
-    { label: '首页', icon: 'dashboard', path: '/' },
-    { label: '选型', icon: 'tune', path: '/selection' },
-    { label: '收藏', icon: 'star', path: '/favorites' },
-    { label: '工单', icon: 'assignment_add', path: '/my-tickets' },
-    { label: '我的', icon: 'person', path: '/profile' },
+    { label: 'adminSettings.gateHome', icon: 'dashboard', path: '/' },
+    { label: 'adminSettings.featureSelectionEntry', icon: 'tune', path: '/selection' },
+    { label: 'adminSettings.gateFavorites', icon: 'star', path: '/favorites' },
+    { label: 'adminSettings.scopeTickets', icon: 'assignment_add', path: '/my-tickets' },
+    { label: 'adminSettings.notifyChannelMine', icon: 'person', path: '/profile' },
   ],
 };
 
@@ -3277,6 +3566,7 @@ function NavItemsEditor({
   updateSetting: SettingUpdater;
   fallback: NavItemConfig[];
 }) {
+  const { t } = useTranslation();
   const rawItems = parseSetting<NavItemConfig[]>(settings[itemKey], fallback);
   const items = rawItems;
   const update = (next: NavItemConfig[]) => setJsonSetting(updateSetting, itemKey, next);
@@ -3328,10 +3618,10 @@ function NavItemsEditor({
       {/* Header row */}
       <div className="hidden xl:grid xl:grid-cols-[20px_1fr_1fr_2fr_auto_24px] gap-2 px-3 pb-1 text-[11px] text-on-surface-variant/60 font-medium uppercase tracking-wider">
         <span />
-        <span>名称</span>
-        <span>图标</span>
-        <span>页面路径</span>
-        <span className="w-10 text-center">启用</span>
+        <span>{t('adminSettings.fieldName')}</span>
+        <span>{t('adminSettings.fieldIcon')}</span>
+        <span>{t('adminSettings.fieldPagePath')}</span>
+        <span className="w-10 text-center">{t('adminSettings.enabledToggle')}</span>
         <span />
       </div>
       {items.map((item: NavItemConfig, index: number) => {
@@ -3357,11 +3647,11 @@ function NavItemsEditor({
                 <Icon name="grip_vertical" size={16} />
               </div>
               <span
-                title={adminOnly ? '仅管理员可见' : '所有用户可见'}
+                title={adminOnly ? t('adminSettings.visibleAdminOnly') : t('adminSettings.visibleAllUsers')}
                 className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${adminOnly ? 'text-amber-600' : 'text-green-600'}`}
               >
                 <Icon name={adminOnly ? 'admin_panel_settings' : 'visibility'} size={12} />
-                {adminOnly ? '管理员' : '用户'}
+                {adminOnly ? t('adminSettings.roleAdmin') : t('adminSettings.scopeUsers')}
               </span>
             </div>
             {/* Desktop: drag handle */}
@@ -3369,31 +3659,36 @@ function NavItemsEditor({
               <Icon name="grip_vertical" size={16} />
             </div>
             <label className="space-y-0.5 xl:hidden">
-              <span className="text-[10px] text-on-surface-variant">名称</span>
+              <span className="text-[10px] text-on-surface-variant">{t('adminSettings.fieldName')}</span>
               <input
                 name="label"
                 value={item.label}
                 onChange={(e) => patch(index, { label: e.target.value })}
-                placeholder="菜单名称"
+                placeholder={t('adminSettings.menuName')}
                 className={inputClass}
               />
             </label>
             <label className="space-y-0.5 xl:hidden">
-              <span className="text-[10px] text-on-surface-variant">图标</span>
+              <span className="text-[10px] text-on-surface-variant">{t('adminSettings.fieldIcon')}</span>
               <IconPicker value={item.icon} onChange={(v) => patch(index, { icon: v })} />
             </label>
             <label className="space-y-0.5 xl:hidden">
-              <span className="text-[10px] text-on-surface-variant">页面路径</span>
+              <span className="text-[10px] text-on-surface-variant">{t('adminSettings.fieldPagePath')}</span>
               <select
                 name="path"
                 value={item.path}
                 onChange={(e) => patch(index, { path: e.target.value })}
                 className={`${inputClass} truncate`}
               >
-                {!isPreset && <option value={item.path}>{item.path}（自定义）</option>}
+                {!isPreset && (
+                  <option value={item.path}>
+                    {item.path}
+                    {t('adminSettings.customSuffix')}
+                  </option>
+                )}
                 {presets.map((p) => (
                   <option key={p.path} value={p.path}>
-                    {p.label}
+                    {t(p.label, { defaultValue: p.label })}
                   </option>
                 ))}
               </select>
@@ -3403,7 +3698,7 @@ function NavItemsEditor({
               name="label"
               value={item.label}
               onChange={(e) => patch(index, { label: e.target.value })}
-              placeholder="菜单名称"
+              placeholder={t('adminSettings.menuName')}
               className={`${inputClass} hidden xl:block`}
             />
             <div className="hidden xl:block">
@@ -3416,19 +3711,24 @@ function NavItemsEditor({
                 onChange={(e) => patch(index, { path: e.target.value })}
                 className={`${inputClass} truncate flex-1`}
               >
-                {!isPreset && <option value={item.path}>{item.path}（自定义）</option>}
+                {!isPreset && (
+                  <option value={item.path}>
+                    {item.path}
+                    {t('adminSettings.customSuffix')}
+                  </option>
+                )}
                 {presets.map((p) => (
                   <option key={p.path} value={p.path}>
-                    {p.label}
+                    {t(p.label, { defaultValue: p.label })}
                   </option>
                 ))}
               </select>
               <span
-                title={adminOnly ? '仅管理员可见' : '所有用户可见'}
+                title={adminOnly ? t('adminSettings.visibleAdminOnly') : t('adminSettings.visibleAllUsers')}
                 className={`inline-flex items-center gap-0.5 text-[10px] font-medium whitespace-nowrap ${adminOnly ? 'text-amber-600' : 'text-green-600'}`}
               >
                 <Icon name={adminOnly ? 'admin_panel_settings' : 'visibility'} size={12} />
-                {adminOnly ? '管理员' : '用户'}
+                {adminOnly ? t('adminSettings.roleAdmin') : t('adminSettings.scopeUsers')}
               </span>
             </div>
             <label className="flex items-center gap-1.5 text-xs text-on-surface-variant px-1">
@@ -3439,11 +3739,11 @@ function NavItemsEditor({
                 onChange={(e) => patch(index, { enabled: e.target.checked })}
                 className="accent-[var(--color-primary-container)]"
               />
-              <span className="xl:hidden">启用</span>
+              <span className="xl:hidden">{t('adminSettings.enabledToggle')}</span>
             </label>
             <button
               type="button"
-              title="删除"
+              title={t('adminSettings.remove')}
               onClick={() => update(items.filter((_: NavItemConfig, i: number) => i !== index))}
               className="w-6 h-6 inline-flex items-center justify-center rounded-md text-on-surface-variant/40 hover:text-red-500 hover:bg-red-500/10 transition-colors"
             >
@@ -3453,7 +3753,7 @@ function NavItemsEditor({
         );
       })}
       <AddRowButton
-        label="添加菜单"
+        label={t('adminSettings.addMenuItem')}
         onClick={() => update([...items, { label: '', icon: 'circle', path: '/', enabled: true }])}
       />
     </div>
@@ -3461,6 +3761,7 @@ function NavItemsEditor({
 }
 
 function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSettings; updateSetting: SettingUpdater }) {
+  const { t } = useTranslation();
   const policy = { ...DEFAULT_UPLOAD_POLICY, ...parseSetting<Partial<UploadPolicy>>(settings.upload_policy, {}) };
   const update = (changes: Partial<UploadPolicy>) =>
     setJsonSetting(updateSetting, 'upload_policy', { ...policy, ...changes });
@@ -3468,13 +3769,19 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
   return (
     <div className={`w-full max-w-4xl ${compactPanelClass}`}>
       <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-on-surface-variant">
-        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">模型上传</span>
-        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">选型导入</span>
-        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">工单附件</span>
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">
+          {t('adminSettings.badgeModelUpload')}
+        </span>
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">
+          {t('adminSettings.badgeSelectionImport')}
+        </span>
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">
+          {t('adminSettings.badgeTicketAttachment')}
+        </span>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">模型格式</span>
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelModelFormats')}</span>
           <input
             name="join"
             value={policy.modelFormats.join(', ')}
@@ -3484,7 +3791,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">模型大小上限 MB</span>
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelModelMaxSizeMb')}</span>
           <input
             name="model-max-size-mb"
             type="number"
@@ -3495,7 +3802,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">分片大小 MB</span>
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelChunkSizeMb')}</span>
           <input
             name="chunk-size-mb"
             type="number"
@@ -3506,7 +3813,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">启用分片阈值 MB</span>
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelChunkThresholdMb')}</span>
           <input
             name="chunk-threshold-mb"
             type="number"
@@ -3517,7 +3824,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">选型图片上限 MB</span>
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelSelectionImageMaxMb')}</span>
           <input
             name="option-image-max-size-mb"
             type="number"
@@ -3528,7 +3835,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">画册/规格书 PDF 上限 MB</span>
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelCatalogPdfMaxMb')}</span>
           <input
             name="selection-pdf-max-size-mb"
             type="number"
@@ -3539,7 +3846,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">选型图片 MIME 规则</span>
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelSelectionImageMime')}</span>
           <input
             name="option-image-mime-pattern"
             value={policy.optionImageMimePattern}
@@ -3549,7 +3856,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">选型导入文件上限 MB</span>
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelSelectionImportMaxMb')}</span>
           <input
             name="selection-import-max-size-mb"
             type="number"
@@ -3562,7 +3869,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">选型单次导入行数</span>
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelSelectionImportRows')}</span>
           <input
             name="selection-import-max-rows"
             type="number"
@@ -3575,7 +3882,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">选型导入列数上限</span>
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelSelectionImportMaxCols')}</span>
           <input
             name="selection-import-max-columns"
             type="number"
@@ -3588,7 +3895,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">工单附件上限 MB</span>
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelTicketAttachmentMaxMbField')}</span>
           <input
             name="ticket-attachment-max-size-mb"
             type="number"
@@ -3601,7 +3908,9 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">工单附件格式</span>
+          <span className="text-xs text-on-surface-variant">
+            {t('adminSettings.labelTicketAttachmentFormatsField')}
+          </span>
           <input
             name="join"
             value={policy.ticketAttachmentExts.join(', ')}
@@ -3622,6 +3931,7 @@ function PageSizePolicyEditor({
   settings: SystemSettings;
   updateSetting: SettingUpdater;
 }) {
+  const { t } = useTranslation();
   const policy = {
     ...DEFAULT_PAGE_SIZE_POLICY,
     ...parseSetting<Partial<PageSizePolicy>>(settings.page_size_policy, {}),
@@ -3629,38 +3939,46 @@ function PageSizePolicyEditor({
   const update = (key: keyof PageSizePolicy, value: number) =>
     setJsonSetting(updateSetting, 'page_size_policy', { ...policy, [key]: value });
   const fields: { key: keyof PageSizePolicy; label: string }[] = [
-    { key: 'homeDefault', label: '首页默认条数' },
-    { key: 'homeMax', label: '首页接口最大条数' },
-    { key: 'homeOption1', label: '首页分页选项 1' },
-    { key: 'homeOption2', label: '首页分页选项 2' },
-    { key: 'homeOption3', label: '首页分页选项 3' },
-    { key: 'homeOption4', label: '首页分页选项 4' },
-    { key: 'selectionDefault', label: '选型默认条数' },
-    { key: 'selectionMax', label: '选型最大条数' },
-    { key: 'selectionAdminRenderBatch', label: '选型后台加载批次' },
-    { key: 'selectionGeneratePreviewPageSize', label: '选型生成预览条数' },
-    { key: 'inquiryAdminDefault', label: '询价后台默认条数' },
-    { key: 'inquiryAdminMax', label: '询价后台最大条数' },
-    { key: 'ticketListMax', label: '工单列表最大条数' },
-    { key: 'notificationDefault', label: '通知默认条数' },
-    { key: 'notificationMax', label: '通知最大条数' },
-    { key: 'adminUserDefault', label: '用户后台默认条数' },
-    { key: 'adminUserMax', label: '用户后台最大条数' },
-    { key: 'shareAdminDefault', label: '分享后台默认条数' },
-    { key: 'shareAdminMax', label: '分享后台最大条数' },
-    { key: 'auditDefault', label: '日志默认条数' },
-    { key: 'auditMax', label: '日志最大条数' },
-    { key: 'userBatchDownloadMax', label: '用户批量下载上限' },
-    { key: 'adminBatchDownloadMax', label: '后台批量下载上限' },
+    { key: 'homeDefault', label: t('adminSettings.homeDefaultCount') },
+    { key: 'homeMax', label: t('adminSettings.homeApiMaxCount') },
+    { key: 'homeOption1', label: t('adminSettings.homePagingOption1') },
+    { key: 'homeOption2', label: t('adminSettings.homePagingOption2') },
+    { key: 'homeOption3', label: t('adminSettings.homePagingOption3') },
+    { key: 'homeOption4', label: t('adminSettings.homePagingOption4') },
+    { key: 'selectionDefault', label: t('adminSettings.selectionDefaultCount') },
+    { key: 'selectionMax', label: t('adminSettings.selectionMaxCount') },
+    { key: 'selectionAdminRenderBatch', label: t('adminSettings.selectionAdminBatch') },
+    { key: 'selectionGeneratePreviewPageSize', label: t('adminSettings.selectionPreviewCount') },
+    { key: 'inquiryAdminDefault', label: t('adminSettings.inquiryAdminDefaultCount') },
+    { key: 'inquiryAdminMax', label: t('adminSettings.inquiryAdminMaxCount') },
+    { key: 'ticketListMax', label: t('adminSettings.ticketAdminMaxCount') },
+    { key: 'notificationDefault', label: t('adminSettings.notifyAdminDefaultCount') },
+    { key: 'notificationMax', label: t('adminSettings.notifyAdminMaxCount') },
+    { key: 'adminUserDefault', label: t('adminSettings.userAdminDefaultCount') },
+    { key: 'adminUserMax', label: t('adminSettings.userAdminMaxCount') },
+    { key: 'shareAdminDefault', label: t('adminSettings.shareAdminDefaultCount') },
+    { key: 'shareAdminMax', label: t('adminSettings.shareAdminMaxCount') },
+    { key: 'auditDefault', label: t('adminSettings.logAdminDefaultCount') },
+    { key: 'auditMax', label: t('adminSettings.logAdminMaxCount') },
+    { key: 'userBatchDownloadMax', label: t('adminSettings.userBatchDownloadMax') },
+    { key: 'adminBatchDownloadMax', label: t('adminSettings.adminBatchDownloadMax') },
   ];
 
   return (
     <div className={`w-full max-w-4xl ${compactPanelClass}`}>
       <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-on-surface-variant">
-        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">选型后台</span>
-        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">通知/用户/分享</span>
-        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">操作日志</span>
-        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">批量下载</span>
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">
+          {t('adminSettings.badgeSelectionAdmin')}
+        </span>
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">
+          {t('adminSettings.badgeNotifyUserShare')}
+        </span>
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">
+          {t('adminSettings.scopeAuditLog')}
+        </span>
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">
+          {t('adminSettings.badgeBatchDownload')}
+        </span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {fields.map((field) => (
@@ -3688,6 +4006,7 @@ function ThreadPriorityEditor({
   settings: SystemSettings;
   updateSetting: SettingUpdater;
 }) {
+  const { t } = useTranslation();
   const priorities = {
     ...DEFAULT_THREAD_PRIORITY,
     ...parseSetting<Record<string, number>>(settings.selection_thread_priority, {}),
@@ -3714,7 +4033,7 @@ function ThreadPriorityEditor({
             onChange={(e) =>
               updateRows(rows.map((item, i) => (i === index ? { ...item, prefix: e.target.value } : item)))
             }
-            placeholder="前缀，如 R / G / NPT"
+            placeholder={t('adminSettings.threadPrefixEg')}
             className={inputClass}
           />
           <input
@@ -3726,7 +4045,7 @@ function ThreadPriorityEditor({
                 rows.map((item, i) => (i === index ? { ...item, rank: toNumber(e.target.value, item.rank) } : item)),
               )
             }
-            placeholder="排序权重"
+            placeholder={t('adminSettings.sortWeight')}
             className={numberInputClass}
           />
           <ListActions
@@ -3737,12 +4056,16 @@ function ThreadPriorityEditor({
           />
         </div>
       ))}
-      <AddRowButton label="添加前缀" onClick={() => updateRows([...rows, { prefix: '', rank: rows.length }])} />
+      <AddRowButton
+        label={t('adminSettings.addPrefix')}
+        onClick={() => updateRows([...rows, { prefix: '', rank: rows.length }])}
+      />
     </div>
   );
 }
 
 function FooterLinksEditor({ settings, updateSetting }: { settings: SystemSettings; updateSetting: SettingUpdater }) {
+  const { t } = useTranslation();
   const links = normalizeFooterLinks(settings.footer_links);
   const update = (next: FooterLinkConfig[]) =>
     setJsonSetting(updateSetting, 'footer_links', normalizeFooterLinks(next));
@@ -3753,26 +4076,24 @@ function FooterLinksEditor({ settings, updateSetting }: { settings: SystemSettin
     <div className="w-full max-w-5xl space-y-3">
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.8fr)]">
         <div className={`${compactPanelClass} space-y-1.5`}>
-          <p className="text-xs font-semibold text-on-surface">友情链接区块</p>
-          <p className="text-[11px] leading-5 text-on-surface-variant">
-            添加后会在前台页脚归入“相关链接”。保存时会自动过滤空行，避免无效链接出现在页面上。
-          </p>
+          <p className="text-xs font-semibold text-on-surface">{t('adminSettings.friendlyLinksBlock')}</p>
+          <p className="text-[11px] leading-5 text-on-surface-variant">{t('adminSettings.friendlyLinksHint')}</p>
         </div>
         <div className={`${compactPanelClass} space-y-1.5`}>
-          <p className="text-xs font-semibold text-on-surface">页脚版权</p>
+          <p className="text-xs font-semibold text-on-surface">{t('adminSettings.footerCopyright')}</p>
           <p className="text-[11px] font-medium text-on-surface">
             {settings.footer_copyright_follow_site_title
               ? resolveFooterCopyright(settings)
               : settings.footer_copyright || DEFAULT_FOOTER_COPYRIGHT}
           </p>
-          <p className="text-[11px] leading-5 text-on-surface-variant">
-            可选择跟随网站名称自动生成，也可以关闭开关后手动编辑。
-          </p>
+          <p className="text-[11px] leading-5 text-on-surface-variant">{t('adminSettings.footerCopyrightHint')}</p>
         </div>
       </div>
       <div className="space-y-2">
         {links.length === 0 ? (
-          <div className={`${compactPanelClass} text-xs text-on-surface-variant`}>暂无友情链接，可以从下方添加。</div>
+          <div className={`${compactPanelClass} text-xs text-on-surface-variant`}>
+            {t('adminSettings.noFriendlyLinksYet')}
+          </div>
         ) : (
           links.map((link, index) => (
             <div
@@ -3783,14 +4104,14 @@ function FooterLinksEditor({ settings, updateSetting }: { settings: SystemSettin
                 name="label"
                 value={link.label}
                 onChange={(e) => patch(index, { label: e.target.value })}
-                placeholder="链接文字"
+                placeholder={t('adminSettings.linkText')}
                 className={inputClass}
               />
               <input
                 name="url"
                 value={link.url}
                 onChange={(e) => patch(index, { url: e.target.value })}
-                placeholder="/about 或 https://example.com"
+                placeholder={t('adminSettings.egAboutOrUrl')}
                 inputMode="url"
                 className={inputClass}
               />
@@ -3804,7 +4125,10 @@ function FooterLinksEditor({ settings, updateSetting }: { settings: SystemSettin
           ))
         )}
       </div>
-      <AddRowButton label="添加友情链接" onClick={() => update([...links, { label: '', url: '' }])} />
+      <AddRowButton
+        label={t('adminSettings.addFriendlyLink')}
+        onClick={() => update([...links, { label: '', url: '' }])}
+      />
     </div>
   );
 }
@@ -3820,6 +4144,7 @@ function LegalSectionsEditor({
   updateSetting: SettingUpdater;
   fallback: LegalSection[];
 }) {
+  const { t } = useTranslation();
   const sections = parseEditableLegalSections(settings[itemKey], fallback);
   const [activeIndex, setActiveIndex] = useState(0);
   const safeActiveIndex = Math.min(activeIndex, Math.max(0, sections.length - 1));
@@ -3841,10 +4166,10 @@ function LegalSectionsEditor({
     <div className="w-full max-w-6xl space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-on-surface">正式条款文档 · {sections.length} 个章节</p>
-          <p className="text-[11px] text-on-surface-variant">
-            左侧选择章节，右侧编辑标题和正文；正文换行会在前台拆成自然段。
+          <p className="text-xs font-semibold text-on-surface">
+            {t('adminSettings.legalDocsCount', { count: sections.length })}
           </p>
+          <p className="text-[11px] text-on-surface-variant">{t('adminSettings.legalEditorHint')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -3853,7 +4178,7 @@ function LegalSectionsEditor({
             className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary-container/15 px-2.5 text-xs font-medium text-primary-container transition-colors hover:bg-primary-container/25"
           >
             <Icon name="add" size={14} />
-            添加章节
+            {t('adminSettings.addSection')}
           </button>
           <button
             type="button"
@@ -3864,7 +4189,7 @@ function LegalSectionsEditor({
             className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
           >
             <Icon name="restore" size={14} />
-            恢复默认
+            {t('adminSettings.restoreDefaults')}
           </button>
         </div>
       </div>
@@ -3888,7 +4213,9 @@ function LegalSectionsEditor({
                 >
                   {index + 1}
                 </span>
-                <span className="min-w-0 flex-1 truncate font-medium">{section.title || '未命名章节'}</span>
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {section.title || t('adminSettings.untitledSection')}
+                </span>
               </button>
             ))}
           </div>
@@ -3897,8 +4224,10 @@ function LegalSectionsEditor({
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-on-surface">第 {safeActiveIndex + 1} 条</p>
-              <p className="text-xs text-on-surface-variant">当前章节会同步出现在前台目录中，可点击目录跳转。</p>
+              <p className="text-sm font-semibold text-on-surface">
+                {t('adminSettings.sectionItemNo', { index: safeActiveIndex + 1 })}
+              </p>
+              <p className="text-xs text-on-surface-variant">{t('adminSettings.sectionTocHint')}</p>
             </div>
             <ListActions
               index={safeActiveIndex}
@@ -3913,23 +4242,25 @@ function LegalSectionsEditor({
 
           <div className="space-y-3">
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-on-surface-variant">章节标题</span>
+              <span className="text-xs font-medium text-on-surface-variant">
+                {t('adminSettings.sectionTitleLabel')}
+              </span>
               <input
                 name="title"
                 value={activeSection.title}
                 onChange={(e) => patch(safeActiveIndex, { title: e.target.value })}
-                placeholder="例如：定义与适用主体"
+                placeholder={t('adminSettings.egDefinitionAndSubject')}
                 className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2.5 border border-outline-variant/20 outline-none focus:border-primary"
               />
             </label>
 
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-on-surface-variant">章节正文</span>
+              <span className="text-xs font-medium text-on-surface-variant">{t('adminSettings.sectionBodyLabel')}</span>
               <textarea
                 name="content"
                 value={activeSection.content}
                 onChange={(e) => patch(safeActiveIndex, { content: e.target.value })}
-                placeholder="每一行或空行会作为前台自然段展示，适合维护正式条款内容。"
+                placeholder={t('adminSettings.legalBodyDesc')}
                 rows={14}
                 className="min-h-72 w-full resize-y rounded-md border border-outline-variant/20 bg-surface-container-lowest px-3 py-3 text-sm leading-7 text-on-surface outline-none focus:border-primary"
               />
@@ -3962,37 +4293,40 @@ function EmailTestPanel({
   templateLabel: string;
   templateKey: string;
 }) {
+  const { t } = useTranslation();
   const smtpReady = Boolean(settings.smtp_host && settings.smtp_user && settings.smtp_pass);
-  const from = settings.smtp_from || settings.smtp_user || '未设置';
+  const from = settings.smtp_from || settings.smtp_user || t('adminSettings.notSet');
   return (
     <div className="w-full max-w-6xl">
       <div className="flex flex-col xl:flex-row xl:items-center gap-2 rounded-lg border border-outline-variant/10 bg-surface-container-high/25 p-3">
         <div className="flex flex-wrap items-center gap-2 min-w-0 xl:flex-nowrap xl:shrink-0">
           <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${smtpReady ? 'bg-green-500' : 'bg-yellow-500'}`} />
           <span className="text-sm font-semibold text-on-surface whitespace-nowrap">
-            {smtpReady ? 'SMTP 配置已具备测试条件' : 'SMTP 配置还不完整'}
+            {smtpReady ? t('adminSettings.smtpReadyToTest') : t('adminSettings.smtpIncomplete')}
           </span>
           <span className="h-7 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2 text-xs min-w-0">
-            <span className="text-on-surface-variant shrink-0">发件人</span>
+            <span className="text-on-surface-variant shrink-0">{t('adminSettings.smtpSenderName')}</span>
             <span className="text-on-surface font-medium truncate max-w-48">{from}</span>
           </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1 text-xs">
           <span className="h-7 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2 min-w-0 whitespace-nowrap leading-none">
-            <span className="text-on-surface-variant shrink-0">服务器</span>
-            <span className="text-on-surface font-medium truncate max-w-40">{settings.smtp_host || '未配置'}</span>
+            <span className="text-on-surface-variant shrink-0">{t('adminSettings.serverShort')}</span>
+            <span className="text-on-surface font-medium truncate max-w-40">
+              {settings.smtp_host || t('adminSettings.notConfigured')}
+            </span>
           </span>
           <span className="h-7 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2 whitespace-nowrap leading-none">
-            <span className="text-on-surface-variant">端口</span>
+            <span className="text-on-surface-variant">{t('adminSettings.unitPort')}</span>
             <span className="text-on-surface font-medium">{settings.smtp_port || 465}</span>
           </span>
           <span className="h-7 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2 whitespace-nowrap leading-none">
-            <span className="text-on-surface-variant">连接</span>
+            <span className="text-on-surface-variant">{t('adminSettings.connectionLabel')}</span>
             <span className="text-on-surface font-medium">{settings.smtp_secure ? 'SSL/TLS' : 'STARTTLS'}</span>
           </span>
           <span className="h-7 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2 whitespace-nowrap leading-none">
-            <span className="text-on-surface-variant">模板</span>
+            <span className="text-on-surface-variant">{t('adminSettings.templatesLabel')}</span>
             <span className="text-on-surface font-medium truncate max-w-36" title={templateKey}>
               {templateLabel}
             </span>
@@ -4015,7 +4349,11 @@ function EmailTestPanel({
             className="h-10 inline-flex items-center justify-center gap-1.5 px-4 text-xs font-semibold bg-primary-container text-on-primary rounded-md hover:opacity-90 disabled:opacity-50 transition-opacity whitespace-nowrap"
           >
             <Icon name={testing ? 'progress_activity' : 'send'} size={14} />
-            {testing ? '发送中...' : changed ? '保存并测试' : '发送测试'}
+            {testing
+              ? t('adminSettings.sending')
+              : changed
+                ? t('adminSettings.saveAndTest')
+                : t('adminSettings.sendTest')}
           </button>
         </div>
       </div>
@@ -4093,6 +4431,7 @@ function SettingsConnectivityTestPanel({
   result: SettingsConnectivityResult | null;
   onRun: () => void;
 }) {
+  const { t } = useTranslation();
   const tone = connectivityTone(result);
   return (
     <div className="w-full max-w-6xl">
@@ -4121,7 +4460,7 @@ function SettingsConnectivityTestPanel({
             className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary-container px-4 text-xs font-semibold text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             <Icon name={testing ? 'progress_activity' : icon} size={14} />
-            {testing ? testingLabel : changed ? '保存并测试' : buttonLabel}
+            {testing ? testingLabel : changed ? t('adminSettings.saveAndTest') : buttonLabel}
           </button>
         </div>
         {result?.details?.length ? (
@@ -4139,60 +4478,67 @@ function SettingsConnectivityTestPanel({
 }
 
 function StoragePolicyInfoPanel({ settings }: { settings: SystemSettings }) {
+  const { t } = useTranslation();
   const rows: { label: string; key: keyof SystemSettings; policy: string; note: string }[] = [
     {
-      label: '图片原图',
+      label: t('adminSettings.dirImageOriginals'),
       key: 'storage_image_prefix',
-      policy: settings.image_cdn_enabled ? '公开缓存 / CDN' : '公开访问',
-      note: '站点图片、模型原图',
+      policy: settings.image_cdn_enabled ? t('adminSettings.accessPublicCdn') : t('adminSettings.accessPublic'),
+      note: t('adminSettings.dirSiteImages'),
     },
     {
-      label: '缩略图',
+      label: t('adminSettings.dirThumbnails'),
       key: 'storage_thumbnail_prefix',
-      policy: settings.image_cdn_enabled ? '公开缓存 / CDN' : '公开访问',
-      note: '首页、模型卡片、产品图库列表',
+      policy: settings.image_cdn_enabled ? t('adminSettings.accessPublicCdn') : t('adminSettings.accessPublic'),
+      note: t('adminSettings.dirHomeLists'),
     },
     {
-      label: '模型文件',
+      label: t('adminSettings.dirModelFiles'),
       key: 'storage_model_prefix',
-      policy: settings.storage_signed_url_enabled ? '私有签名下载' : '后端鉴权下载',
-      note: 'STEP/STP/IGES 等模型资源',
+      policy: settings.storage_signed_url_enabled
+        ? t('adminSettings.accessSignedDownload')
+        : t('adminSettings.accessAuthDownload'),
+      note: t('adminSettings.dirStepModels'),
     },
     {
-      label: '原始文件',
+      label: t('adminSettings.dirOriginalFiles'),
       key: 'storage_original_prefix',
-      policy: settings.storage_signed_url_enabled ? '私有签名访问' : '不建议公开',
-      note: '上传源文件和转换源',
+      policy: settings.storage_signed_url_enabled
+        ? t('adminSettings.accessSigned')
+        : t('adminSettings.notRecommendedPublic'),
+      note: t('adminSettings.dirRawSources'),
     },
     {
-      label: '图纸文件',
+      label: t('adminSettings.dirDrawings'),
       key: 'storage_drawing_prefix',
-      policy: settings.storage_signed_url_enabled ? '私有签名下载' : '后端鉴权下载',
-      note: 'PDF、工程图、说明文档',
+      policy: settings.storage_signed_url_enabled
+        ? t('adminSettings.accessSignedDownload')
+        : t('adminSettings.accessAuthDownload'),
+      note: t('adminSettings.dirDrawingDocs'),
     },
     {
-      label: '产品图库',
+      label: t('adminSettings.scopeProductWall'),
       key: 'storage_product_wall_prefix',
-      policy: settings.image_cdn_enabled ? '公开缓存 / CDN' : '公开访问',
-      note: '图库原图、批量导入图片',
+      policy: settings.image_cdn_enabled ? t('adminSettings.accessPublicCdn') : t('adminSettings.accessPublic'),
+      note: t('adminSettings.dirGalleryOriginals'),
     },
     {
-      label: '沟通附件',
+      label: t('adminSettings.dirThreadAttachments'),
       key: 'storage_attachment_prefix',
-      policy: settings.storage_signed_url_enabled ? '私有签名访问' : '后端鉴权访问',
-      note: '工单、询价、用户附件',
+      policy: settings.storage_signed_url_enabled ? t('adminSettings.accessSigned') : t('adminSettings.accessAuthed'),
+      note: t('adminSettings.dirTicketAttachments'),
     },
     {
-      label: '备份文件',
+      label: t('adminSettings.dirBackupFiles'),
       key: 'storage_backup_prefix',
-      policy: '管理员访问',
-      note: '数据库备份、资源备份、更新包',
+      policy: t('adminSettings.gateAdmin'),
+      note: t('adminSettings.dirBackupAssets'),
     },
     {
-      label: '临时目录',
+      label: t('adminSettings.dirTemp'),
       key: 'storage_temp_prefix',
-      policy: '不参与同步',
-      note: '分片上传、转换中间文件',
+      policy: t('adminSettings.syncExcluded'),
+      note: t('adminSettings.dirConversionTemp'),
     },
   ];
 
@@ -4203,18 +4549,16 @@ function StoragePolicyInfoPanel({ settings }: { settings: SystemSettings }) {
           <Icon name="folder_open" size={18} />
         </span>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-on-surface">目录与访问策略说明</p>
-          <p className="mt-0.5 text-xs leading-5 text-on-surface-variant">
-            本地存储对应 server/static 下的目录；云存储使用相同对象前缀，方便迁移、同步和 CDN 配置。
-          </p>
+          <p className="text-sm font-semibold text-on-surface">{t('adminSettings.storagePolicyNotesHeading')}</p>
+          <p className="mt-0.5 text-xs leading-5 text-on-surface-variant">{t('adminSettings.storagePolicyHint')}</p>
         </div>
       </div>
       <div className="overflow-hidden rounded-lg border border-outline-variant/10">
         <div className="grid grid-cols-[88px_minmax(0,1fr)_112px] gap-0 bg-surface-container text-xs font-semibold text-on-surface-variant sm:grid-cols-[120px_minmax(0,1fr)_140px_minmax(0,1fr)]">
-          <div className="px-3 py-2">资源</div>
-          <div className="px-3 py-2">目录 / 前缀</div>
-          <div className="px-3 py-2">策略</div>
-          <div className="hidden px-3 py-2 sm:block">说明</div>
+          <div className="px-3 py-2">{t('adminSettings.colResource')}</div>
+          <div className="px-3 py-2">{t('adminSettings.colDirectory')}</div>
+          <div className="px-3 py-2">{t('adminSettings.colPolicy')}</div>
+          <div className="hidden px-3 py-2 sm:block">{t('adminSettings.fieldDescription')}</div>
         </div>
         {rows.map((row) => {
           const prefix = String(settings[row.key] || '').replace(/^\/+|\/+$/g, '') || '-';
@@ -4240,17 +4584,17 @@ function StoragePolicyInfoPanel({ settings }: { settings: SystemSettings }) {
 function storageSyncStatusLabel(status?: StorageSyncJob['status']) {
   switch (status) {
     case 'queued':
-      return '排队中';
+      return i18n.t('adminSettings.statusQueued');
     case 'running':
-      return '同步中';
+      return i18n.t('adminSettings.syncRunning');
     case 'done':
-      return '已完成';
+      return i18n.t('adminSettings.statusCompleted');
     case 'cancelled':
-      return '已停止';
+      return i18n.t('adminSettings.statusStopped');
     case 'error':
-      return '失败';
+      return i18n.t('adminSettings.statusFailed');
     default:
-      return '未开始';
+      return i18n.t('adminSettings.statusNotStarted');
   }
 }
 
@@ -4269,6 +4613,7 @@ function formatStorageSyncTime(value?: string) {
 }
 
 function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [payload, setPayload] = useState<StorageSyncStatusPayload | null>(null);
   const [loading, setLoading] = useState(false);
@@ -4290,7 +4635,7 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
         return next.scopes.map((scope) => scope.key);
       });
     } catch (err: unknown) {
-      if (!silent) toast(errorMessage(err, '同步状态加载失败'), 'error');
+      if (!silent) toast(errorMessage(err, t('adminSettings.syncStatusLoadFailed')), 'error');
     } finally {
       if (!silent) setLoading(false);
     }
@@ -4338,11 +4683,11 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
 
   async function handleStart() {
     if (!settings.storage_sync_enabled) {
-      toast('请先开启“启用同步工具”并保存设置', 'error');
+      toast(t('adminSettings.enableSyncToolFirst'), 'error');
       return;
     }
     if (selectedScopeKeys.length === 0) {
-      toast('请选择至少一个同步目录', 'error');
+      toast(t('adminSettings.pickAtLeastOneSyncDir'), 'error');
       return;
     }
     setWorking(true);
@@ -4358,9 +4703,9 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
           ? { ...current, active: job, latest: job, jobs: [job, ...current.jobs.filter((item) => item.id !== job.id)] }
           : current,
       );
-      toast('同步任务已开始');
+      toast(t('adminSettings.syncStarted'));
     } catch (err: unknown) {
-      toast(errorMessage(err, '同步任务启动失败'), 'error');
+      toast(errorMessage(err, t('adminSettings.syncStartFailed')), 'error');
     } finally {
       setWorking(false);
     }
@@ -4381,9 +4726,9 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
             }
           : current,
       );
-      toast('同步任务已停止');
+      toast(t('adminSettings.syncStopped'));
     } catch (err: unknown) {
-      toast(errorMessage(err, '停止同步失败'), 'error');
+      toast(errorMessage(err, t('adminSettings.stopSyncFailed')), 'error');
     } finally {
       setWorking(false);
     }
@@ -4403,9 +4748,9 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
             }
           : current,
       );
-      toast('同步记录已删除');
+      toast(t('adminSettings.syncRecordDeleted'));
     } catch (err: unknown) {
-      toast(errorMessage(err, '删除同步记录失败'), 'error');
+      toast(errorMessage(err, t('adminSettings.deleteSyncRecordFailed')), 'error');
     } finally {
       setWorking(false);
     }
@@ -4427,12 +4772,14 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
             </span>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-on-surface">
-                {activeJob ? activeJob.message || '正在同步资源' : latestJob?.message || '暂无正在运行的同步任务'}
+                {activeJob
+                  ? activeJob.message || t('adminSettings.syncingAssets')
+                  : latestJob?.message || t('adminSettings.noRunningSyncJobs')}
               </p>
               <p className="mt-0.5 text-xs text-on-surface-variant">
                 {activeJob || latestJob
                   ? `${storageSyncStatusLabel((activeJob || latestJob)?.status)} · ${formatStorageSyncTime((activeJob || latestJob)?.startedAt)}`
-                  : '可按资源目录执行本地与云端同步'}
+                  : t('adminSettings.syncToolDesc')}
               </p>
             </div>
           </div>
@@ -4444,7 +4791,7 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
               className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-outline-variant/15 bg-surface-container-lowest px-3 text-xs font-semibold text-on-surface transition-colors hover:border-primary/40 disabled:opacity-50"
             >
               <Icon name={loading ? 'progress_activity' : 'refresh'} size={14} />
-              刷新
+              {t('adminSettings.refresh')}
             </button>
             {activeJob ? (
               <button
@@ -4454,7 +4801,7 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
                 className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-error-container px-3 text-xs font-semibold text-error transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 <Icon name="stop_circle" size={14} />
-                停止
+                {t('adminSettings.stop')}
               </button>
             ) : (
               <button
@@ -4464,7 +4811,7 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
                 className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-primary-container px-4 text-xs font-semibold text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 <Icon name={working ? 'progress_activity' : 'play_arrow'} size={14} />
-                开始同步
+                {t('adminSettings.startSync')}
               </button>
             )}
           </div>
@@ -4479,15 +4826,23 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
               />
             </div>
             <div className="mt-2 grid gap-2 text-xs text-on-surface-variant sm:grid-cols-4">
-              <span>进度 {Math.round((activeJob || latestJob)?.percent || 0)}%</span>
               <span>
-                文件 {(activeJob || latestJob)?.processedFiles || 0}/{(activeJob || latestJob)?.totalFiles || 0}
+                {t('adminSettings.syncProgress', { percent: Math.round((activeJob || latestJob)?.percent || 0) })}
               </span>
               <span>
-                体积 {(activeJob || latestJob)?.processedBytesText || '0 B'}/
+                {t('adminSettings.syncFiles', {
+                  processed: (activeJob || latestJob)?.processedFiles || 0,
+                  total: (activeJob || latestJob)?.totalFiles || 0,
+                })}
+              </span>
+              <span>
+                {t('adminSettings.syncBytes', {
+                  processed: (activeJob || latestJob)?.processedBytesText || '0 B',
+                  total: (activeJob || latestJob)?.totalBytesText || '',
+                })}
                 {(activeJob || latestJob)?.totalBytesText || '0 B'}
               </span>
-              <span>失败 {(activeJob || latestJob)?.failedFiles || 0}</span>
+              <span>{t('adminSettings.syncFailedCount', { count: (activeJob || latestJob)?.failedFiles || 0 })}</span>
             </div>
           </div>
         )}
@@ -4496,7 +4851,7 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
         <div className="rounded-lg border border-outline-variant/10 bg-surface-container-high/20 p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-on-surface">同步目录</p>
+            <p className="text-sm font-semibold text-on-surface">{t('adminSettings.syncDirectories')}</p>
             <button
               type="button"
               onClick={() =>
@@ -4506,7 +4861,9 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
               }
               className="text-xs font-medium text-primary hover:underline"
             >
-              {selectedScopeKeys.length === scopes.length ? '取消全选' : '全选'}
+              {selectedScopeKeys.length === scopes.length
+                ? t('adminSettings.deselectAll')
+                : t('adminSettings.selectAll')}
             </button>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -4525,7 +4882,9 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
                 >
                   <Icon name={checked ? 'check_circle' : 'radio_button_unchecked'} size={16} />
                   <span className="min-w-0">
-                    <span className="block truncate text-xs font-semibold">{scope.label}</span>
+                    <span className="block truncate text-xs font-semibold">
+                      {t(scope.label, { defaultValue: scope.label })}
+                    </span>
                     <span className="block truncate text-[11px] font-mono opacity-70">{scope.prefix || '-'}</span>
                   </span>
                 </button>
@@ -4536,11 +4895,15 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
 
         <div className="space-y-3 rounded-lg border border-outline-variant/10 bg-surface-container-high/20 p-3">
           <div>
-            <p className="mb-2 text-sm font-semibold text-on-surface">方向</p>
+            <p className="mb-2 text-sm font-semibold text-on-surface">{t('adminSettings.directionLabel')}</p>
             <div className="grid gap-2">
               {[
-                { value: 'local_to_cloud', label: '本地 → 云端', icon: 'cloud_upload' },
-                { value: 'cloud_to_local', label: '云端 → 本地', icon: 'cloud_download' },
+                { value: 'local_to_cloud', label: t('adminSettings.directionLocalToCloudArrow'), icon: 'cloud_upload' },
+                {
+                  value: 'cloud_to_local',
+                  label: t('adminSettings.directionCloudToLocalArrow'),
+                  icon: 'cloud_download',
+                },
               ].map((option) => (
                 <button
                   key={option.value}
@@ -4553,13 +4916,13 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
                   }`}
                 >
                   <Icon name={option.icon} size={15} />
-                  {option.label}
+                  {t(option.label, { defaultValue: option.label })}
                 </button>
               ))}
             </div>
           </div>
           <label className="flex items-center justify-between gap-3 text-xs text-on-surface">
-            覆盖同名文件
+            {t('adminSettings.overwriteExisting')}
             <Switch checked={overwrite} onChange={setOverwrite} />
           </label>
           <label
@@ -4567,7 +4930,7 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
               canDeleteExtra ? 'text-on-surface' : 'text-on-surface-variant/50'
             }`}
           >
-            删除目标端多余文件
+            {t('adminSettings.deleteExtraFiles')}
             <Switch
               checked={canDeleteExtra && deleteExtraneous}
               onChange={setDeleteExtraneous}
@@ -4576,7 +4939,7 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
           </label>
           {!settings.storage_sync_enabled ? (
             <p className="rounded-md bg-yellow-500/10 px-3 py-2 text-xs leading-5 text-yellow-600">
-              需要先开启“启用同步工具”并保存设置。
+              {t('adminSettings.needEnableSyncToolFirst')}
             </p>
           ) : null}
         </div>
@@ -4585,20 +4948,29 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
       {payload?.jobs?.length ? (
         <div className="rounded-lg border border-outline-variant/10 bg-surface-container-high/20">
           <div className="flex items-center justify-between gap-2 border-b border-outline-variant/10 px-3 py-2">
-            <p className="text-sm font-semibold text-on-surface">最近同步记录</p>
-            <span className="text-xs text-on-surface-variant">{payload.jobs.length} 条</span>
+            <p className="text-sm font-semibold text-on-surface">{t('adminSettings.recentSyncRecords')}</p>
+            <span className="text-xs text-on-surface-variant">
+              {t('adminSettings.countRecords', { count: payload.jobs.length })}
+            </span>
           </div>
           <div className="divide-y divide-outline-variant/5">
             {payload.jobs.slice(0, 5).map((job) => (
               <div key={job.id} className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold text-on-surface">
-                    {job.direction === 'local_to_cloud' ? '本地到云端' : '云端到本地'} ·{' '}
-                    {storageSyncStatusLabel(job.status)}
+                    {job.direction === 'local_to_cloud'
+                      ? t('adminSettings.directionLocalToCloud')
+                      : t('adminSettings.directionCloudToLocal')}{' '}
+                    · {storageSyncStatusLabel(job.status)}
                   </p>
                   <p className="mt-0.5 truncate text-[11px] text-on-surface-variant">
-                    {formatStorageSyncTime(job.startedAt)} · 复制 {job.copiedFiles} · 跳过 {job.skippedFiles} · 删除{' '}
-                    {job.deletedFiles} · 失败 {job.failedFiles}
+                    {formatStorageSyncTime(job.startedAt)} ·{' '}
+                    {t('adminSettings.syncRecordStats', {
+                      copied: job.copiedFiles,
+                      skipped: job.skippedFiles,
+                      deleted: job.deletedFiles,
+                      failed: job.failedFiles,
+                    })}
                   </p>
                 </div>
                 <button
@@ -4608,7 +4980,7 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
                   className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-on-surface-variant transition-colors hover:bg-error-container/10 hover:text-error disabled:opacity-40"
                 >
                   <Icon name="delete" size={14} />
-                  删除记录
+                  {t('adminSettings.deleteRecord')}
                 </button>
               </div>
             ))}
@@ -4624,11 +4996,14 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
           setDeleteJobTarget(null);
           void handleDelete(target);
         }}
-        title="确认删除同步记录"
-        description={`确定删除这条「${
-          deleteJobTarget?.direction === 'cloud_to_local' ? '云端到本地' : '本地到云端'
-        }」同步记录吗？不会删除已同步的资源文件。`}
-        confirmLabel="确认删除"
+        title={t('adminSettings.confirmDeleteSyncRecord')}
+        description={t('adminSettings.confirmDeleteSyncRecordDesc', {
+          job:
+            deleteJobTarget?.direction === 'cloud_to_local'
+              ? t('adminSettings.directionCloudToLocal')
+              : t('adminSettings.directionLocalToCloud'),
+        })}
+        confirmLabel={t('adminSettings.confirmDeleteTitle')}
         confirmDisabled={working}
       />
       <ConfirmDialog
@@ -4641,15 +5016,15 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
         icon="cloud_sync"
         iconColor="text-primary"
         iconBg="bg-primary/15"
-        title="确认开始存储同步"
-        description={`将启动存储同步（方向：${
-          direction === 'cloud_to_local' ? '云端 → 本地' : '本地 → 云端'
-        }），可能持续较长时间并占用网络带宽。${
-          deleteExtraneous && canDeleteExtra
-            ? '已开启“删除多余文件”：目标端存在但源端没有的文件将被删除，此操作不可撤销，请谨慎。'
-            : ''
-        }确定开始？`}
-        confirmLabel="开始同步"
+        title={t('adminSettings.confirmStartSync')}
+        description={t('adminSettings.confirmStartSyncDesc', {
+          direction:
+            direction === 'cloud_to_local'
+              ? t('adminSettings.directionCloudToLocalArrow')
+              : t('adminSettings.directionLocalToCloudArrow'),
+          extra: deleteExtraneous && canDeleteExtra ? t('adminSettings.deleteExtraWarningOn') : '',
+        })}
+        confirmLabel={t('adminSettings.startSync')}
       />
     </div>
   );
@@ -4661,24 +5036,24 @@ function renderEmailSample(source: string, settings: SystemSettings) {
     siteLogo: settings.site_logo || `${window.location.origin}/favicon.svg`,
     siteUrl: window.location.origin,
     actionUrl: `${window.location.origin}/my-inquiries/demo`,
-    actionLabel: '打开详情',
+    actionLabel: i18n.t('adminSettings.openDetail'),
     contactEmail: settings.contact_email || settings.smtp_from || settings.smtp_user || 'support@example.com',
     currentYear: String(new Date().getFullYear()),
     email: 'test@example.com',
     code: '826419',
     expireMinutes: '10',
     testTime: new Date().toLocaleString('zh-CN', { hour12: false }),
-    username: '客户',
+    username: i18n.t('adminSettings.roleCustomer'),
     inquiryNo: 'INQ-20260427-001',
     itemCount: '3',
-    statusLabel: '处理中',
-    ticketTitle: '模型下载问题',
-    replyPreview: '我们已收到您的问题，正在进一步确认。',
-    assigneeName: '销售工程师',
-    modelName: '不锈钢接头 STEP 模型',
-    errorMessage: '示例错误信息',
-    riskLevel: '中风险',
-    summary: '备份目录空间不足，请及时检查。',
+    statusLabel: i18n.t('adminSettings.statusProcessing'),
+    ticketTitle: i18n.t('adminSettings.ticketTypeDownloadIssue'),
+    replyPreview: i18n.t('adminSettings.ticketReceivedBody'),
+    assigneeName: i18n.t('adminSettings.roleSalesEngineer'),
+    modelName: i18n.t('adminSettings.egStepModels'),
+    errorMessage: i18n.t('adminSettings.sampleErrorMessage'),
+    riskLevel: i18n.t('adminSettings.riskMedium'),
+    summary: i18n.t('adminSettings.backupDirLowSpace'),
     downloadFormat: 'STEP',
   };
   return source.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_match, key: string) => vars[key] ?? '');
@@ -4690,7 +5065,7 @@ function withEmailActionLinks(html: string): string {
   const legacyFooter = '<div><a href="{{siteUrl}}" style="color:#f97316;text-decoration:none;">{{siteUrl}}</a></div>';
   const actionFooter =
     '<div style="margin:0 0 12px;"><a href="{{actionUrl}}" style="display:inline-block;padding:9px 14px;border-radius:8px;background:#f97316;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;">{{actionLabel}}</a></div>\n' +
-    '    <div>入口：<a href="{{actionUrl}}" style="color:#f97316;text-decoration:none;">{{actionUrl}}</a></div>';
+    i18n.t('adminSettings.emailTplEntranceDiv');
   return html.split(legacyHeader).join(actionHeader).split(legacyFooter).join(actionFooter);
 }
 
@@ -4725,11 +5100,12 @@ function EmailTemplatesEditor({
   activeKey: string;
   onActiveKeyChange: (key: string) => void;
 }) {
+  const { t } = useTranslation();
   const templates = getEmailTemplates(settings);
   const keys = Object.keys(templates);
   const resolvedActiveKey = templates[activeKey] ? activeKey : keys[0] || 'smtp_test';
   const active = templates[resolvedActiveKey] || templates[keys[0]];
-  const previewSubject = active ? renderEmailSample(active.subject, settings) : '';
+  const previewSubject = active ? renderEmailSample(t(active.subject, { defaultValue: active.subject }), settings) : '';
   const previewHtml = active ? renderEmailSample(active.html, settings) : '';
   const update = (next: Record<string, EmailTemplateConfig>) => setJsonSetting(updateSetting, 'email_templates', next);
   const patch = (key: string, changes: Partial<EmailTemplateConfig>) =>
@@ -4788,14 +5164,16 @@ function EmailTemplatesEditor({
                 className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors"
               >
                 <Icon name="restore" size={14} />
-                恢复默认
+                {t('adminSettings.restoreDefaults')}
               </button>
             </div>
 
             <div className="grid grid-cols-1 2xl:grid-cols-[1.1fr_0.9fr] gap-4 p-4">
               <div className="space-y-4 min-w-0">
                 <label className="block space-y-1.5">
-                  <span className="text-xs font-medium text-on-surface-variant">邮件标题</span>
+                  <span className="text-xs font-medium text-on-surface-variant">
+                    {t('adminSettings.emailSubjectLabel')}
+                  </span>
                   <input
                     name="subject"
                     value={active.subject}
@@ -4805,7 +5183,9 @@ function EmailTemplatesEditor({
                 </label>
 
                 <div className="space-y-1.5">
-                  <span className="text-xs font-medium text-on-surface-variant">可用变量</span>
+                  <span className="text-xs font-medium text-on-surface-variant">
+                    {t('adminSettings.availableVars')}
+                  </span>
                   <div className="flex flex-wrap gap-1.5 rounded-md bg-surface-container-lowest/60 border border-outline-variant/10 p-2">
                     {(active.tokens || []).map((token) => (
                       <button
@@ -4813,7 +5193,7 @@ function EmailTemplatesEditor({
                         type="button"
                         onClick={() => navigator.clipboard?.writeText(`{{${token}}}`)}
                         className="text-[10px] px-2 py-1 rounded bg-primary-container/10 text-primary-container hover:bg-primary-container/20 transition-colors font-mono"
-                        title="点击复制"
+                        title={t('adminSettings.clickToCopy')}
                       >
                         {`{{${token}}}`}
                       </button>
@@ -4822,7 +5202,9 @@ function EmailTemplatesEditor({
                 </div>
 
                 <label className="block space-y-1.5">
-                  <span className="text-xs font-medium text-on-surface-variant">HTML 正文</span>
+                  <span className="text-xs font-medium text-on-surface-variant">
+                    {t('adminSettings.htmlBodyLabel')}
+                  </span>
                   <textarea
                     name="html"
                     value={active.html}
@@ -4836,8 +5218,10 @@ function EmailTemplatesEditor({
 
               <div className="space-y-2 min-w-0">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-on-surface-variant">预览</span>
-                  <span className="text-[10px] text-on-surface-variant">已用示例数据预览</span>
+                  <span className="text-xs font-medium text-on-surface-variant">{t('adminSettings.preview')}</span>
+                  <span className="text-[10px] text-on-surface-variant">
+                    {t('adminSettings.previewWithSampleData')}
+                  </span>
                 </div>
                 <div className="rounded-md border border-outline-variant/10 bg-white overflow-hidden">
                   <div className="px-3 py-2 border-b border-slate-200 bg-slate-50">
@@ -4845,7 +5229,7 @@ function EmailTemplatesEditor({
                     <p className="text-sm text-slate-900 truncate">{previewSubject}</p>
                   </div>
                   <iframe
-                    title={`${active.label} 预览`}
+                    title={`${active.label} ${t('adminSettings.previewWord')}`}
                     srcDoc={previewHtml}
                     className="w-full h-[420px] bg-white"
                     sandbox=""
@@ -4950,6 +5334,7 @@ function StructuredSettingEditor({
 }
 
 function Content() {
+  const { t } = useTranslation();
   const location = useLocation();
   const { toast } = useToast();
   const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
@@ -4967,7 +5352,7 @@ function Content() {
   const [testingStorage, setTestingStorage] = useState(false);
   const [cacheTestResult, setCacheTestResult] = useState<SettingsConnectivityResult | null>(null);
   const [storageTestResult, setStorageTestResult] = useState<SettingsConnectivityResult | null>(null);
-  const [activeTab, setActiveTab] = useState(GROUPS[0]?.title || '访问控制');
+  const [activeTab, setActiveTab] = useState(GROUPS[0]?.title || 'adminSettings.tabAccessControl');
   const [previewSubtab, setPreviewSubtab] = useState<PreviewSubtab>('general');
   const [matPresetEdit, setMatPresetEdit] = useState<MaterialPresetKey>('default');
   const imageInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -5062,14 +5447,18 @@ function Content() {
   const backupScopeCounts: Partial<Record<BackupScope, string>> = backupStats
     ? {
         full: backupStats.totalDataSizeText || backupStats.dbSize,
-        models: `${formatStatNumber(backupStats.modelCount)} 个模型`,
-        selection: `${formatOptionalStatNumber(backupStats.selectionProductCount)} 个产品`,
-        product_wall: `${formatOptionalStatNumber(backupStats.productWallImageCount)} 张图片`,
-        config: `${formatOptionalStatNumber(backupStats.settingsCount)} 项配置`,
-        users: `${formatOptionalStatNumber(backupStats.userCount)} 个账号`,
-        tickets: `${formatOptionalStatNumber(backupStats.ticketCount)} 个工单`,
-        inquiries: `${formatOptionalStatNumber(backupStats.inquiryCount)} 个询价`,
-        audit: `${formatOptionalStatNumber(backupStats.auditLogCount)} 条记录`,
+        models: t('adminSettings.statModels', { count: formatStatNumber(backupStats.modelCount) }),
+        selection: t('adminSettings.statSelectionProducts', {
+          count: formatOptionalStatNumber(backupStats.selectionProductCount),
+        }),
+        product_wall: t('adminSettings.statGalleryImages', {
+          count: formatOptionalStatNumber(backupStats.productWallImageCount),
+        }),
+        config: t('adminSettings.statConfigItems', { count: formatOptionalStatNumber(backupStats.settingsCount) }),
+        users: t('adminSettings.statUserAccounts', { count: formatOptionalStatNumber(backupStats.userCount) }),
+        tickets: t('adminSettings.statTickets', { count: formatOptionalStatNumber(backupStats.ticketCount) }),
+        inquiries: t('adminSettings.statInquiries', { count: formatOptionalStatNumber(backupStats.inquiryCount) }),
+        audit: t('adminSettings.statAuditRecords', { count: formatOptionalStatNumber(backupStats.auditLogCount) }),
       }
     : {};
   const backupProtectionCards = backupHealth ? buildBackupProtectionCards(backupHealth, backupPolicyCheck) : [];
@@ -5101,7 +5490,7 @@ function Content() {
   }
 
   function toastBackupCreatedOnce(jobId?: string | null) {
-    toastJobOnce('backup-create', jobId, '备份创建成功');
+    toastJobOnce('backup-create', jobId, t('adminSettings.backupCreated'));
   }
 
   function toastRestoreSuccessOnce(
@@ -5119,22 +5508,24 @@ function Content() {
       toastJobOnce(
         'backup-restore',
         jobId,
-        `${getBackupScopeLabel(result.scope, result.scopeLabel)}恢复成功：${result.itemCount ?? result.modelCount} 条记录，${
-          result.fileCount ?? result.thumbnailCount
-        } 个资源文件`,
+        t('adminSettings.restoreSuccessDetail', {
+          scope: getBackupScopeLabel(result.scope, result.scopeLabel),
+          count: result.itemCount ?? result.modelCount,
+          files: result.fileCount ?? result.thumbnailCount,
+        }),
       );
       return;
     }
     // 预览图数量统计已不再可靠（缩略图格式从 png 转 jpg 后统计口径失效，恒为 0），提示语只保留模型数
-    toastJobOnce('backup-restore', jobId, `恢复成功：${result.modelCount} 个 STEP 模型`);
+    toastJobOnce('backup-restore', jobId, t('adminSettings.restoreSuccessModels', { count: result.modelCount }));
   }
 
   function toastImportSaveSuccessOnce(jobId?: string | null) {
-    toastJobOnce('backup-import-save', jobId, '备份文件已保存到备份记录列表');
+    toastJobOnce('backup-import-save', jobId, t('adminSettings.backupSavedToList'));
   }
 
   function toastVerifySuccessOnce(jobId: string | null | undefined, message?: string) {
-    toastJobOnce('backup-verify', jobId, message || '备份校验通过');
+    toastJobOnce('backup-verify', jobId, message || t('adminSettings.backupVerifyPassed'));
   }
 
   useEffect(() => {
@@ -5161,7 +5552,7 @@ function Content() {
         setExportProgress({
           stage: activeBackup.stage || 'resuming',
           percent: activeBackup.percent ?? 0,
-          message: activeBackup.message || '正在恢复备份任务...',
+          message: activeBackup.message || t('adminSettings.resumingBackupJob'),
           logs: activeBackup.logs || [],
         });
       } else if (backupJobId) {
@@ -5174,7 +5565,7 @@ function Content() {
     if (backupJobId) {
       setExporting(true);
       setExportProgress((prev) =>
-        prev.stage ? prev : { stage: 'resuming', percent: 0, message: '正在恢复备份任务...', logs: [] },
+        prev.stage ? prev : { stage: 'resuming', percent: 0, message: t('adminSettings.resumingBackupJob'), logs: [] },
       );
       try {
         const { encrypted } = await pollBackupProgress(backupJobId, (stage, percent, message, logs) => {
@@ -5186,7 +5577,7 @@ function Content() {
         loadBackupStats();
         loadBackupHealth();
       } catch (err: unknown) {
-        toast(errorMessage(err, '备份任务失败'), 'error');
+        toast(errorMessage(err, t('adminSettings.backupJobFailed')), 'error');
       } finally {
         localStorage.removeItem('backupJobId');
         setExporting(false);
@@ -5204,7 +5595,7 @@ function Content() {
         setRestoreProgress({
           stage: activeRestore.stage || 'resuming',
           percent: activeRestore.percent ?? 0,
-          message: activeRestore.message || '正在恢复备份恢复任务...',
+          message: activeRestore.message || t('adminSettings.resumingRestoreJob'),
           logs: activeRestore.logs || [],
         });
       } else if (restoreJobId) {
@@ -5230,7 +5621,7 @@ function Content() {
           : {
               stage: 'resuming',
               percent: 0,
-              message: savedBackupId ? '正在恢复备份记录...' : '正在恢复导入任务...',
+              message: savedBackupId ? t('adminSettings.resumingBackupRecords') : t('adminSettings.resumingImportJob'),
               logs: [],
             },
       );
@@ -5244,7 +5635,7 @@ function Content() {
         loadBackupStats();
         loadBackupHealth();
       } catch (err: unknown) {
-        handleRestoreFlowError(err, '恢复失败');
+        handleRestoreFlowError(err, t('adminSettings.restoreFailed'));
       } finally {
         localStorage.removeItem('restoreJobId');
         localStorage.removeItem('restoreConfirmBackupId');
@@ -5265,7 +5656,7 @@ function Content() {
         setRestoreProgress({
           stage: activeImportSave.stage || 'resuming',
           percent: activeImportSave.percent ?? 0,
-          message: activeImportSave.message || '正在恢复导入保存任务...',
+          message: activeImportSave.message || t('adminSettings.resumingImportSaveJob'),
           logs: activeImportSave.logs || [],
         });
       } else if (importSaveJobId) {
@@ -5278,7 +5669,9 @@ function Content() {
     if (importSaveJobId) {
       setImporting(true);
       setRestoreProgress((prev) =>
-        prev.stage ? prev : { stage: 'resuming', percent: 0, message: '正在恢复导入保存任务...', logs: [] },
+        prev.stage
+          ? prev
+          : { stage: 'resuming', percent: 0, message: t('adminSettings.resumingImportSaveJob'), logs: [] },
       );
       try {
         await pollImportSaveProgress(importSaveJobId, (stage, percent, message, logs) => {
@@ -5289,7 +5682,7 @@ function Content() {
         loadBackupStats();
         loadBackupHealth();
       } catch (err: unknown) {
-        toast(errorMessage(err, '导入保存失败'), 'error');
+        toast(errorMessage(err, t('adminSettings.importSaveFailed')), 'error');
       } finally {
         localStorage.removeItem('importSaveJobId');
         setImporting(false);
@@ -5304,7 +5697,7 @@ function Content() {
         setVerifyProgress({
           stage: activeVerify.stage || 'validating_archive',
           percent: activeVerify.percent ?? 0,
-          message: activeVerify.message || '正在恢复校验任务...',
+          message: activeVerify.message || t('adminSettings.resumingVerifyJob'),
           logs: activeVerify.logs || [],
         });
         try {
@@ -5315,7 +5708,7 @@ function Content() {
           loadBackupList();
           loadBackupHealth();
         } catch (err: unknown) {
-          toast(errorMessage(err, '备份校验失败'), 'error');
+          toast(errorMessage(err, t('adminSettings.backupVerifyFailed')), 'error');
         } finally {
           setVerifyingBackupId(null);
           setVerifyProgress({ stage: '', percent: 0, message: '', logs: [] });
@@ -5331,7 +5724,7 @@ function Content() {
       const data = await getSettings();
       setSettings(normalizeSettingsForClient(data));
     } catch {
-      toast('加载设置失败', 'error');
+      toast(t('adminSettings.loadSettingsFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -5362,12 +5755,12 @@ function Content() {
     try {
       const result = await checkBackupPolicy();
       setBackupPolicyCheck(result);
-      if (result.status === 'ok') toast('备份策略体检通过', 'success');
-      else if (result.status === 'warning') toast('备份策略体检有警告，请查看详情', 'info');
-      else toast('备份策略体检发现错误，请查看详情', 'error');
+      if (result.status === 'ok') toast(t('adminSettings.policyCheckPassed'), 'success');
+      else if (result.status === 'warning') toast(t('adminSettings.policyCheckHasWarnings'), 'info');
+      else toast(t('adminSettings.policyCheckFoundErrors'), 'error');
       loadBackupHealth();
     } catch (err: unknown) {
-      toast(errorMessage(err, '备份策略体检失败'), 'error');
+      toast(errorMessage(err, t('adminSettings.policyCheckFailed')), 'error');
     } finally {
       policyCheckInFlight.current = false;
       setCheckingBackupPolicy(false);
@@ -5378,7 +5771,7 @@ function Content() {
     if (verifyActionInFlight.current) return;
     verifyActionInFlight.current = true;
     setVerifyingBackupId(id);
-    setVerifyProgress({ stage: 'queued', percent: 0, message: '正在准备校验备份...', logs: [] });
+    setVerifyProgress({ stage: 'queued', percent: 0, message: t('adminSettings.preparingVerifiedBackup'), logs: [] });
     try {
       const jobId = await startVerifyBackupJob(id);
       const result = await pollVerifyBackupProgress(jobId, (stage, percent, message, logs) => {
@@ -5388,7 +5781,7 @@ function Content() {
       loadBackupList();
       loadBackupHealth();
     } catch (err: unknown) {
-      toast(errorMessage(err, '备份校验失败'), 'error');
+      toast(errorMessage(err, t('adminSettings.backupVerifyFailed')), 'error');
     } finally {
       verifyActionInFlight.current = false;
       setVerifyingBackupId(null);
@@ -5417,9 +5810,9 @@ function Content() {
       await refreshSiteConfig();
       patchPublicSettings(pickPublicAppearanceSettings(nextSettings));
       loadBackupHealth();
-      toast('设置已保存', 'success');
+      toast(t('adminSettings.settingsSaved'), 'success');
     } catch (err: unknown) {
-      toast(errorMessage(err, '保存失败'), 'error');
+      toast(errorMessage(err, t('adminSettings.saveFailed')), 'error');
     } finally {
       setSaving(false);
     }
@@ -5476,12 +5869,12 @@ function Content() {
     ) as Partial<SystemSettings>;
     setSettings((prev) => ({ ...prev, ...defaults }) as SystemSettings);
     setChanged(true);
-    toast('已恢复为系统预设，点击保存生效', 'success');
+    toast(t('adminSettings.resetToPresetDone'), 'success');
   }
 
   async function handleSendTestEmail() {
     if (!testEmailTo.trim()) {
-      toast('请输入测试收件邮箱', 'error');
+      toast(t('adminSettings.enterTestEmail'), 'error');
       return;
     }
     setTestingEmail(true);
@@ -5500,9 +5893,9 @@ function Content() {
       const templates = getEmailTemplates(settings);
       const templateKey = templates[testEmailTemplateKey] ? testEmailTemplateKey : 'smtp_test';
       await sendTestEmail(testEmailTo.trim(), templateKey);
-      toast('测试邮件已发送', 'success');
+      toast(t('adminSettings.testEmailSent'), 'success');
     } catch (err: unknown) {
-      toast(errorMessage(err, '测试邮件发送失败'), 'error');
+      toast(errorMessage(err, t('adminSettings.testEmailFailed')), 'error');
     } finally {
       setTestingEmail(false);
     }
@@ -5530,7 +5923,7 @@ function Content() {
       setCacheTestResult(result);
       toast(result.message, result.status === 'success' ? 'success' : 'info');
     } catch (err: unknown) {
-      const result = readConnectivityError(err, '缓存测试失败');
+      const result = readConnectivityError(err, t('adminSettings.cacheTestFailed'));
       setCacheTestResult(result);
       toast(result.message, 'error');
     } finally {
@@ -5549,7 +5942,7 @@ function Content() {
       setStorageTestResult(result);
       toast(result.message, result.status === 'success' ? 'success' : 'info');
     } catch (err: unknown) {
-      const result = readConnectivityError(err, '存储测试失败');
+      const result = readConnectivityError(err, t('adminSettings.storageTestFailed'));
       setStorageTestResult(result);
       toast(result.message, 'error');
     } finally {
@@ -5586,13 +5979,18 @@ function Content() {
     const dims = await readPngDimensions(file);
     if (!dims) return '';
     const { width, height } = dims;
-    const label = key === 'site_app_icon' ? '应用图标' : key === 'site_icon' ? '站点图标' : 'Favicon 图标';
+    const label =
+      key === 'site_app_icon'
+        ? t('adminSettings.appIcon')
+        : key === 'site_icon'
+          ? t('adminSettings.siteIcon')
+          : t('adminSettings.faviconIcon');
     if (width !== height) {
-      toast(`${label}建议正方形（当前 ${width}×${height}）：非正方形图在手机主屏/PC 安装图标上会被裁切或弃用`, 'error');
+      toast(t('adminSettings.iconSquareAdvice', { label, width, height }), 'error');
       return 'abort';
     }
     if (key === 'site_app_icon' && width < 192) {
-      toast(`应用图标建议 ≥192×192（当前 ${width}×${width}），过小在 PC 端安装后会模糊`, 'info');
+      toast(t('adminSettings.appIconMinSize', { width }), 'info');
     }
     return '';
   }
@@ -5615,9 +6013,9 @@ function Content() {
       const { url } = await uploadImage(file, key);
       setSettings((prev) => ({ ...prev, [key]: url }));
       setChanged(true);
-      toast('图片已上传，请保存设置', 'success');
+      toast(t('adminSettings.imageUploadedSaveNow'), 'success');
     } catch {
-      toast('上传失败', 'error');
+      toast(t('adminSettings.uploadFailed'), 'error');
     } finally {
       setUploadingKey(null);
       if (imageInputRefs.current[key]) imageInputRefs.current[key]!.value = '';
@@ -5628,7 +6026,7 @@ function Content() {
     if (backupActionInFlight.current) return;
     backupActionInFlight.current = true;
     setExporting(true);
-    setExportProgress({ stage: 'dumping', percent: 0, message: '正在准备...', logs: [] });
+    setExportProgress({ stage: 'dumping', percent: 0, message: t('adminSettings.preparing'), logs: [] });
     try {
       const jobId = await startBackupJob(backupScope);
       localStorage.setItem('backupJobId', jobId);
@@ -5644,7 +6042,7 @@ function Content() {
     } catch (err: unknown) {
       const existingJobId = errorJobId(err);
       if (existingJobId) {
-        toast('已有备份任务正在进行中，已恢复进度显示', 'info');
+        toast(t('adminSettings.backupAlreadyRunningProgressRestored'), 'info');
         localStorage.setItem('backupJobId', existingJobId);
         try {
           const { encrypted } = await pollBackupProgress(existingJobId, (stage, percent, message, logs) => {
@@ -5656,13 +6054,13 @@ function Content() {
           loadBackupStats();
           loadBackupHealth();
         } catch (pollErr: unknown) {
-          toast(errorMessage(pollErr, '查询备份进度失败'), 'error');
+          toast(errorMessage(pollErr, t('adminSettings.queryBackupProgressFailed')), 'error');
         } finally {
           localStorage.removeItem('backupJobId');
         }
       } else {
         localStorage.removeItem('backupJobId');
-        toast(errorMessage(err, '导出失败'), 'error');
+        toast(errorMessage(err, t('adminSettings.exportFailed')), 'error');
       }
     } finally {
       backupActionInFlight.current = false;
@@ -5677,10 +6075,10 @@ function Content() {
       const info = await checkUpdate();
       setUpdateInfo(info);
       if (!info.updateAvailable) {
-        toast('当前已是最新版本', 'success');
+        toast(t('adminSettings.alreadyLatestVersion'), 'success');
       }
     } catch {
-      toast('检查更新失败', 'error');
+      toast(t('adminSettings.checkUpdatesFailed'), 'error');
     } finally {
       setCheckingUpdate(false);
     }
@@ -5726,18 +6124,21 @@ function Content() {
 
   async function handleRecoverInterrupted(info: InterruptedRestoreInfo) {
     if (!info.durableSnapshot || recoveringSnapshot) return;
-    const when = info.startedAt ? new Date(info.startedAt).toLocaleString() : '未知时间';
+    const when = info.startedAt ? new Date(info.startedAt).toLocaleString() : t('adminSettings.unknownTime');
     if (
       !window.confirm(
-        `确认回滚数据库到 ${when} 恢复操作之前的状态？\n\n` +
-          '· 当前数据库会被重置并导入恢复前快照（大库可能需要几十分钟）\n' +
-          '· 回滚期间请勿关闭页面和服务器\n' +
-          '· 若文件目录也被中断替换过，回滚完成后请重新执行一次完整恢复以同步文件',
+        t('adminSettings.confirmRollbackTitle', { time: when }) +
+          '\n\n' +
+          t('adminSettings.rollbackNoteDbReset') +
+          '\n' +
+          t('adminSettings.rollbackNoteKeepOpen') +
+          '\n' +
+          t('adminSettings.rollbackNoteResyncFiles'),
       )
     )
       return;
     setRecoveringSnapshot(info.durableSnapshot);
-    toast('已发起回滚，大库可能需要几十分钟，完成后此告警会自动消失', 'info', 8000);
+    toast(t('adminSettings.rollbackStarted'), 'info', 8000);
     try {
       await recoverInterruptedRestore(info.durableSnapshot);
     } catch {
@@ -5754,23 +6155,25 @@ function Content() {
       }
       setInterruptedRestores(current);
       if (!current.some((item) => item.durableSnapshot === info.durableSnapshot)) {
-        toast('已成功回滚到恢复前的数据库状态', 'success');
+        toast(t('adminSettings.rollbackSucceeded'), 'success');
         setRecoveringSnapshot(null);
         loadBackupList();
         return;
       }
     }
     setRecoveringSnapshot(null);
-    toast('回滚仍在执行或耗时较长，请稍后刷新页面查看告警是否消失', 'info', 8000);
+    toast(t('adminSettings.rollbackStillRunning'), 'info', 8000);
   }
 
   async function handleClearLeftoverDirs() {
     if (leftoverCleanupBusy) return;
     if (
       !window.confirm(
-        '确认清理文件替换阶段残留的旧目录备份？\n\n' +
-          '· 这些目录是恢复被中断时自动保留的旧文件副本，清理后无法再用于文件侧恢复\n' +
-          '· 仅在「数据库已回滚/重新完整恢复成功」或「确认现状可用」后执行',
+        t('adminSettings.confirmClearLeftoverTitle') +
+          '\n\n' +
+          t('adminSettings.leftoverNoteIrreversible') +
+          '\n' +
+          t('adminSettings.rollbackNoteOnlyAfter'),
       )
     )
       return;
@@ -5778,12 +6181,12 @@ function Content() {
     try {
       const result = await clearLeftoverRestoreDirs();
       if (result.ok) {
-        toast(result.message || `已清理 ${result.removed} 个残留目录`, 'success');
+        toast(result.message || t('adminSettings.cleanedResidualDirs', { count: result.removed }), 'success');
       } else {
-        toast(result.message || '部分残留目录清理失败', 'error');
+        toast(result.message || t('adminSettings.someResidualCleanupFailed'), 'error');
       }
     } catch (err: unknown) {
-      toast(errorMessage(err, '清理残留目录失败'), 'error');
+      toast(errorMessage(err, t('adminSettings.cleanupResidualFailed')), 'error');
     } finally {
       setLeftoverCleanupBusy(false);
       loadInterruptedRestoresOnly();
@@ -5804,12 +6207,12 @@ function Content() {
     if (!file) return;
     const lowerName = file.name.toLowerCase();
     if (!lowerName.endsWith('.tar.gz') && !lowerName.endsWith('.tgz')) {
-      toast('请选择 .tar.gz 格式的备份文件', 'error');
+      toast(t('adminSettings.chooseTarGzFile'), 'error');
       return;
     }
     // 大文件分块上传支持断点续传：检测是否有同指纹的未完成会话，提示用户会自动跳过已传分块
     if (file.size >= BACKUP_DIRECT_UPLOAD_THRESHOLD_BYTES && hasResumableChunkedUpload(file)) {
-      toast('检测到上次未完成的上传，将自动从断点续传（已上传的分块不会重传）', 'info');
+      toast(t('adminSettings.resumeDetected'), 'info');
     }
     setRestoreConfirmFile(file);
   }
@@ -5855,14 +6258,14 @@ function Content() {
               setRestoreProgress({
                 stage: 'uploading',
                 percent: 100,
-                message: '分块已传完，服务器正在合并文件（大文件可能需要数分钟）...',
+                message: t('adminSettings.chunksMerging'),
                 logs: [],
               });
             } else if (phase === 'starting') {
               setRestoreProgress({
                 stage: 'uploading',
                 percent: 100,
-                message: '合并完成，正在启动恢复任务...',
+                message: t('adminSettings.mergeDoneStartingRestore'),
                 logs: [],
               });
             }
@@ -5870,7 +6273,12 @@ function Content() {
         );
         localStorage.setItem('restoreJobId', jobId);
         localStorage.setItem(RESTORE_JOB_SOURCE_KEY, 'import-file');
-        setRestoreProgress({ stage: 'uploading', percent: 0, message: '上传完成，正在启动恢复...', logs: [] });
+        setRestoreProgress({
+          stage: 'uploading',
+          percent: 0,
+          message: t('adminSettings.uploadDoneStartingRestore'),
+          logs: [],
+        });
         const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
           setRestoreProgress({ stage, percent, message, logs: logs || [] });
         });
@@ -5881,7 +6289,7 @@ function Content() {
         loadBackupHealth();
       }
     } catch (err: unknown) {
-      handleRestoreFlowError(err, '操作失败');
+      handleRestoreFlowError(err, t('adminSettings.actionFailed'));
     } finally {
       localStorage.removeItem('restoreJobId');
       localStorage.removeItem('importSaveJobId');
@@ -5901,7 +6309,7 @@ function Content() {
       setServerFiles(files);
       setServerFilesScanned(true);
     } catch {
-      toast('获取服务器文件列表失败', 'error');
+      toast(t('adminSettings.fetchServerFilesFailed'), 'error');
     } finally {
       setLoadingServerFiles(false);
     }
@@ -5912,7 +6320,12 @@ function Content() {
     importActionInFlight.current = true;
     setServerFileConfirm(null);
     setImporting(true);
-    setRestoreProgress({ stage: 'starting', percent: 0, message: '正在从服务器路径恢复...', logs: [] });
+    setRestoreProgress({
+      stage: 'starting',
+      percent: 0,
+      message: t('adminSettings.restoringFromServerPath'),
+      logs: [],
+    });
     try {
       const jobId = await importBackupFromPath(file.path);
       localStorage.setItem('restoreJobId', jobId);
@@ -5925,7 +6338,7 @@ function Content() {
       loadBackupStats();
       loadBackupHealth();
     } catch (err: unknown) {
-      handleRestoreFlowError(err, '恢复失败');
+      handleRestoreFlowError(err, t('adminSettings.restoreFailed'));
     } finally {
       localStorage.removeItem('restoreJobId');
       localStorage.removeItem(RESTORE_JOB_SOURCE_KEY);
@@ -5942,14 +6355,14 @@ function Content() {
     if (backupDownloadInFlight.current) return;
     backupDownloadInFlight.current = true;
     try {
-      toast('已发起下载，请在浏览器下载列表查看进度', 'success');
+      toast(t('adminSettings.downloadStarted'), 'success');
       const { rangeSupported } = await downloadBackup(id);
       // 下载已正常发起；这是链路体检结果：代理/CDN 剥 Range 时大文件中断后会整单重下
       if (rangeSupported === false) {
-        toast('当前网络链路不支持断点续传：下载若中断将从头上重新下载，建议网络稳定时下载', 'info', 8000);
+        toast(t('adminSettings.noResumeSupported'), 'info', 8000);
       }
     } catch {
-      toast('下载失败', 'error');
+      toast(t('adminSettings.downloadFailed'), 'error');
     } finally {
       backupDownloadInFlight.current = false;
     }
@@ -5962,9 +6375,9 @@ function Content() {
       setRenamingId(null);
       setRenameValue('');
       loadBackupList();
-      toast('已重命名', 'success');
+      toast(t('adminSettings.renamed'), 'success');
     } catch {
-      toast('重命名失败', 'error');
+      toast(t('adminSettings.renameFailed'), 'error');
     }
   }
 
@@ -5979,10 +6392,10 @@ function Content() {
       loadBackupList();
       loadBackupStats();
       loadBackupHealth();
-      toast('备份已删除', 'success');
+      toast(t('adminSettings.backupDeleted'), 'success');
     } catch (err: unknown) {
       loadBackupList();
-      toast(errorMessage(err, '删除失败'), 'error');
+      toast(errorMessage(err, t('adminSettings.deleteFailed')), 'error');
     } finally {
       backupDeleteInFlight.current = false;
       setDeletingBackupId(null);
@@ -5997,22 +6410,22 @@ function Content() {
   async function handleCancelRestore() {
     const jobId = localStorage.getItem('restoreJobId');
     if (!jobId) {
-      toast('未找到进行中的恢复任务', 'info');
+      toast(t('adminSettings.noActiveRestoreFound'), 'info');
       return;
     }
-    if (!window.confirm('确认停止恢复？数据库重置前的阶段可安全停止，不会修改任何数据。')) return;
+    if (!window.confirm(t('adminSettings.confirmStopRestore'))) return;
     restoreCancelRequestedRef.current = true;
     try {
       const r = await cancelRestore(jobId);
       if (r.cancelled) {
-        toast(r.message || '已停止恢复', 'success');
+        toast(r.message || t('adminSettings.restoreStopped'), 'success');
       } else {
         restoreCancelRequestedRef.current = false;
-        toast(r.message || '当前阶段无法安全停止恢复', 'info');
+        toast(r.message || t('adminSettings.cannotStopRestoreNow'), 'info');
       }
     } catch (err: unknown) {
       restoreCancelRequestedRef.current = false;
-      toast(errorMessage(err, '停止恢复失败'), 'error');
+      toast(errorMessage(err, t('adminSettings.stopRestoreFailed')), 'error');
     }
   }
 
@@ -6031,15 +6444,11 @@ function Content() {
         type="button"
         disabled={restoreStageLocked}
         onClick={handleCancelRestore}
-        title={
-          restoreStageLocked
-            ? '数据库恢复中，无法安全取消（中断会留下不完整数据库）'
-            : '停止恢复（数据库重置前可安全停止，不会修改任何数据）'
-        }
+        title={restoreStageLocked ? t('adminSettings.restoreCannotCancel') : t('adminSettings.stopRestoreSafe')}
         className="px-2.5 py-1.5 text-xs font-medium bg-error-container/10 text-error rounded-md hover:bg-error-container/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
       >
         <Icon name="block" size={13} />
-        停止恢复
+        {t('adminSettings.stopRestore')}
       </button>
     </div>
   ) : null;
@@ -6049,7 +6458,7 @@ function Content() {
     if (restoreActionInFlight.current) return;
     restoreActionInFlight.current = true;
     setRestoring(true);
-    setRestoreProgress({ stage: 'starting', percent: 0, message: '正在启动恢复...', logs: [] });
+    setRestoreProgress({ stage: 'starting', percent: 0, message: t('adminSettings.startingRestore'), logs: [] });
     try {
       const jobId = await startRestore(restoreConfirmId, restoreForce);
       localStorage.setItem('restoreJobId', jobId);
@@ -6065,7 +6474,7 @@ function Content() {
       loadBackupStats();
       loadBackupHealth();
     } catch (err: unknown) {
-      handleRestoreFlowError(err, '恢复失败');
+      handleRestoreFlowError(err, t('adminSettings.restoreFailed'));
     } finally {
       localStorage.removeItem('restoreJobId');
       localStorage.removeItem('restoreConfirmBackupId');
@@ -6085,7 +6494,7 @@ function Content() {
       const result = await scanCleanup();
       setCleanupScan(result);
     } catch (err: unknown) {
-      toast(errorMessage(err, '扫描失败'), 'error');
+      toast(errorMessage(err, t('adminSettings.scanFailed')), 'error');
     } finally {
       setCleanupScanning(false);
     }
@@ -6098,16 +6507,18 @@ function Content() {
     try {
       const result = await executeCleanup(Array.from(cleanupSelectedKeys));
       toast(
-        `清理完成：删除 ${result.deletedCount} 个文件，释放 ${result.freedSizeText}${
-          result.failedCount > 0 ? `，${result.failedCount} 个文件删除失败` : ''
-        }`,
+        t('adminSettings.cleanupDoneSummary', {
+          count: result.deletedCount,
+          size: result.freedSizeText,
+          extra: result.failedCount > 0 ? t('adminSettings.cleanupFailedSuffix', { count: result.failedCount }) : '',
+        }),
         result.failedCount > 0 ? 'info' : 'success',
       );
       setCleanupSelectedKeys(new Set());
       const newScan = await scanCleanup();
       setCleanupScan(newScan);
     } catch (err: unknown) {
-      toast(errorMessage(err, '清理失败'), 'error');
+      toast(errorMessage(err, t('adminSettings.cleanupFailed')), 'error');
     } finally {
       setCleanupRunning(false);
     }
@@ -6115,12 +6526,12 @@ function Content() {
 
   useEffect(() => {
     if (location.hash === '#backup') {
-      setActiveTab('数据备份');
+      setActiveTab(t('adminSettings.tabBackup'));
     }
   }, [location.hash]);
 
   useEffect(() => {
-    if (location.hash !== '#backup' || activeTab !== '数据备份') return;
+    if (location.hash !== '#backup' || activeTab !== 'adminSettings.tabBackup') return;
     window.setTimeout(() => {
       document.getElementById('backup')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 0);
@@ -6130,7 +6541,7 @@ function Content() {
   // 首次进页若已有本地缓存则直接展示并跳过请求（服务端长期缓存 + 新版本才全量刷新，
   // 缓存内容极少变化）；手动点刷新按钮仍会强制拉取。
   useEffect(() => {
-    if (activeTab === '关于系统' && !updateHistoryLoaded && !updateHistoryLoading) {
+    if (activeTab === 'adminSettings.tabAboutSystem' && !updateHistoryLoaded && !updateHistoryLoading) {
       if (updateHistory.length > 0) {
         setUpdateHistoryLoaded(true);
       } else {
@@ -6156,9 +6567,9 @@ function Content() {
       icon: group.icon,
     })),
     ...cacheStorageSectionTabs,
-    { title: '数据备份', icon: 'cloud_upload' },
-    { title: '缓存清理', icon: 'cleaning_services' },
-    { title: '关于系统', icon: 'info' },
+    { title: t('adminSettings.tabBackup'), icon: 'cloud_upload' },
+    { title: t('adminSettings.tabCacheCleanup'), icon: 'cleaning_services' },
+    { title: t('adminSettings.tabAboutSystem'), icon: 'info' },
   ];
   const resolvedActiveTab = activeTab === CACHE_STORAGE_GROUP_TITLE ? CACHE_STORAGE_SECTION_TITLES[0] : activeTab;
   const activeGroup = GROUPS.find((group) => group.title === resolvedActiveTab);
@@ -6172,7 +6583,11 @@ function Content() {
           items: activeCacheStorageSection.items,
         }
       : undefined);
-  const tabItems = tabs.map((tab) => ({ value: tab.title, label: tab.title, icon: tab.icon }));
+  const tabItems = tabs.map((tab) => ({
+    value: tab.title,
+    label: t(tab.title, { defaultValue: tab.title }),
+    icon: tab.icon,
+  }));
   const tabItemMap = new Map(tabItems.map((tab) => [tab.value, tab]));
   const navGroups = SETTINGS_NAV_GROUPS.map((group) => ({
     ...group,
@@ -6182,7 +6597,11 @@ function Content() {
   })).filter((group) => group.sections.length > 0);
   const activeNavGroup =
     navGroups.find((group) => group.sections.some((section) => section.value === resolvedActiveTab)) || navGroups[0];
-  const primaryTabItems = navGroups.map((group) => ({ value: group.title, label: group.title, icon: group.icon }));
+  const primaryTabItems = navGroups.map((group) => ({
+    value: group.title,
+    label: t(group.title, { defaultValue: group.title }),
+    icon: group.icon,
+  }));
   const secondaryTabItems = activeNavGroup?.sections || tabItems;
   const handlePrimaryTabChange = (value: string) => {
     const nextGroup = navGroups.find((group) => group.title === value);
@@ -6199,7 +6618,7 @@ function Content() {
       >
         <span className={`h-1.5 w-1.5 rounded-full ${changed ? 'bg-amber-500' : 'bg-emerald-500'}`} />
         {/* 两个文案都是 7 个字（CJK 等宽），切换时宽度不变，避免页面抖动 */}
-        {changed ? '有未保存的修改' : '当前配置已保存'}
+        {changed ? t('adminSettings.hasUnsavedChanges') : t('adminSettings.configSaved')}
       </span>
       <button
         onClick={handleSave}
@@ -6207,7 +6626,7 @@ function Content() {
         className="inline-flex h-9 w-[6.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3.5 text-xs font-bold text-on-primary shadow-sm transition-colors hover:opacity-95 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none md:h-8"
       >
         <Icon name="save" size={14} />
-        {saving ? '保存中...' : '保存设置'}
+        {saving ? t('adminSettings.saving') : t('adminSettings.saveSettings')}
       </button>
     </div>
   );
@@ -6216,7 +6635,7 @@ function Content() {
       tabs={primaryTabItems}
       value={activeNavGroup?.title || primaryTabItems[0]?.value || ''}
       onChange={handlePrimaryTabChange}
-      mobileTitle="设置分组"
+      mobileTitle={t('adminSettings.settingGroups')}
       mobileTriggerVariant="surface"
       desktopVariant="prominent"
       desktopAlign="end"
@@ -6230,7 +6649,7 @@ function Content() {
           tabs={secondaryTabItems}
           value={resolvedActiveTab}
           onChange={setActiveTab}
-          mobileTitle="设置项"
+          mobileTitle={t('adminSettings.settingItem')}
           mobileTriggerVariant="surface"
           desktopVariant="subtle"
           className="w-full min-w-0"
@@ -6243,7 +6662,7 @@ function Content() {
         tabs={primaryTabItems}
         value={activeNavGroup?.title || primaryTabItems[0]?.value || ''}
         onChange={handlePrimaryTabChange}
-        mobileTitle="设置分组"
+        mobileTitle={t('adminSettings.settingGroups')}
         mobileTriggerVariant="surface"
       />
       {secondarySettingsNavigation}
@@ -6261,8 +6680,8 @@ function Content() {
   return (
     <>
       <AdminManagementPage
-        title="系统设置"
-        description="配置平台的全局行为和访问策略"
+        title={t('adminSettings.pageTitle')}
+        description={t('adminSettings.tabAccessControlDesc')}
         actions={headerActions}
         headerNavigation={settingsHeaderNavigation}
         contentClassName="min-h-0 overflow-hidden"
@@ -6275,7 +6694,7 @@ function Content() {
               <div key={resolvedActiveTab} className="admin-tab-panel flex flex-col gap-4">
                 {activeContentGroup
                   ? [activeContentGroup].map((group) => {
-                      const is3DPreview = group.title === '3D 预览';
+                      const is3DPreview = group.title === 'adminSettings.tab3dPreview';
 
                       // ── 3D Preview: custom tabbed layout ──
                       if (is3DPreview) {
@@ -6294,7 +6713,7 @@ function Content() {
                                     }`}
                                   >
                                     <Icon name={tab.icon} size={14} />
-                                    {tab.label}
+                                    {t(tab.label, { defaultValue: tab.label })}
                                   </button>
                                 ))}
                               </div>
@@ -6303,7 +6722,7 @@ function Content() {
                                 className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface shrink-0 ml-2"
                               >
                                 <Icon name="restart_alt" size={14} />
-                                恢复预设
+                                {t('adminSettings.restorePreset')}
                               </button>
                             </div>
 
@@ -6313,8 +6732,12 @@ function Content() {
                                 <>
                                   <div className="px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center">
                                     <div className="min-w-0 max-w-2xl">
-                                      <p className="text-sm font-medium text-on-surface">选择预设</p>
-                                      <p className="text-xs text-on-surface-variant mt-0.5">选择要编辑的材质预设方案</p>
+                                      <p className="text-sm font-medium text-on-surface">
+                                        {t('adminSettings.choosePreset')}
+                                      </p>
+                                      <p className="text-xs text-on-surface-variant mt-0.5">
+                                        {t('adminSettings.choosePresetDesc')}
+                                      </p>
                                     </div>
                                     <select
                                       name="mat-preset-edit"
@@ -6324,7 +6747,7 @@ function Content() {
                                     >
                                       {MAT_PRESET_OPTIONS.map((opt) => (
                                         <option key={opt.value} value={opt.value}>
-                                          {opt.label}
+                                          {t(opt.label, { defaultValue: opt.label })}
                                         </option>
                                       ))}
                                     </select>
@@ -6339,13 +6762,13 @@ function Content() {
                                       >
                                         <div className="min-w-0 max-w-2xl">
                                           <p className="text-sm font-medium text-on-surface">
-                                            {field.label}
+                                            {t(field.label, { defaultValue: field.label })}
                                             {field.canEmpty && !isEmpty && (
                                               <button
                                                 onClick={() => updateSetting(field.key, '')}
                                                 className="ml-2 text-[10px] text-error hover:underline"
                                               >
-                                                重置
+                                                {t('adminSettings.reset')}
                                               </button>
                                             )}
                                           </p>
@@ -6364,7 +6787,9 @@ function Content() {
                                               type="text"
                                               value={(val as string) || ''}
                                               onChange={(e) => updateSetting(field.key, e.target.value)}
-                                              placeholder={field.canEmpty ? '留空 = 使用模型原色' : '#FF6600'}
+                                              placeholder={
+                                                field.canEmpty ? t('adminSettings.edgeColorEmptyOriginal') : '#FF6600'
+                                              }
                                               className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
                                             />
                                             <input
@@ -6389,7 +6814,9 @@ function Content() {
                                                 }}
                                               />
                                               <span className="text-xs text-on-surface-variant">
-                                                {isEmpty ? '使用模型原色' : '自定义覆盖'}
+                                                {isEmpty
+                                                  ? t('adminSettings.matOriginal')
+                                                  : t('adminSettings.customOverride')}
                                               </span>
                                             </div>
                                             {!isEmpty && (
@@ -6487,11 +6914,13 @@ function Content() {
                                           <>
                                             <div className="min-w-0 max-w-2xl">
                                               <p className="text-sm font-medium text-on-surface">
-                                                {item.label === '__preset_checkboxes__' ? '可见预设' : item.label}
+                                                {item.label === '__preset_checkboxes__'
+                                                  ? t('adminSettings.visiblePresets')
+                                                  : t(item.label, { defaultValue: item.label })}
                                               </p>
                                               <p className="text-xs text-on-surface-variant mt-0.5">
                                                 {item.label === '__preset_checkboxes__'
-                                                  ? '勾选要在模型查看器工具栏中显示的材质预设'
+                                                  ? t('adminSettings.visiblePresetsDesc')
                                                   : item.desc}
                                               </p>
                                             </div>
@@ -6527,7 +6956,7 @@ function Content() {
                                                       }`}
                                                     >
                                                       <Icon name={enabled ? 'check_circle' : 'circle'} size={14} />
-                                                      {opt.label}
+                                                      {t(opt.label, { defaultValue: opt.label })}
                                                     </button>
                                                   );
                                                 })}
@@ -6561,7 +6990,7 @@ function Content() {
                                                       }`}
                                                     >
                                                       <Icon name={enabled ? 'check_circle' : 'circle'} size={14} />
-                                                      {opt.label}
+                                                      {t(opt.label, { defaultValue: opt.label })}
                                                     </button>
                                                   );
                                                 })}
@@ -6596,7 +7025,7 @@ function Content() {
                                                   {settings[item.key] && (
                                                     <SafeImage
                                                       src={settings[item.key] as string}
-                                                      alt="预览"
+                                                      alt={t('adminSettings.preview')}
                                                       className={`${['site_icon', 'site_favicon', 'site_app_icon'].includes(String(item.key)) ? 'h-12 w-12' : 'h-12 w-32'} object-contain bg-surface-container-lowest rounded border border-outline-variant/20`}
                                                       fallbackIcon="image"
                                                     />
@@ -6618,10 +7047,10 @@ function Content() {
                                                       className="px-3 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors"
                                                     >
                                                       {uploadingKey === item.key
-                                                        ? '上传中...'
+                                                        ? t('adminSettings.uploading')
                                                         : settings[item.key]
-                                                          ? '更换图片'
-                                                          : '上传图片'}
+                                                          ? t('adminSettings.changeImage')
+                                                          : t('adminSettings.uploadImage')}
                                                     </button>
                                                     {settings[item.key] && (
                                                       <button
@@ -6630,7 +7059,7 @@ function Content() {
                                                         }}
                                                         className="px-2 py-1.5 text-xs text-error hover:bg-error-container/10 rounded-md transition-colors"
                                                       >
-                                                        移除
+                                                        {t('adminSettings.removeItem')}
                                                       </button>
                                                     )}
                                                   </div>
@@ -6687,7 +7116,7 @@ function Content() {
                                                     name="settings"
                                                     value={settings[item.key] as string}
                                                     onChange={(e) => updateSetting(item.key, e.target.value)}
-                                                    placeholder={item.desc}
+                                                    placeholder={t(item.desc, { defaultValue: item.desc })}
                                                     rows={3}
                                                     className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 resize-y font-mono"
                                                   />
@@ -6701,7 +7130,7 @@ function Content() {
                                                 >
                                                   {item.options?.map((opt) => (
                                                     <option key={opt.value} value={opt.value}>
-                                                      {opt.label}
+                                                      {t(opt.label, { defaultValue: opt.label })}
                                                     </option>
                                                   ))}
                                                 </select>
@@ -6743,7 +7172,7 @@ function Content() {
                                                   maxLength={item.key === 'contact_phone' ? 32 : undefined}
                                                   value={settings[item.key] as string}
                                                   onChange={(e) => updateSetting(item.key, e.target.value)}
-                                                  placeholder={item.desc}
+                                                  placeholder={t(item.desc, { defaultValue: item.desc })}
                                                   className="w-full lg:max-w-md bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30"
                                                 />
                                               ))
@@ -6769,7 +7198,7 @@ function Content() {
                                 return (
                                   <div key={`section-${itemIndex}`} className="px-4 sm:px-6 pt-5 pb-1">
                                     <p className="text-xs font-bold uppercase tracking-wider text-primary/70">
-                                      {item._section}
+                                      {t(item._section, { defaultValue: item._section })}
                                     </p>
                                     <div className="mt-1 h-px bg-outline-variant/10" />
                                   </div>
@@ -6827,8 +7256,12 @@ function Content() {
                                   ) : (
                                     <>
                                       <div className="min-w-0 max-w-2xl">
-                                        <p className="text-sm font-medium text-on-surface">{item.label}</p>
-                                        <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
+                                        <p className="text-sm font-medium text-on-surface">
+                                          {t(item.label, { defaultValue: item.label })}
+                                        </p>
+                                        <p className="text-xs text-on-surface-variant mt-0.5">
+                                          {t(item.desc, { defaultValue: item.desc })}
+                                        </p>
                                       </div>
                                       {item.key === 'ui_enabled_locales' ? (
                                         <div className="flex flex-wrap gap-2">
@@ -6859,7 +7292,7 @@ function Content() {
                                                 }`}
                                               >
                                                 <Icon name={enabled ? 'check_circle' : 'circle'} size={14} />
-                                                {opt.label}
+                                                {t(opt.label, { defaultValue: opt.label })}
                                               </button>
                                             );
                                           })}
@@ -6888,17 +7321,21 @@ function Content() {
                                             saving={saving}
                                             settings={settings}
                                             templateLabel={
-                                              resolvedTestEmailTemplate?.label || resolvedTestEmailTemplateKey
+                                              (resolvedTestEmailTemplate
+                                                ? t(resolvedTestEmailTemplate.label, {
+                                                    defaultValue: resolvedTestEmailTemplate.label,
+                                                  })
+                                                : '') || resolvedTestEmailTemplateKey
                                             }
                                             templateKey={resolvedTestEmailTemplateKey}
                                           />
                                         ) : item.type === 'cache-test' ? (
                                           <SettingsConnectivityTestPanel
                                             icon="memory"
-                                            title="执行 Redis 真实读写测试"
-                                            summary="会先保存当前设置，再执行 PING、写入、读取和删除测试键"
-                                            buttonLabel="测试 Redis"
-                                            testingLabel="测试中..."
+                                            title={t('adminSettings.runRedisTest')}
+                                            summary={t('adminSettings.cacheTestDesc')}
+                                            buttonLabel={t('adminSettings.testRedis')}
+                                            testingLabel={t('adminSettings.testing')}
                                             testing={testingCache}
                                             changed={changed}
                                             saving={saving}
@@ -6908,10 +7345,10 @@ function Content() {
                                         ) : item.type === 'storage-test' ? (
                                           <SettingsConnectivityTestPanel
                                             icon="storage"
-                                            title="执行存储真实读写测试"
-                                            summary="会先保存当前设置，再写入、读取并删除一个临时对象"
-                                            buttonLabel="测试存储"
-                                            testingLabel="测试中..."
+                                            title={t('adminSettings.runStorageTest')}
+                                            summary={t('adminSettings.storageTestDesc')}
+                                            buttonLabel={t('adminSettings.testStorage')}
+                                            testingLabel={t('adminSettings.testing')}
                                             testing={testingStorage}
                                             changed={changed}
                                             saving={saving}
@@ -6935,7 +7372,7 @@ function Content() {
                                             {settings[item.key] && (
                                               <SafeImage
                                                 src={settings[item.key] as string}
-                                                alt="预览"
+                                                alt={t('adminSettings.preview')}
                                                 className={`${['site_icon', 'site_favicon', 'site_app_icon'].includes(String(item.key)) ? 'h-12 w-12' : 'h-12 w-32'} object-contain bg-surface-container-lowest rounded border border-outline-variant/20`}
                                                 fallbackIcon="image"
                                               />
@@ -6957,10 +7394,10 @@ function Content() {
                                                 className="px-3 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors"
                                               >
                                                 {uploadingKey === item.key
-                                                  ? '上传中...'
+                                                  ? t('adminSettings.uploading')
                                                   : settings[item.key]
-                                                    ? '更换图片'
-                                                    : '上传图片'}
+                                                    ? t('adminSettings.changeImage')
+                                                    : t('adminSettings.uploadImage')}
                                               </button>
                                               {settings[item.key] && (
                                                 <button
@@ -6969,7 +7406,7 @@ function Content() {
                                                   }}
                                                   className="px-2 py-1.5 text-xs text-error hover:bg-error-container/10 rounded-md transition-colors"
                                                 >
-                                                  移除
+                                                  {t('adminSettings.removeItem')}
                                                 </button>
                                               )}
                                             </div>
@@ -7020,13 +7457,15 @@ function Content() {
                                               name="settings"
                                               value={settings[item.key] as string}
                                               onChange={(e) => updateSetting(item.key, e.target.value)}
-                                              placeholder={item.desc}
+                                              placeholder={t(item.desc, { defaultValue: item.desc })}
                                               rows={3}
                                               className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 resize-y font-mono"
                                             />
                                             {item.key === 'allowed_hosts' && typeof window !== 'undefined' && (
                                               <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                                                <span className="text-xs text-on-surface-variant">当前访问域名：</span>
+                                                <span className="text-xs text-on-surface-variant">
+                                                  {t('adminSettings.currentAccessDomain')}
+                                                </span>
                                                 <code className="text-xs font-mono text-primary-container bg-primary-container/10 px-2 py-0.5 rounded break-all">
                                                   {window.location.host}
                                                 </code>
@@ -7040,7 +7479,7 @@ function Content() {
                                                   }}
                                                   className="text-xs text-primary-container hover:underline"
                                                 >
-                                                  加入授权
+                                                  {t('adminSettings.authorizeDomain')}
                                                 </button>
                                               </div>
                                             )}
@@ -7054,7 +7493,7 @@ function Content() {
                                           >
                                             {item.options?.map((opt) => (
                                               <option key={opt.value} value={opt.value}>
-                                                {opt.label}
+                                                {t(opt.label, { defaultValue: opt.label })}
                                               </option>
                                             ))}
                                           </select>
@@ -7102,7 +7541,7 @@ function Content() {
                                             onChange={(e) => {
                                               if (!copyrightInputLocked) updateSetting(item.key, e.target.value);
                                             }}
-                                            placeholder={item.desc}
+                                            placeholder={t(item.desc, { defaultValue: item.desc })}
                                             disabled={copyrightInputLocked}
                                             className={`w-full lg:max-w-md bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 ${
                                               copyrightInputLocked
@@ -7123,7 +7562,7 @@ function Content() {
                     })
                   : null}
 
-                {activeTab === '数据备份' && (
+                {activeTab === 'adminSettings.tabBackup' && (
                   <>
                     {/* Data Backup Section */}
                     <div
@@ -7137,10 +7576,11 @@ function Content() {
                           <div className="flex items-start gap-2">
                             <Icon name="warning" size={18} className="text-error mt-0.5 shrink-0" />
                             <div className="min-w-0">
-                              <p className="text-sm font-bold text-error">检测到被中断的恢复任务，数据库可能不完整</p>
+                              <p className="text-sm font-bold text-error">
+                                {t('adminSettings.interruptedRestoreTitle')}
+                              </p>
                               <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">
-                                恢复操作在数据写入阶段被强制中断（服务器重启/断电/OOM）。系统已自动保留恢复前的数据库快照，
-                                可一键回滚；普通用户在处理完成前会看到维护页。
+                                {t('adminSettings.interruptedRestoreBody')}
                               </p>
                             </div>
                           </div>
@@ -7151,9 +7591,15 @@ function Content() {
                             >
                               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-on-surface-variant">
                                 <span>
-                                  中断任务: <span className="font-mono">{info.jobId}</span>
+                                  {t('adminSettings.interruptedJob')} <span className="font-mono">{info.jobId}</span>
                                 </span>
-                                {info.startedAt && <span>开始于 {new Date(info.startedAt).toLocaleString()}</span>}
+                                {info.startedAt && (
+                                  <span>
+                                    {t('adminSettings.startedAtTime', {
+                                      time: new Date(info.startedAt).toLocaleString(),
+                                    })}
+                                  </span>
+                                )}
                               </div>
                               {info.durableSnapshot ? (
                                 <div className="flex flex-wrap items-center gap-2">
@@ -7165,24 +7611,26 @@ function Content() {
                                   >
                                     <Icon name="restore" size={13} />
                                     {recoveringSnapshot === info.durableSnapshot
-                                      ? '回滚进行中…'
-                                      : '一键回滚到恢复前状态'}
+                                      ? t('adminSettings.rollbackInProgress')
+                                      : t('adminSettings.rollbackOneClick')}
                                   </button>
                                   <span className="text-xs text-on-surface-variant">
-                                    回滚会把数据库恢复到本次恢复操作之前的状态（大库可能需要几十分钟）
+                                    {t('adminSettings.rollbackScopeDesc')}
                                   </span>
                                 </div>
                               ) : (
                                 <p className="text-xs text-on-surface-variant leading-relaxed">
-                                  数据库已导入成功，仅文件目录替换阶段被中断（数据库与文件可能不一致）。
-                                  建议：重新执行一次完整恢复以同步文件；若确认现状可用，可清理下方残留旧目录。
+                                  {t('adminSettings.dbOkFilesInterrupted')}
+                                  {t('adminSettings.dbOkFilesAdvice')}
                                 </p>
                               )}
                               {(info.leftoverRestoreBackupDirs?.length ?? 0) > 0 && (
                                 <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-outline-variant/20">
                                   <span className="text-xs text-on-surface-variant">
-                                    文件替换阶段残留 {info.leftoverRestoreBackupDirs!.length} 个旧目录备份
-                                    （数据库回滚/重新恢复成功后可清理）
+                                    {t('adminSettings.leftoverDirsCount', {
+                                      count: info.leftoverRestoreBackupDirs!.length,
+                                    })}
+                                    {t('adminSettings.leftoverDirsCleanHint')}
                                   </span>
                                   <button
                                     type="button"
@@ -7190,7 +7638,9 @@ function Content() {
                                     disabled={leftoverCleanupBusy}
                                     className="px-2.5 py-1 text-[11px] font-medium text-error border border-error/40 rounded-md hover:bg-error/10 disabled:opacity-50 transition-colors"
                                   >
-                                    {leftoverCleanupBusy ? '清理中…' : '清理残留目录'}
+                                    {leftoverCleanupBusy
+                                      ? t('adminSettings.cleaningEllipsis')
+                                      : t('adminSettings.cleanupResidualDirs')}
                                   </button>
                                 </div>
                               )}
@@ -7203,15 +7653,17 @@ function Content() {
                         <div className="px-4 py-4 sm:px-6">
                           <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                             <div>
-                              <p className="text-sm font-medium text-on-surface">备份与保障</p>
+                              <p className="text-sm font-medium text-on-surface">
+                                {t('adminSettings.backupAndProtection')}
+                              </p>
                               <p className="text-xs text-on-surface-variant mt-0.5">
-                                支持整站备份，也可以只备份指定模块
+                                {t('adminSettings.backupScopeHint')}
                               </p>
                             </div>
                             <div className="flex shrink-0 items-center gap-2">
                               {backupStats?.totalDataSizeText && (
                                 <span className="text-xs text-on-surface-variant">
-                                  整站约 {backupStats.totalDataSizeText}
+                                  {t('adminSettings.fullSiteAbout', { size: backupStats.totalDataSizeText })}
                                 </span>
                               )}
                               {backupHealth && (
@@ -7221,7 +7673,9 @@ function Content() {
                                   className="px-2.5 py-1.5 text-[11px] font-medium text-primary-container hover:bg-primary-container/10 rounded-md disabled:opacity-50 transition-colors flex items-center gap-1"
                                 >
                                   <Icon name="fact_check" size={13} />
-                                  {checkingBackupPolicy ? '体检中...' : '策略体检'}
+                                  {checkingBackupPolicy
+                                    ? t('adminSettings.healthChecking')
+                                    : t('adminSettings.policyCheck')}
                                 </button>
                               )}
                             </div>
@@ -7297,18 +7751,24 @@ function Content() {
                                     className={`rounded-full border px-2 py-0.5 font-medium ${getBackupStatusClasses(toBackupProtectionStatus(backupPolicyCheck.status))}`}
                                   >
                                     {backupPolicyCheck.status === 'ok'
-                                      ? '体检通过'
+                                      ? t('adminSettings.healthPassed')
                                       : backupPolicyCheck.status === 'error'
-                                        ? `${backupPolicyIssueCount} 项异常`
-                                        : `${backupPolicyIssueCount} 项需关注`}
+                                        ? t('adminSettings.issueErrorCount', { count: backupPolicyIssueCount })
+                                        : t('adminSettings.issueWarningCount', { count: backupPolicyIssueCount })}
                                   </span>
-                                  <span>体检时间：{new Date(backupPolicyCheck.checkedAt).toLocaleString('zh-CN')}</span>
+                                  <span>
+                                    {t('adminSettings.checkTime', {
+                                      time: new Date(backupPolicyCheck.checkedAt).toLocaleString(),
+                                    })}
+                                  </span>
                                   <button
                                     type="button"
                                     onClick={() => setPolicyDetailOpen((open) => !open)}
                                     className="text-primary-container hover:underline flex items-center gap-0.5"
                                   >
-                                    {policyDetailOpen ? '收起明细' : '查看明细'}
+                                    {policyDetailOpen
+                                      ? t('adminSettings.collapseDetails')
+                                      : t('adminSettings.viewDetails')}
                                     <Icon name={policyDetailOpen ? 'expand_less' : 'expand_more'} size={12} />
                                   </button>
                                   {policyDetailOpen && (
@@ -7339,7 +7799,7 @@ function Content() {
                           <div
                             className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5"
                             role="listbox"
-                            aria-label="备份范围"
+                            aria-label={t('adminSettings.backupScope')}
                           >
                             {BACKUP_SCOPE_OPTIONS.map((option) => {
                               const active = option.value === backupScope;
@@ -7372,7 +7832,7 @@ function Content() {
                                         active ? 'text-primary-container' : 'text-on-surface'
                                       }`}
                                     >
-                                      {option.label}
+                                      {t(option.label, { defaultValue: option.label })}
                                     </span>
                                     {active && (
                                       <Icon name="check" size={13} className="shrink-0 text-primary-container" />
@@ -7384,7 +7844,7 @@ function Content() {
                                         {backupScopeCounts[option.value]}
                                       </span>
                                     )}
-                                    {option.desc}
+                                    {t(option.desc, { defaultValue: option.desc })}
                                   </span>
                                 </button>
                               );
@@ -7396,7 +7856,11 @@ function Content() {
                             className="mt-2 w-full px-4 py-2.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shrink-0"
                           >
                             <Icon name="add" size={14} />
-                            {exporting ? `${exportProgress.percent}%` : `创建${selectedBackupScope.label}备份`}
+                            {exporting
+                              ? `${exportProgress.percent}%`
+                              : t('adminSettings.createScopeBackup', {
+                                  scope: t(selectedBackupScope.label, { defaultValue: selectedBackupScope.label }),
+                                })}
                           </button>
                           {exporting && <TaskProgressCard progress={exportProgress} />}
                         </div>
@@ -7404,7 +7868,9 @@ function Content() {
                         {/* Backup List */}
                         {backupList.length > 0 && (
                           <div className="px-4 py-4 sm:px-6">
-                            <p className="text-sm font-medium text-on-surface mb-3">备份记录</p>
+                            <p className="text-sm font-medium text-on-surface mb-3">
+                              {t('adminSettings.backupRecords')}
+                            </p>
                             <div className="space-y-2">
                               {backupList.map((b) => (
                                 <div
@@ -7435,7 +7901,7 @@ function Content() {
                                               onClick={() => handleRename(b.id)}
                                               className="px-2 py-1.5 text-xs text-primary-container hover:bg-primary-container/10 rounded-md"
                                             >
-                                              保存
+                                              {t('common.save')}
                                             </button>
                                             <button
                                               onClick={() => {
@@ -7444,7 +7910,7 @@ function Content() {
                                               }}
                                               className="px-2 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded-md"
                                             >
-                                              取消
+                                              {t('common.cancel')}
                                             </button>
                                           </div>
                                         </div>
@@ -7457,27 +7923,43 @@ function Content() {
                                         <span>{b.fileSizeText}</span>
                                         {b.scope && b.scope !== 'full' ? (
                                           <>
-                                            <span>{b.itemCount ?? b.modelCount ?? 0} 条记录</span>
-                                            <span>{b.fileCount ?? b.thumbnailCount ?? 0} 个资源文件</span>
+                                            <span>
+                                              {t('adminSettings.recordCountShort', {
+                                                count: b.itemCount ?? b.modelCount ?? 0,
+                                              })}
+                                            </span>
+                                            <span>
+                                              {t('adminSettings.assetFileCount', {
+                                                count: b.fileCount ?? b.thumbnailCount ?? 0,
+                                              })}
+                                            </span>
                                           </>
                                         ) : (
                                           <>
-                                            <span>{b.modelCount ?? 0} 个 STEP 模型</span>
-                                            <span>数据库 {b.dbSize}</span>
+                                            <span>
+                                              {t('adminSettings.stepModelCount', { count: b.modelCount ?? 0 })}
+                                            </span>
+                                            <span>{t('adminSettings.dbSizeShort', { size: b.dbSize })}</span>
                                           </>
                                         )}
-                                        {b.manifestVersion && <span>清单 v{b.manifestVersion}</span>}
-                                        {b.verifiedAt && <span>已校验</span>}
+                                        {b.manifestVersion && (
+                                          <span>
+                                            {t('adminSettings.manifestVersionShort', { version: b.manifestVersion })}
+                                          </span>
+                                        )}
+                                        {b.verifiedAt && <span>{t('adminSettings.verifiedBadge')}</span>}
                                         {b.encrypted && (
                                           <span className="inline-flex items-center gap-0.5 text-green-600">
                                             <Icon name="lock" size={11} />
-                                            已加密
+                                            {t('adminSettings.encryptedBadge')}
                                           </span>
                                         )}
                                       </div>
                                       {b.filePath && (
                                         <div className="mt-1.5 flex items-center gap-1.5 min-w-0">
-                                          <span className="shrink-0 text-xs text-on-surface-variant">路径</span>
+                                          <span className="shrink-0 text-xs text-on-surface-variant">
+                                            {t('adminSettings.pathLabel')}
+                                          </span>
                                           <code className="min-w-0 truncate font-mono text-[11px] text-on-surface-variant/80 bg-surface-container-lowest/40 px-1.5 py-0.5 rounded">
                                             {b.filePath}
                                           </code>
@@ -7485,10 +7967,10 @@ function Content() {
                                             type="button"
                                             onClick={() => {
                                               copyText(b.filePath!)
-                                                .then(() => toast('已复制路径', 'success'))
-                                                .catch(() => toast('复制失败', 'error'));
+                                                .then(() => toast(t('adminSettings.pathCopied'), 'success'))
+                                                .catch(() => toast(t('adminSettings.copyFailed'), 'error'));
                                             }}
-                                            title="复制路径"
+                                            title={t('adminSettings.copyPath')}
                                             className="shrink-0 text-on-surface-variant/60 hover:text-on-surface-variant transition-colors"
                                           >
                                             <Icon name="content_copy" size={13} />
@@ -7503,7 +7985,7 @@ function Content() {
                                         className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-primary-container/15 text-primary-container rounded-md hover:bg-primary-container/25 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
                                       >
                                         <Icon name="restore" size={13} />
-                                        恢复
+                                        {t('adminSettings.restoreAction')}
                                       </button>
                                       <button
                                         onClick={() => handleDownloadBackup(b.id)}
@@ -7511,7 +7993,7 @@ function Content() {
                                         className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
                                       >
                                         <Icon name="download" size={13} />
-                                        下载
+                                        {t('common.download')}
                                       </button>
                                       <button
                                         onClick={() => setVerifyConfirmId(b.id)}
@@ -7519,7 +8001,9 @@ function Content() {
                                         className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
                                       >
                                         <Icon name="verified" size={13} />
-                                        {verifyingBackupId === b.id ? `${verifyProgress.percent}%` : '校验'}
+                                        {verifyingBackupId === b.id
+                                          ? `${verifyProgress.percent}%`
+                                          : t('adminSettings.verify')}
                                       </button>
                                       <button
                                         onClick={() => {
@@ -7530,7 +8014,7 @@ function Content() {
                                         className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
                                       >
                                         <Icon name="edit" size={13} />
-                                        重命名
+                                        {t('adminSettings.renameAction')}
                                       </button>
                                       <button
                                         onClick={() => setBackupDeleteConfirm({ id: b.id, name: b.name })}
@@ -7538,7 +8022,9 @@ function Content() {
                                         className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-error-container/10 text-error rounded-md hover:bg-error-container/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
                                       >
                                         <Icon name="delete" size={13} />
-                                        {deletingBackupId === b.id ? '删除中' : '删除'}
+                                        {deletingBackupId === b.id
+                                          ? t('adminSettings.deleting')
+                                          : t('adminSettings.remove')}
                                       </button>
                                     </div>
                                   </div>
@@ -7556,13 +8042,17 @@ function Content() {
                                         <div className="flex-1">
                                           {!restoring ? (
                                             <>
-                                              <p className="text-xs font-medium text-on-surface">确认恢复到此备份？</p>
+                                              <p className="text-xs font-medium text-on-surface">
+                                                {t('adminSettings.confirmRestoreToBackup')}
+                                              </p>
                                               <p className="text-xs text-error/80 mt-1">
                                                 {b.scope === 'users'
-                                                  ? '此操作将按邮箱/用户名合并恢复用户：已有用户更新资料但保留现有密码，新用户将使用备份中的密码。不可撤销！'
+                                                  ? t('adminSettings.confirmRestoreUsers')
                                                   : b.scope && b.scope !== 'full'
-                                                    ? `此操作将只覆盖当前${getBackupScopeLabel(b.scope, b.scopeLabel)}数据和资源文件，不可撤销！`
-                                                    : '此操作将覆盖当前数据库和模型文件，不可撤销！'}
+                                                    ? t('adminSettings.confirmScopedRestoreOverwrite', {
+                                                        scope: getBackupScopeLabel(b.scope, b.scopeLabel),
+                                                      })
+                                                    : t('adminSettings.confirmRestoreOverwrite')}
                                               </p>
                                               <label className="flex items-start gap-2 mt-2 cursor-pointer select-none">
                                                 <input
@@ -7573,9 +8063,9 @@ function Content() {
                                                   className="mt-0.5 accent-primary"
                                                 />
                                                 <span className="text-[11px] leading-tight text-on-surface-variant">
-                                                  跨服务器迁移：跳过签名校验
+                                                  {t('adminSettings.skipSignatureCheck')}
                                                   <span className="block text-on-surface-variant/70">
-                                                    备份来自另一台服务器、签名校验失败时勾选（仍校验文件完整性）
+                                                    {t('adminSettings.skipSignatureCheckDesc')}
                                                   </span>
                                                 </span>
                                               </label>
@@ -7584,13 +8074,13 @@ function Content() {
                                                   onClick={handleRestoreConfirm}
                                                   className="px-3 py-1 text-xs font-medium bg-error text-on-error-container rounded-md hover:opacity-90 transition-opacity"
                                                 >
-                                                  确认恢复
+                                                  {t('adminSettings.confirmRestoreAction')}
                                                 </button>
                                                 <button
                                                   onClick={() => setRestoreConfirmId(null)}
                                                   className="px-3 py-1 text-xs text-on-surface-variant border border-outline-variant/30 rounded-md hover:bg-surface-container-high/50 transition-colors"
                                                 >
-                                                  取消
+                                                  {t('common.cancel')}
                                                 </button>
                                               </div>
                                             </>
@@ -7614,9 +8104,9 @@ function Content() {
                         <div className="px-4 py-4 sm:px-6">
                           <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                             <div>
-                              <p className="text-sm font-medium text-on-surface">导入恢复</p>
+                              <p className="text-sm font-medium text-on-surface">{t('adminSettings.importRestore')}</p>
                               <p className="text-xs text-on-surface-variant mt-0.5">
-                                上传备份文件恢复数据（将覆盖当前数据）
+                                {t('adminSettings.importRestoreDesc')}
                               </p>
                             </div>
                             <div className="grid grid-cols-2 gap-2 sm:flex">
@@ -7634,7 +8124,7 @@ function Content() {
                                 className="px-4 py-2.5 sm:py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
                               >
                                 <Icon name="upload" size={14} />
-                                本地上传
+                                {t('adminSettings.localUpload')}
                               </button>
                               <button
                                 onClick={() => {
@@ -7645,7 +8135,7 @@ function Content() {
                                 className="px-4 py-2.5 sm:py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
                               >
                                 <Icon name="folder" size={14} />
-                                服务器文件
+                                {t('adminSettings.serverFile')}
                               </button>
                             </div>
                           </div>
@@ -7654,14 +8144,16 @@ function Content() {
                             <div className="mt-3">
                               {/* Phase 1: Upload（独立进度段，切换到服务端阶段后隐藏，避免回跳） */}
                               {!restoreProgress.message && uploadProgress < 100 && (
-                                <TaskProgressCard progress={{ message: '上传中...', percent: uploadProgress }} />
+                                <TaskProgressCard
+                                  progress={{ message: t('adminSettings.uploading'), percent: uploadProgress }}
+                                />
                               )}
                               {/* Phase 2: Server processing（服务端任务有自己的 0-100 进度） */}
                               {(restoreProgress.message || uploadProgress >= 100) && (
                                 <div className="space-y-2">
                                   <TaskProgressCard
                                     progress={{
-                                      message: restoreProgress.message || '上传完成，正在处理...',
+                                      message: restoreProgress.message || t('adminSettings.uploadDoneProcessing'),
                                       percent: restoreProgress.message ? restoreProgress.percent : 100,
                                       logs: restoreProgress.logs,
                                     }}
@@ -7675,7 +8167,7 @@ function Content() {
                           {/* Server file list */}
                           {loadingServerFiles && (
                             <div className="mt-3 text-xs text-on-surface-variant animate-pulse">
-                              正在扫描服务器文件...
+                              {t('adminSettings.scanningServerFiles')}
                             </div>
                           )}
                           {!loadingServerFiles && serverFiles.length > 0 && !importing && (
@@ -7697,14 +8189,16 @@ function Content() {
                                     disabled={adminBusy}
                                     className="w-full sm:w-auto sm:ml-2 px-3 py-1.5 text-xs font-medium text-primary border border-primary/30 rounded hover:bg-primary/10 disabled:opacity-50 transition-colors shrink-0"
                                   >
-                                    恢复
+                                    {t('adminSettings.restoreAction')}
                                   </button>
                                 </div>
                               ))}
                             </div>
                           )}
                           {!loadingServerFiles && serverFilesScanned && serverFiles.length === 0 && (
-                            <div className="mt-3 text-xs text-on-surface-variant">未找到服务器上的备份文件</div>
+                            <div className="mt-3 text-xs text-on-surface-variant">
+                              {t('adminSettings.noServerBackupFiles')}
+                            </div>
                           )}
 
                           {/* Server file confirm dialog */}
@@ -7713,26 +8207,29 @@ function Content() {
                               <div className="flex items-start gap-3">
                                 <Icon name="warning" size={20} className="text-error shrink-0 mt-0.5" />
                                 <div className="flex-1">
-                                  <p className="text-sm font-medium text-on-surface">确认从服务器文件恢复</p>
+                                  <p className="text-sm font-medium text-on-surface">
+                                    {t('adminSettings.confirmServerFileRestore')}
+                                  </p>
                                   <p className="text-xs text-on-surface-variant mt-1">
-                                    文件：{serverFileConfirm.name}（{(serverFileConfirm.size / 1024 / 1024).toFixed(1)}{' '}
-                                    MB）
+                                    {t('adminSettings.fileLabelColon')}
+                                    {serverFileConfirm.name}（{(serverFileConfirm.size / 1024 / 1024).toFixed(1)} MB）
                                   </p>
                                   <p className="text-xs text-on-surface-variant mt-0.5 break-all">
-                                    路径：{serverFileConfirm.path}
+                                    {t('adminSettings.pathLabelColon')}
+                                    {serverFileConfirm.path}
                                   </p>
                                   <div className="mt-3 grid grid-cols-1 gap-2 sm:flex">
                                     <button
                                       onClick={() => handleServerFileImport(serverFileConfirm)}
                                       className="px-4 py-1.5 text-xs font-medium text-on-error bg-error rounded-md hover:bg-error/90 transition-colors"
                                     >
-                                      确认恢复（将覆盖当前数据）
+                                      {t('adminSettings.confirmRestoreOverwriteData')}
                                     </button>
                                     <button
                                       onClick={() => setServerFileConfirm(null)}
                                       className="px-4 py-1.5 text-xs text-on-surface-variant border border-outline-variant/30 rounded-md hover:bg-surface-container-high/50 transition-colors"
                                     >
-                                      取消
+                                      {t('common.cancel')}
                                     </button>
                                   </div>
                                 </div>
@@ -7745,28 +8242,34 @@ function Content() {
                               <div className="flex items-start gap-3">
                                 <Icon name="warning" size={20} className="text-error shrink-0 mt-0.5" />
                                 <div className="flex-1">
-                                  <p className="text-sm font-medium text-on-surface">选择导入方式</p>
+                                  <p className="text-sm font-medium text-on-surface">
+                                    {t('adminSettings.chooseImportMethod')}
+                                  </p>
                                   <p className="text-xs text-on-surface-variant mt-1">
-                                    文件：{restoreConfirmFile.name}（
-                                    {(restoreConfirmFile.size / 1024 / 1024).toFixed(1)} MB）
+                                    {t('adminSettings.fileLabelColon')}
+                                    {restoreConfirmFile.name}（{(restoreConfirmFile.size / 1024 / 1024).toFixed(1)} MB）
                                   </p>
                                   <div className="mt-3 space-y-2">
                                     <button
                                       onClick={() => handleImport('restore')}
                                       className="w-full text-left px-3 py-2 bg-error/10 border border-error/20 rounded-md hover:bg-error/15 transition-colors"
                                     >
-                                      <p className="text-xs font-medium text-error">直接恢复</p>
+                                      <p className="text-xs font-medium text-error">
+                                        {t('adminSettings.directRestore')}
+                                      </p>
                                       <p className="text-xs text-on-surface-variant mt-0.5">
-                                        整站备份将覆盖数据库和全部资源文件；模块备份只覆盖对应模块（不可撤销）
+                                        {t('adminSettings.directRestoreDesc')}
                                       </p>
                                     </button>
                                     <button
                                       onClick={() => handleImport('save')}
                                       className="w-full text-left px-3 py-2 bg-primary/10 border border-primary/20 rounded-md hover:bg-primary/15 transition-colors"
                                     >
-                                      <p className="text-xs font-medium text-primary">保存到备份列表</p>
+                                      <p className="text-xs font-medium text-primary">
+                                        {t('adminSettings.saveToBackupList')}
+                                      </p>
                                       <p className="text-xs text-on-surface-variant mt-0.5">
-                                        保存后可随时通过「恢复备份」按需恢复
+                                        {t('adminSettings.saveToBackupListDesc')}
                                       </p>
                                     </button>
                                   </div>
@@ -7774,7 +8277,7 @@ function Content() {
                                     onClick={() => setRestoreConfirmFile(null)}
                                     className="mt-2 px-4 py-1 text-xs text-on-surface-variant border border-outline-variant/30 rounded-md hover:bg-surface-container-high/50 transition-colors"
                                   >
-                                    取消
+                                    {t('common.cancel')}
                                   </button>
                                 </div>
                               </div>
@@ -7786,19 +8289,17 @@ function Content() {
                   </>
                 )}
 
-                {activeTab === '关于系统' && (
+                {activeTab === 'adminSettings.tabAboutSystem' && (
                   <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
                     <div className="divide-y divide-outline-variant/5">
                       {/* Program intro */}
                       <div className="px-6 py-4">
-                        <p className="text-sm font-medium text-on-surface">程序介绍</p>
+                        <p className="text-sm font-medium text-on-surface">{t('adminSettings.aboutIntro')}</p>
                         <p className="text-xs text-on-surface-variant mt-1.5 leading-relaxed">
-                          3DPartHub
-                          是一套面向制造企业的三维零件模型管理平台，覆盖模型上传与格式转换、在线预览与测量、分类检索、产品选型、工单与询价、分享协作、数据备份等完整能力。前后端一体部署，Docker
-                          一键安装，支持多级权限与功能开关。
+                          3DPartHub{t('adminSettings.aboutIntroBody')}
                         </p>
                         <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-on-surface-variant/50">
-                          <span>© 2026 廖为祥</span>
+                          <span>{t('adminSettings.copyright2026')}</span>
                           <a
                             href="http://wpa.qq.com/msgrd?v=3&uin=255955956&site=qq&menu=yes"
                             target="_blank"
@@ -7839,21 +8340,22 @@ function Content() {
                       <div className="px-6 py-4">
                         <div className="flex items-center justify-between gap-4 mb-3">
                           <div>
-                            <p className="text-sm font-medium text-on-surface">版本检测</p>
+                            <p className="text-sm font-medium text-on-surface">{t('adminSettings.versionCheck')}</p>
                             <p className="text-xs text-on-surface-variant mt-0.5">
-                              当前版本:{' '}
+                              {t('adminSettings.currentVersion')}:{' '}
                               <span className="font-mono text-primary-container">
                                 {currentVersion || updateInfo?.current || '—'}
                               </span>
                               {updateInfo &&
                                 !updateInfo.updateAvailable &&
                                 (updateInfo.current || currentVersion) !== 'unknown' && (
-                                  <span className="ml-1.5 text-emerald-400">· 已是最新</span>
+                                  <span className="ml-1.5 text-emerald-400">{t('adminSettings.upToDateBadge')}</span>
                                 )}
                               {updateInfo?.updateAvailable && (
                                 <>
                                   {' '}
-                                  · 最新版本: <span className="font-mono text-emerald-400">{updateInfo.remote}</span>
+                                  {t('adminSettings.latestVersionPrefix')}{' '}
+                                  <span className="font-mono text-emerald-400">{updateInfo.remote}</span>
                                 </>
                               )}
                             </p>
@@ -7864,7 +8366,7 @@ function Content() {
                             className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
                           >
                             <Icon name="search" size={14} className={checkingUpdate ? 'animate-spin' : ''} />
-                            {checkingUpdate ? '检查中...' : '检查更新'}
+                            {checkingUpdate ? t('adminSettings.checking') : t('adminSettings.checkUpdates')}
                           </button>
                         </div>
 
@@ -7880,14 +8382,18 @@ function Content() {
                                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono">
                                   {updateInfo.remote}
                                 </span>
-                                <span className="text-xs font-medium text-primary">发现新版本</span>
+                                <span className="text-xs font-medium text-primary">
+                                  {t('adminSettings.newVersionFound')}
+                                </span>
                               </div>
                             </div>
 
                             {/* Release notes */}
                             {updateInfo.releaseNotes && (
                               <div className="px-4 py-3">
-                                <p className="text-xs font-medium text-on-surface mb-2">更新内容</p>
+                                <p className="text-xs font-medium text-on-surface mb-2">
+                                  {t('adminSettings.releaseNotes')}
+                                </p>
                                 <div className="max-h-48 overflow-y-auto text-xs text-on-surface-variant/80 space-y-0.5 whitespace-pre-line bg-surface-container/50 rounded p-3">
                                   {updateInfo.releaseNotes}
                                 </div>
@@ -7897,7 +8403,7 @@ function Content() {
                             {/* Upgrade command */}
                             <div className="px-4 py-3 border-t border-primary/10">
                               <p className="text-xs text-on-surface-variant mb-2">
-                                服务器默认启用自动更新；如需立即更新，执行：
+                                {t('adminSettings.autoUpdateHint')}
                               </p>
                               <div className="bg-surface-container rounded p-3 font-mono text-xs text-on-surface select-all space-y-1">
                                 <div>cd /opt/3dparthub</div>
@@ -7914,7 +8420,7 @@ function Content() {
                                 <div>docker compose up -d --force-recreate</div>
                               </div>
                               <p className="text-[10px] text-on-surface-variant/50 mt-2">
-                                不要复制 shell 提示符；升级后数据库会自动迁移，请查看日志确认: docker compose logs -f
+                                {t('adminSettings.shellHint')}
                                 api
                               </p>
                               {updateInfo.releaseUrl && (
@@ -7924,7 +8430,7 @@ function Content() {
                                   rel="noopener noreferrer"
                                   className="inline-block mt-2 text-xs text-primary hover:underline"
                                 >
-                                  查看 GitHub Release 详情 →
+                                  {t('adminSettings.viewGithubRelease')}
                                 </a>
                               )}
                             </div>
@@ -7935,7 +8441,9 @@ function Content() {
                           <div className="mt-2 rounded-md bg-surface-container/60 border border-outline-variant/20 overflow-hidden">
                             <div className="px-4 py-3 border-b border-outline-variant/10">
                               <div className="flex items-center justify-between gap-3">
-                                <p className="text-xs font-medium text-on-surface">最新版本更新内容</p>
+                                <p className="text-xs font-medium text-on-surface">
+                                  {t('adminSettings.latestReleaseNotes')}
+                                </p>
                                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 font-mono">
                                   {updateInfo.remote}
                                 </span>
@@ -7952,7 +8460,7 @@ function Content() {
                                   rel="noopener noreferrer"
                                   className="inline-block mt-2 text-xs text-primary hover:underline"
                                 >
-                                  查看 GitHub Release 详情 →
+                                  {t('adminSettings.viewGithubRelease')}
                                 </a>
                               )}
                             </div>
@@ -7964,9 +8472,9 @@ function Content() {
                       <div className="px-6 py-4">
                         <div className="flex items-center justify-between gap-4 mb-4">
                           <div>
-                            <p className="text-sm font-medium text-on-surface">版本更新记录</p>
+                            <p className="text-sm font-medium text-on-surface">{t('adminSettings.versionHistory')}</p>
                             <p className="text-xs text-on-surface-variant mt-0.5">
-                              最近发布的版本与更新内容，从上到下按时间倒序
+                              {t('adminSettings.versionHistoryDesc')}
                             </p>
                           </div>
                           <button
@@ -7975,18 +8483,19 @@ function Content() {
                             className="px-3 py-1.5 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5 shrink-0"
                           >
                             <Icon name="refresh" size={14} className={updateHistoryLoading ? 'animate-spin' : ''} />
-                            刷新
+                            {t('adminSettings.refresh')}
                           </button>
                         </div>
 
                         {updateHistoryLoading && !updateHistoryLoaded ? (
                           <div className="flex items-center gap-2 text-xs text-on-surface-variant">
                             <Icon name="refresh" size={14} className="animate-spin" />
-                            正在获取版本记录...
+                            {t('adminSettings.loadingVersionHistory')}
                           </div>
                         ) : updateHistory.length === 0 ? (
                           <div className="rounded-md border border-outline-variant/20 bg-surface-container/40 px-4 py-3 text-xs text-on-surface-variant">
-                            暂无版本记录{updateHistoryLoaded ? '（获取失败，可点右上角刷新重试）' : ''}
+                            {t('adminSettings.noVersionHistory')}
+                            {updateHistoryLoaded ? t('adminSettings.fetchFailedRetryHint') : ''}
                           </div>
                         ) : (
                           <div className="relative pl-5">
@@ -8031,7 +8540,7 @@ function Content() {
                                         </span>
                                         {isCurrent && (
                                           <span className="text-[10px] font-medium text-emerald-400 shrink-0">
-                                            当前版本
+                                            {t('adminSettings.currentVersion')}
                                           </span>
                                         )}
                                         {publishedText && (
@@ -8062,7 +8571,7 @@ function Content() {
                                           rel="noopener noreferrer"
                                           className="inline-block mt-2 text-xs text-primary hover:underline"
                                         >
-                                          查看 GitHub Release 详情 →
+                                          {t('adminSettings.viewGithubRelease')}
                                         </a>
                                       </div>
                                     )}
@@ -8079,7 +8588,7 @@ function Content() {
                             rel="noopener noreferrer"
                             className="mt-4 ml-5 inline-flex items-center gap-1 text-xs text-on-surface-variant/70 hover:text-primary transition-colors"
                           >
-                            更多历史版本
+                            {t('adminSettings.moreHistoryVersions')}
                             <Icon name="open_in_new" size={12} />
                           </a>
                         )}
@@ -8088,16 +8597,16 @@ function Content() {
                   </div>
                 )}
 
-                {activeTab === '缓存清理' && (
+                {activeTab === 'adminSettings.tabCacheCleanup' && (
                   <div className="space-y-4">
                     {/* Scan header */}
                     <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 p-4">
                       <div className="flex items-center justify-between gap-4 flex-wrap">
                         <div>
-                          <h3 className="text-sm font-semibold text-on-surface">缓存垃圾清理</h3>
-                          <p className="text-xs text-on-surface-variant mt-1">
-                            扫描磁盘上与数据库记录不匹配的孤立文件、过期临时文件等，释放磁盘空间
-                          </p>
+                          <h3 className="text-sm font-semibold text-on-surface">
+                            {t('adminSettings.cacheJunkCleanup')}
+                          </h3>
+                          <p className="text-xs text-on-surface-variant mt-1">{t('adminSettings.cacheJunkDesc')}</p>
                         </div>
                         <button
                           onClick={() => setCleanupScanConfirmOpen(true)}
@@ -8105,7 +8614,7 @@ function Content() {
                           className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary-container px-4 text-xs font-bold text-on-primary shadow-sm transition-colors hover:opacity-95 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
                         >
                           <Icon name={cleanupScanning ? 'hourglass_empty' : 'search'} size={14} />
-                          {cleanupScanning ? '扫描中...' : '开始扫描'}
+                          {cleanupScanning ? t('adminSettings.scanning') : t('adminSettings.startScan')}
                         </button>
                       </div>
                     </div>
@@ -8117,8 +8626,8 @@ function Content() {
                           <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 flex items-center gap-3">
                             <Icon name="verified" size={20} className="text-emerald-500 shrink-0" />
                             <div>
-                              <p className="text-sm font-medium text-on-surface">系统很干净</p>
-                              <p className="text-xs text-on-surface-variant mt-0.5">未发现缓存垃圾文件</p>
+                              <p className="text-sm font-medium text-on-surface">{t('adminSettings.systemIsClean')}</p>
+                              <p className="text-xs text-on-surface-variant mt-0.5">{t('adminSettings.noJunkFound')}</p>
                             </div>
                           </div>
                         ) : (
@@ -8128,7 +8637,9 @@ function Content() {
                               <div className="flex items-center gap-2 mb-3">
                                 <Icon name="info" size={16} className="text-on-surface-variant" />
                                 <span className="text-sm text-on-surface">
-                                  发现 <strong>{cleanupScan.totalFiles}</strong> 个垃圾文件，共{' '}
+                                  {t('adminSettings.junkFoundPrefix')}
+                                  <strong>{cleanupScan.totalFiles}</strong>
+                                  {t('adminSettings.junkFoundMiddle')}
                                   <strong>{cleanupScan.totalSizeText}</strong>
                                 </span>
                               </div>
@@ -8165,7 +8676,7 @@ function Content() {
                                         <div className="flex items-center gap-2 text-sm text-on-surface">
                                           <span className="font-medium">{cat.label}</span>
                                           <span className="text-xs px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant">
-                                            {cat.count} 个文件
+                                            {t('adminSettings.junkFileCount', { count: cat.count })}
                                           </span>
                                           <span className="text-xs px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant">
                                             {cat.totalSizeText}
@@ -8173,7 +8684,7 @@ function Content() {
                                         </div>
                                         {cat.samplePaths.length > 0 && (
                                           <p className="text-xs text-on-surface-variant mt-1 truncate">
-                                            示例: {cat.samplePaths.join(', ')}
+                                            {t('adminSettings.samplePrefix')} {cat.samplePaths.join(', ')}
                                           </p>
                                         )}
                                       </div>
@@ -8197,7 +8708,9 @@ function Content() {
                                   disabled={cleanupRunning}
                                   className="text-xs text-primary hover:underline disabled:text-on-surface-variant"
                                 >
-                                  {cleanupSelectedKeys.size === cleanupScan.categories.length ? '取消全选' : '全选'}
+                                  {cleanupSelectedKeys.size === cleanupScan.categories.length
+                                    ? t('adminSettings.deselectAll')
+                                    : t('adminSettings.selectAll')}
                                 </button>
                                 <button
                                   onClick={() => {
@@ -8208,7 +8721,9 @@ function Content() {
                                   className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-error/90 px-4 text-xs font-bold text-white shadow-sm transition-colors hover:opacity-95 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
                                 >
                                   <Icon name={cleanupRunning ? 'hourglass_empty' : 'delete'} size={14} />
-                                  {cleanupRunning ? '清理中...' : `清理选中 (${cleanupSelectedKeys.size})`}
+                                  {cleanupRunning
+                                    ? t('adminSettings.cleaning')
+                                    : t('adminSettings.cleanSelectedWithCount', { count: cleanupSelectedKeys.size })}
                                 </button>
                               </div>
                             </div>
@@ -8232,9 +8747,9 @@ function Content() {
           const target = backupDeleteConfirm;
           if (target) void handleDelete(target.id);
         }}
-        title="确认删除备份"
-        description={`确定要删除备份「${backupDeleteConfirm?.name || ''}」吗？`}
-        confirmLabel="确认删除"
+        title={t('adminSettings.confirmDeleteBackupTitle')}
+        description={t('adminSettings.confirmDeleteBackupDesc', { name: backupDeleteConfirm?.name || '' })}
+        confirmLabel={t('adminSettings.confirmDeleteTitle')}
         confirmDisabled={backupDeleteInFlight.current}
       />
       <ConfirmDialog
@@ -8242,9 +8757,9 @@ function Content() {
         onClose={() => setCleanupConfirmOpen(false)}
         onConfirm={() => void handleCleanupSelectedConfirm()}
         icon="delete_sweep"
-        title="确认清理缓存"
-        description={`将清理选中的 ${cleanupSelectedKeys.size} 个分类缓存文件，此操作不可撤销。`}
-        confirmLabel={cleanupRunning ? '清理中...' : '清理选中'}
+        title={t('adminSettings.confirmCleanupCache')}
+        description={t('adminSettings.confirmCleanSelected', { count: cleanupSelectedKeys.size })}
+        confirmLabel={cleanupRunning ? t('adminSettings.cleaning') : t('adminSettings.cleanSelected')}
         confirmDisabled={cleanupSelectedKeys.size === 0 || cleanupRunning}
       />
       <ConfirmDialog
@@ -8257,9 +8772,9 @@ function Content() {
         icon="fact_check"
         iconColor="text-primary"
         iconBg="bg-primary/15"
-        title="确认开始备份策略体检"
-        description="将对备份策略进行全面体检（磁盘空间、文件权限、归档完整性等），约需 1–2 分钟，期间请勿关闭页面。确定开始？"
-        confirmLabel="开始体检"
+        title={t('adminSettings.confirmPolicyCheckTitle')}
+        description={t('adminSettings.confirmPolicyCheck')}
+        confirmLabel={t('adminSettings.startHealthCheck')}
       />
       <ConfirmDialog
         open={exportConfirmOpen}
@@ -8271,9 +8786,9 @@ function Content() {
         icon="backup"
         iconColor="text-primary"
         iconBg="bg-primary/15"
-        title="确认创建备份"
-        description="将创建备份，可能需要数分钟；期间备份功能会锁定、无法同时执行其他备份操作。确定开始？"
-        confirmLabel="创建备份"
+        title={t('adminSettings.confirmCreateBackupTitle')}
+        description={t('adminSettings.confirmCreateBackup')}
+        confirmLabel={t('adminSettings.createBackup')}
       />
       <ConfirmDialog
         open={cleanupScanConfirmOpen}
@@ -8285,9 +8800,9 @@ function Content() {
         icon="search"
         iconColor="text-primary"
         iconBg="bg-primary/15"
-        title="确认开始缓存扫描"
-        description="将扫描磁盘上的孤立文件和过期临时文件，约需 30–60 秒。扫描为只读，不会删除任何文件（删除需扫描后单独确认）。确定开始？"
-        confirmLabel="开始扫描"
+        title={t('adminSettings.confirmCacheScanTitle')}
+        description={t('adminSettings.confirmCacheScan')}
+        confirmLabel={t('adminSettings.startScan')}
       />
       <ConfirmDialog
         open={Boolean(verifyConfirmId)}
@@ -8300,9 +8815,9 @@ function Content() {
         icon="verified"
         iconColor="text-primary"
         iconBg="bg-primary/15"
-        title="确认校验备份"
-        description="将校验该备份归档的完整性（解压、逐文件比对 SHA256），约需 1–2 分钟。确定开始？"
-        confirmLabel="开始校验"
+        title={t('adminSettings.confirmVerifyBackupTitle')}
+        description={t('adminSettings.confirmVerifyBackup')}
+        confirmLabel={t('adminSettings.startVerify')}
       />
       <BackupEncryptionNoticeDialog
         open={backupEncryptedNoticeOpen}
@@ -8314,7 +8829,8 @@ function Content() {
 }
 
 export default function SettingsPage() {
-  useDocumentTitle('系统设置');
+  const { t } = useTranslation();
+  useDocumentTitle(t('adminSettings.pageTitle'));
 
   return (
     <AdminPageShell>

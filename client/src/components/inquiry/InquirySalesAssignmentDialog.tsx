@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import {
   assignInquirySales,
@@ -13,26 +15,54 @@ import { useToast } from '../shared/Toast';
 
 type AssignmentMode = InquirySalesAssignmentParams['mode'];
 
-const MODES: Array<{ value: AssignmentMode; label: string; desc: string; icon: string }> = [
-  { value: 'manual', label: '手动指定', desc: '明确指定某个业务对接人。', icon: 'person' },
-  { value: 'default', label: '默认负责人', desc: '使用系统默认业务负责人。', icon: 'badge' },
-  { value: 'auto', label: '自动分配', desc: '按当前跟进量自动选择较空闲人员。', icon: 'sync' },
-  { value: 'region', label: '按区域', desc: '按客户区域辅助匹配业务人员。', icon: 'compass' },
-  { value: 'channel', label: '按交易方式', desc: '区分线上/线下交易后再转交。', icon: 'compare_arrows' },
+const MODES: Array<{ value: AssignmentMode; labelKey: string; descKey: string; icon: string }> = [
+  {
+    value: 'manual',
+    labelKey: 'inquiryAdminPage.modeManual',
+    descKey: 'inquiryAdminPage.modeManualDesc',
+    icon: 'person',
+  },
+  {
+    value: 'default',
+    labelKey: 'inquiryAdminPage.modeDefault',
+    descKey: 'inquiryAdminPage.modeDefaultDesc',
+    icon: 'badge',
+  },
+  {
+    value: 'auto',
+    labelKey: 'inquiryAdminPage.modeAuto',
+    descKey: 'inquiryAdminPage.modeAutoDesc',
+    icon: 'sync',
+  },
+  {
+    value: 'region',
+    labelKey: 'inquiryAdminPage.modeRegion',
+    descKey: 'inquiryAdminPage.modeRegionDesc',
+    icon: 'compass',
+  },
+  {
+    value: 'channel',
+    labelKey: 'inquiryAdminPage.modeChannel',
+    descKey: 'inquiryAdminPage.modeChannelDesc',
+    icon: 'compare_arrows',
+  },
 ];
 
-function modeTemplate(mode: AssignmentMode, channel: string, region: string) {
-  if (mode === 'auto') return '系统按当前跟进量自动分配，请核对客户需求并继续对接报价。';
-  if (mode === 'default') return '按默认负责人转交，请继续跟进客户询价需求。';
-  if (mode === 'region') return `按区域${region ? `「${region}」` : ''}转交，请结合客户所在地安排后续对接。`;
+function modeTemplate(t: TFunction, mode: AssignmentMode, channel: string, region: string) {
+  if (mode === 'auto') return t('inquiryAdminPage.templateAuto');
+  if (mode === 'default') return t('inquiryAdminPage.templateDefault');
+  if (mode === 'region') return t('inquiryAdminPage.templateRegion', { region: region ? `「${region}」` : '' });
   if (mode === 'channel') {
-    return `${channel === 'offline' ? '线下交易' : '线上交易'}场景转交，请按对应业务流程继续跟进。`;
+    return t('inquiryAdminPage.templateChannel', {
+      channel: channel === 'offline' ? t('inquiryAdminPage.channelOffline') : t('inquiryAdminPage.channelOnline'),
+    });
   }
-  return '请继续跟进客户询价需求，确认报价、交期和后续对接方式。';
+  return t('inquiryAdminPage.templateManual');
 }
 
-function modeLabel(mode?: string | null) {
-  return MODES.find((item) => item.value === mode)?.label || '手动指定';
+function modeLabel(t: TFunction, mode?: string | null) {
+  const key = MODES.find((item) => item.value === mode)?.labelKey || 'inquiryAdminPage.modeManual';
+  return t(key);
 }
 
 interface InquirySalesAssignmentDialogProps {
@@ -48,6 +78,7 @@ export default function InquirySalesAssignmentDialog({
   onClose,
   onAssigned,
 }: InquirySalesAssignmentDialogProps) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { data: candidates = [], isLoading } = useSWR(
     open ? 'inquiry-sales-candidates' : null,
@@ -69,8 +100,8 @@ export default function InquirySalesAssignmentDialog({
     setAssigneeId(inquiry.salesAssigneeId || '');
     setChannel(nextChannel);
     setRegion(nextRegion);
-    setHandoffNote(inquiry.salesHandoffNote || modeTemplate(nextMode, nextChannel, nextRegion));
-  }, [inquiry, open]);
+    setHandoffNote(inquiry.salesHandoffNote || modeTemplate(t, nextMode, nextChannel, nextRegion));
+  }, [inquiry, open, t]);
 
   const selectedCandidate = useMemo(
     () => candidates.find((candidate) => candidate.id === assigneeId),
@@ -82,7 +113,7 @@ export default function InquirySalesAssignmentDialog({
   async function handleSubmit() {
     if (!inquiry) return;
     if (mode === 'manual' && !assigneeId) {
-      toast('请选择业务对接人', 'error');
+      toast(t('inquiryAdminPage.selectAssigneeError'), 'error');
       return;
     }
     setSubmitting(true);
@@ -94,14 +125,14 @@ export default function InquirySalesAssignmentDialog({
         region,
         handoffNote,
       });
-      toast('已转交销售跟进', 'success');
+      toast(t('inquiryAdminPage.assignedToast'), 'success');
       onAssigned(updated);
       onClose();
     } catch (err: unknown) {
       const resp = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
       const data = typeof resp === 'object' && resp !== null ? (resp as Record<string, unknown>).data : undefined;
       const detail = typeof data === 'object' && data !== null ? (data as Record<string, unknown>).detail : undefined;
-      const errMsg = err instanceof Error ? err.message : '转交销售失败';
+      const errMsg = err instanceof Error ? err.message : t('inquiryAdminPage.assignFail');
       toast(String(detail) || errMsg, 'error');
     } finally {
       setSubmitting(false);
@@ -113,12 +144,10 @@ export default function InquirySalesAssignmentDialog({
       <div className="flex max-h-[86vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-outline-variant/15 bg-surface-container shadow-2xl">
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-outline-variant/12 px-4 py-4 md:px-5">
           <div className="min-w-0">
-            <p className="text-base font-bold text-on-surface">转交销售跟进</p>
-            <p className="mt-1 text-xs text-on-surface-variant">
-              选择分配模式和对接人，客户将在询价详情里看到跟进进度与业务联系方式。
-            </p>
+            <p className="text-base font-bold text-on-surface">{t('inquiryAdminPage.dialogTitle')}</p>
+            <p className="mt-1 text-xs text-on-surface-variant">{t('inquiryAdminPage.dialogDesc')}</p>
           </div>
-          <AdminIconButton icon="close" onClick={onClose} variant="ghost" aria-label="关闭" />
+          <AdminIconButton icon="close" onClick={onClose} variant="ghost" aria-label={t('common.close')} />
         </div>
 
         <div className="min-h-0 overflow-y-auto px-4 py-4 md:px-5">
@@ -131,7 +160,7 @@ export default function InquirySalesAssignmentDialog({
                   type="button"
                   onClick={() => {
                     setMode(item.value);
-                    setHandoffNote(modeTemplate(item.value, channel, region));
+                    setHandoffNote(modeTemplate(t, item.value, channel, region));
                   }}
                   className={`rounded-xl border px-3 py-3 text-left transition-colors ${
                     active
@@ -141,9 +170,9 @@ export default function InquirySalesAssignmentDialog({
                 >
                   <span className="mb-2 flex items-center gap-1.5 text-xs font-bold">
                     <Icon name={item.icon} size={14} />
-                    {item.label}
+                    {t(item.labelKey)}
                   </span>
-                  <span className="block text-[11px] leading-relaxed">{item.desc}</span>
+                  <span className="block text-[11px] leading-relaxed">{t(item.descKey)}</span>
                 </button>
               );
             })}
@@ -152,13 +181,17 @@ export default function InquirySalesAssignmentDialog({
           <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_240px]">
             <div className="space-y-3">
               <label className="block">
-                <span className={APP_FIELD_LABEL_CLASS}>业务对接人</span>
+                <span className={APP_FIELD_LABEL_CLASS}>{t('inquiryAdminPage.labelAssignee')}</span>
                 <AppSelect
                   value={assigneeId}
                   onChange={(event) => setAssigneeId(event.target.value)}
                   disabled={isLoading}
                 >
-                  <option value="">{mode === 'manual' ? '请选择对接人' : '由系统选择或手动指定'}</option>
+                  <option value="">
+                    {mode === 'manual'
+                      ? t('inquiryAdminPage.selectPlaceholderManual')
+                      : t('inquiryAdminPage.selectPlaceholderAuto')}
+                  </option>
                   {candidates.map((candidate) => (
                     <option key={candidate.id} value={candidate.id}>
                       {candidate.username}
@@ -171,34 +204,34 @@ export default function InquirySalesAssignmentDialog({
 
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="block">
-                  <span className={APP_FIELD_LABEL_CLASS}>客户区域</span>
+                  <span className={APP_FIELD_LABEL_CLASS}>{t('inquiryAdminPage.labelRegion')}</span>
                   <AppTextInput
                     value={region}
                     onChange={(event) => {
                       setRegion(event.target.value);
-                      if (mode === 'region') setHandoffNote(modeTemplate(mode, channel, event.target.value));
+                      if (mode === 'region') setHandoffNote(modeTemplate(t, mode, channel, event.target.value));
                     }}
-                    placeholder="例如：华东 / 上海 / 广东"
+                    placeholder={t('inquiryAdminPage.regionPlaceholder')}
                   />
                 </label>
                 <label className="block">
-                  <span className={APP_FIELD_LABEL_CLASS}>交易方式</span>
+                  <span className={APP_FIELD_LABEL_CLASS}>{t('inquiryAdminPage.labelChannel')}</span>
                   <AppSelect
                     value={channel}
                     onChange={(event) => {
                       const next = event.target.value as 'online' | 'offline';
                       setChannel(next);
-                      if (mode === 'channel') setHandoffNote(modeTemplate(mode, next, region));
+                      if (mode === 'channel') setHandoffNote(modeTemplate(t, mode, next, region));
                     }}
                   >
-                    <option value="offline">线下交易</option>
-                    <option value="online">线上交易</option>
+                    <option value="offline">{t('inquiryAdminPage.channelOffline')}</option>
+                    <option value="online">{t('inquiryAdminPage.channelOnline')}</option>
                   </AppSelect>
                 </label>
               </div>
 
               <label className="block">
-                <span className={APP_FIELD_LABEL_CLASS}>交接说明模板</span>
+                <span className={APP_FIELD_LABEL_CLASS}>{t('inquiryAdminPage.labelNote')}</span>
                 <AppTextArea
                   value={handoffNote}
                   onChange={(event) => setHandoffNote(event.target.value)}
@@ -209,25 +242,36 @@ export default function InquirySalesAssignmentDialog({
             </div>
 
             <aside className="rounded-xl border border-outline-variant/12 bg-surface-container-low p-3">
-              <p className="text-xs font-bold text-on-surface">当前分配</p>
+              <p className="text-xs font-bold text-on-surface">{t('inquiryAdminPage.currentTitle')}</p>
               <div className="mt-3 space-y-2 text-xs text-on-surface-variant">
                 <p>
-                  模式：<span className="font-semibold text-on-surface">{modeLabel(mode)}</span>
+                  {t('inquiryAdminPage.modeLabel')}：
+                  <span className="font-semibold text-on-surface">{modeLabel(t, mode)}</span>
                 </p>
                 <p>
-                  对接人：
+                  {t('inquiryAdminPage.assigneeLabel')}：
                   <span className="font-semibold text-on-surface">
-                    {selectedCandidate?.username || (mode === 'manual' ? '未选择' : '系统自动选择')}
+                    {selectedCandidate?.username ||
+                      (mode === 'manual' ? t('inquiryAdminPage.notSelected') : t('inquiryAdminPage.systemAuto'))}
                   </span>
                 </p>
-                <p>区域：{region || '未填写'}</p>
-                <p>方式：{channel === 'offline' ? '线下交易' : '线上交易'}</p>
+                <p>
+                  {t('inquiryAdminPage.regionLabel')}：{region || t('inquiryAdminPage.noRegion')}
+                </p>
+                <p>
+                  {t('inquiryAdminPage.channelLabel')}：
+                  {channel === 'offline' ? t('inquiryAdminPage.channelOffline') : t('inquiryAdminPage.channelOnline')}
+                </p>
               </div>
               {selectedCandidate ? (
                 <div className="mt-3 rounded-lg bg-surface-container-high p-3 text-xs text-on-surface-variant">
                   <p className="font-semibold text-on-surface">{selectedCandidate.username}</p>
-                  <p className="mt-1">{selectedCandidate.department || selectedCandidate.company || '未设置部门'}</p>
-                  <p className="mt-1">{selectedCandidate.phone || selectedCandidate.email || '未设置联系方式'}</p>
+                  <p className="mt-1">
+                    {selectedCandidate.department || selectedCandidate.company || t('inquiryAdminPage.noDept')}
+                  </p>
+                  <p className="mt-1">
+                    {selectedCandidate.phone || selectedCandidate.email || t('inquiryAdminPage.noContact')}
+                  </p>
                 </div>
               ) : null}
             </aside>
@@ -236,10 +280,10 @@ export default function InquirySalesAssignmentDialog({
 
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-outline-variant/12 px-4 py-3 md:px-5">
           <AdminButton onClick={onClose} variant="secondary">
-            取消
+            {t('common.cancel')}
           </AdminButton>
           <AdminButton onClick={handleSubmit} disabled={submitting} icon="send" variant="primary">
-            {submitting ? '转交中...' : '确认转交'}
+            {submitting ? t('inquiryAdminPage.submitting') : t('inquiryAdminPage.confirmTransfer')}
           </AdminButton>
         </div>
       </div>

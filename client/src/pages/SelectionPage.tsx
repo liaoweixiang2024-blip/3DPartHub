@@ -1515,7 +1515,12 @@ export default function SelectionPage() {
       const { default: writeXlsxFile } = await import('write-excel-file/browser');
       // 只导核心四列（型号/名称/数量/单位），不带参数列；
       // 名称剥掉型号的「所有」出现（历史数据常以「系列号 描述 完整型号」结尾，不剥会和型号列重复）
-      const headers = ['型号', '名称', '数量', '单位'];
+      const headers = [
+        t('sharedMisc.exportColModelNo'),
+        t('sharedMisc.exportColName'),
+        t('sharedMisc.exportColQty'),
+        t('sharedMisc.exportColUnit'),
+      ];
       const rows = items.map((it) => {
         let name = it.productName || '';
         if (it.modelNo) {
@@ -1530,7 +1535,7 @@ export default function SelectionPage() {
       });
       const stamp = new Date();
       const pad = (n: number) => String(n).padStart(2, '0');
-      const fileName = `选型清单_${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.xlsx`;
+      const fileName = `${t('sharedMisc.exportSelectionListName')}_${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.xlsx`;
       await writeXlsxFile([headers, ...rows], { sheet: t('selectionPage.inquiryCart.exportTitle') }).toFile(fileName);
       toast(t('selectionPage.inquiryCart.exportedCount', { count: items.length }), 'success');
     } catch {

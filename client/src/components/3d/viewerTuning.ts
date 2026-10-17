@@ -16,9 +16,9 @@ export const DEFAULT_VIEWER_TUNING: ViewerTuning = {
 };
 
 export const VIEWER_TUNING_PRESETS: { label: string; value: ViewerTuning }[] = [
-  { label: '浅灰 CAD', value: DEFAULT_VIEWER_TUNING },
+  { label: 'modelAdminComp.presetLightGray', value: DEFAULT_VIEWER_TUNING },
   {
-    label: '黑底灰模',
+    label: 'modelAdminComp.presetDarkGray',
     value: {
       viewer_exposure: 1.15,
       viewer_ambient_intensity: 0.35,
@@ -33,7 +33,7 @@ export const VIEWER_TUNING_PRESETS: { label: string; value: ViewerTuning }[] = [
     },
   },
   {
-    label: '柔光白底',
+    label: 'modelAdminComp.presetSoftWhite',
     value: {
       viewer_exposure: 0.95,
       viewer_ambient_intensity: 0.75,
@@ -49,6 +49,7 @@ export const VIEWER_TUNING_PRESETS: { label: string; value: ViewerTuning }[] = [
   },
 ];
 
+// label 存 i18n key，渲染处用 t() 取文案
 export const VIEWER_TUNING_FIELDS: Array<{
   key: keyof ViewerTuning;
   label: string;
@@ -56,14 +57,14 @@ export const VIEWER_TUNING_FIELDS: Array<{
   max: number;
   step: number;
 }> = [
-  { key: 'viewer_exposure', label: '曝光', min: 0.2, max: 3, step: 0.05 },
-  { key: 'viewer_ambient_intensity', label: '环境光', min: 0, max: 2, step: 0.05 },
-  { key: 'viewer_main_light_intensity', label: '主光', min: 0, max: 3, step: 0.05 },
-  { key: 'viewer_fill_light_intensity', label: '补光', min: 0, max: 2, step: 0.05 },
-  { key: 'viewer_hemisphere_intensity', label: '半球光', min: 0, max: 2, step: 0.05 },
-  { key: 'mat_default_metalness', label: '金属度', min: 0, max: 1, step: 0.05 },
-  { key: 'mat_default_roughness', label: '粗糙度', min: 0, max: 1, step: 0.05 },
-  { key: 'mat_default_envMapIntensity', label: '反射', min: 0, max: 3, step: 0.05 },
+  { key: 'viewer_exposure', label: 'modelAdminComp.fieldExposure', min: 0.2, max: 3, step: 0.05 },
+  { key: 'viewer_ambient_intensity', label: 'modelAdminComp.fieldAmbient', min: 0, max: 2, step: 0.05 },
+  { key: 'viewer_main_light_intensity', label: 'modelAdminComp.fieldMainLight', min: 0, max: 3, step: 0.05 },
+  { key: 'viewer_fill_light_intensity', label: 'modelAdminComp.fieldFillLight', min: 0, max: 2, step: 0.05 },
+  { key: 'viewer_hemisphere_intensity', label: 'modelAdminComp.fieldHemisphere', min: 0, max: 2, step: 0.05 },
+  { key: 'mat_default_metalness', label: 'modelAdminComp.fieldMetalness', min: 0, max: 1, step: 0.05 },
+  { key: 'mat_default_roughness', label: 'modelAdminComp.fieldRoughness', min: 0, max: 1, step: 0.05 },
+  { key: 'mat_default_envMapIntensity', label: 'modelAdminComp.fieldReflection', min: 0, max: 3, step: 0.05 },
 ];
 
 export function viewerTuningFromSettings(settings: Partial<ViewerTuning>): ViewerTuning {

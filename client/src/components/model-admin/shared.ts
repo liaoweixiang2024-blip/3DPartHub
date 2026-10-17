@@ -4,6 +4,7 @@
  */
 
 import type { ConversionQueueState, PreviewDiagnosticFilter } from '../../api/models';
+import { i18n } from '../../i18n';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -11,13 +12,14 @@ export const MODEL_SOURCE_FORMATS = ['step', 'stp', 'iges', 'igs'];
 export const MODEL_SOURCE_ACCEPT = MODEL_SOURCE_FORMATS.map((item) => `.${item}`).join(',');
 export const MODEL_SOURCE_LABEL = 'STEP/IGES';
 
+// label 存 i18n key，渲染处用 t() 取文案
 export const DIAGNOSTIC_FILTERS: Array<{ key: PreviewDiagnosticFilter; label: string; icon: string }> = [
-  { key: 'all', label: '全部', icon: 'inventory_2' },
-  { key: 'problem', label: '待处理', icon: 'warning' },
-  { key: 'missing', label: '缺少诊断', icon: 'data_usage' },
-  { key: 'invalid', label: '转换异常', icon: 'error' },
-  { key: 'warning', label: '需复核', icon: 'checklist' },
-  { key: 'ok', label: '正常', icon: 'check_circle' },
+  { key: 'all', label: 'modelAdminComp.filterAll', icon: 'inventory_2' },
+  { key: 'problem', label: 'modelAdminComp.filterProblem', icon: 'warning' },
+  { key: 'missing', label: 'modelAdminComp.filterMissing', icon: 'data_usage' },
+  { key: 'invalid', label: 'modelAdminComp.filterInvalid', icon: 'error' },
+  { key: 'warning', label: 'modelAdminComp.filterWarning', icon: 'checklist' },
+  { key: 'ok', label: 'modelAdminComp.filterOk', icon: 'check_circle' },
 ];
 
 export const QUEUE_STATUS_CARDS: Array<{
@@ -25,11 +27,11 @@ export const QUEUE_STATUS_CARDS: Array<{
   label: string;
   icon: string;
 }> = [
-  { key: 'waiting', label: '等待', icon: 'hourglass_top' },
-  { key: 'active', label: '处理中', icon: 'play_circle' },
-  { key: 'delayed', label: '延迟', icon: 'schedule' },
-  { key: 'completed', label: '完成', icon: 'check_circle' },
-  { key: 'failed', label: '失败', icon: 'error' },
+  { key: 'waiting', label: 'modelAdminComp.queueWaiting', icon: 'hourglass_top' },
+  { key: 'active', label: 'modelAdminComp.queueActive', icon: 'play_circle' },
+  { key: 'delayed', label: 'modelAdminComp.queueDelayed', icon: 'schedule' },
+  { key: 'completed', label: 'modelAdminComp.queueCompleted', icon: 'check_circle' },
+  { key: 'failed', label: 'modelAdminComp.queueFailed', icon: 'error' },
 ];
 
 // ── Format helpers ─────────────────────────────────────────────────────────
@@ -41,9 +43,9 @@ export function formatSize(bytes: number) {
 }
 
 export function formatModelDateTime(value?: string | null) {
-  if (!value) return '未记录';
+  if (!value) return i18n.t('modelAdminComp.notRecorded');
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '未记录';
+  if (Number.isNaN(date.getTime())) return i18n.t('modelAdminComp.notRecorded');
   return date.toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
@@ -79,23 +81,23 @@ export function getDiagnosticTone(status: PreviewDiagnosticFilter, active = fals
 export function getQueueStateLabel(state: ConversionQueueState) {
   switch (state) {
     case 'active':
-      return '处理中';
+      return i18n.t('modelAdminComp.queueActive');
     case 'waiting':
-      return '等待';
+      return i18n.t('modelAdminComp.queueWaiting');
     case 'delayed':
-      return '延迟';
+      return i18n.t('modelAdminComp.queueDelayed');
     case 'prioritized':
-      return '优先';
+      return i18n.t('modelAdminComp.queuePrioritized');
     case 'waiting-children':
-      return '等待子任务';
+      return i18n.t('modelAdminComp.queueWaitingChildren');
     case 'completed':
-      return '完成';
+      return i18n.t('modelAdminComp.queueCompleted');
     case 'failed':
-      return '失败';
+      return i18n.t('modelAdminComp.queueFailed');
     case 'paused':
-      return '暂停';
+      return i18n.t('modelAdminComp.queuePaused');
     default:
-      return '未知';
+      return i18n.t('modelAdminComp.queueUnknown');
   }
 }
 
@@ -121,20 +123,22 @@ export function formatQueueTime(value?: number | null) {
 export function formatQueueDuration(ms?: number | null) {
   if (!ms || ms <= 0) return '-';
   const minutes = Math.floor(ms / 60000);
-  if (minutes < 1) return '不到 1 分钟';
-  if (minutes < 60) return `${minutes} 分钟`;
+  if (minutes < 1) return i18n.t('modelAdminComp.durationLt1');
+  if (minutes < 60) return i18n.t('modelAdminComp.durationMinutes', { count: minutes });
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return rest > 0 ? `${hours} 小时 ${rest} 分钟` : `${hours} 小时`;
+  return rest > 0
+    ? i18n.t('modelAdminComp.durationHoursMinutes', { hours, minutes: rest })
+    : i18n.t('modelAdminComp.durationHours', { hours });
 }
 
 export function formatQueueFailureReason(reason?: string | null) {
   if (!reason) return null;
   if (reason.includes('job started more than allowable limit')) {
-    return '任务启动次数超限：通常是转换服务重启、热更新或队列锁过早失效导致的队列保护失败，不代表 STEP 文件一定损坏。可重试该任务。';
+    return i18n.t('modelAdminComp.failureReasonStartLimit');
   }
   if (reason.includes('job stalled more than allowable limit')) {
-    return '任务多次被判定卡住：通常是转换进程退出、服务重启或长时间无响应导致。可查看日志后重试。';
+    return i18n.t('modelAdminComp.failureReasonStalled');
   }
   return reason;
 }

@@ -1,6 +1,73 @@
 import type { SheetData } from 'write-excel-file/browser';
 import type { Inquiry, InquiryItem } from '../api/inquiries';
+import { i18n } from '../i18n';
 import { statusInfo, type StatusConfig } from './businessConfig';
+
+const HEADER_KEYS = [
+  'inquiryCode',
+  'inquiryId',
+  'status',
+  'submittedAt',
+  'updatedAt',
+  'company',
+  'contactName',
+  'contactPhone',
+  'contactAddress',
+  'customerEmail',
+  'salesAssignee',
+  'assigneePhone',
+  'assigneeEmail',
+  'salesMode',
+  'salesChannel',
+  'salesRegion',
+  'handoffNote',
+  'itemIndex',
+  'productId',
+  'modelNo',
+  'productName',
+  'specs',
+  'qty',
+  'unit',
+  'unitPrice',
+  'amount',
+  'leadTime',
+  'salesRemark',
+  'customerRemark',
+  'itemRemark',
+];
+
+const HEADER_DEFAULTS: Record<string, string> = {
+  inquiryCode: '询价单号',
+  inquiryId: '询价ID',
+  status: '状态',
+  submittedAt: '提交时间',
+  updatedAt: '更新时间',
+  company: '客户公司',
+  contactName: '联系人',
+  contactPhone: '联系电话',
+  contactAddress: '联系地址',
+  customerEmail: '客户邮箱',
+  salesAssignee: '业务对接人',
+  assigneePhone: '对接人电话',
+  assigneeEmail: '对接人邮箱',
+  salesMode: '分配模式',
+  salesChannel: '交易方式',
+  salesRegion: '客户区域',
+  handoffNote: '交接说明',
+  itemIndex: '产品序号',
+  productId: '产品ID',
+  modelNo: '型号',
+  productName: '产品名称',
+  specs: '规格参数',
+  qty: '数量',
+  unit: '单位',
+  unitPrice: '单价',
+  amount: '金额',
+  leadTime: '交期',
+  salesRemark: '业务备注',
+  customerRemark: '客户备注',
+  itemRemark: '明细备注',
+};
 
 function formatExportTimestamp() {
   const now = new Date();
@@ -43,7 +110,8 @@ function getSalesModeLabel(mode?: string | null) {
     region: '按区域分配',
     channel: '按渠道分配',
   };
-  return mode ? labels[mode] || mode : '';
+  if (!mode) return '';
+  return i18n.t(`inquiryExport.salesMode.${mode}`, { defaultValue: labels[mode] || mode });
 }
 
 function getSalesChannelLabel(channel?: string | null) {
@@ -51,7 +119,8 @@ function getSalesChannelLabel(channel?: string | null) {
     online: '线上',
     offline: '线下',
   };
-  return channel ? labels[channel] || channel : '';
+  if (!channel) return '';
+  return i18n.t(`inquiryExport.salesChannel.${channel}`, { defaultValue: labels[channel] || channel });
 }
 
 function buildProductCells(inquiry: Inquiry, item: InquiryItem | null, index: number) {
@@ -62,7 +131,7 @@ function buildProductCells(inquiry: Inquiry, item: InquiryItem | null, index: nu
     safeSpreadsheetText(item?.productName || item?.modelNo || ''),
     safeSpreadsheetText(getSpecText(item?.specs)),
     item?.qty ?? '',
-    safeSpreadsheetText(item?.unit || '个'),
+    safeSpreadsheetText(item?.unit || i18n.t('inquiryExport.defaultUnit', { defaultValue: '个' })),
     '',
     '',
     '',
@@ -73,7 +142,8 @@ function buildProductCells(inquiry: Inquiry, item: InquiryItem | null, index: nu
 }
 
 function buildInquiryCells(inquiry: Inquiry, statuses: StatusConfig[]) {
-  const statusLabel = statusInfo(statuses, inquiry.status).label || inquiry.status;
+  const rawStatusLabel = statusInfo(statuses, inquiry.status).label || inquiry.status;
+  const statusLabel = i18n.t(`inquiryStatus.${inquiry.status}.label`, { defaultValue: rawStatusLabel });
   return [
     safeSpreadsheetText(getInquiryCode(inquiry.id)),
     safeSpreadsheetText(inquiry.id),
@@ -96,38 +166,9 @@ function buildInquiryCells(inquiry: Inquiry, statuses: StatusConfig[]) {
 }
 
 function buildRows(inquiries: Inquiry[], statuses: StatusConfig[]) {
-  const headers = [
-    '询价单号',
-    '询价ID',
-    '状态',
-    '提交时间',
-    '更新时间',
-    '客户公司',
-    '联系人',
-    '联系电话',
-    '联系地址',
-    '客户邮箱',
-    '业务对接人',
-    '对接人电话',
-    '对接人邮箱',
-    '分配模式',
-    '交易方式',
-    '客户区域',
-    '交接说明',
-    '产品序号',
-    '产品ID',
-    '型号',
-    '产品名称',
-    '规格参数',
-    '数量',
-    '单位',
-    '单价',
-    '金额',
-    '交期',
-    '业务备注',
-    '客户备注',
-    '明细备注',
-  ];
+  const headers = HEADER_KEYS.map((key) =>
+    i18n.t(`inquiryExport.header.${key}`, { defaultValue: HEADER_DEFAULTS[key] }),
+  );
   const rows: SheetData = [headers.map((header) => ({ value: header, fontWeight: 'bold' as const }))];
   inquiries.forEach((inquiry) => {
     const inquiryCells = buildInquiryCells(inquiry, statuses);
@@ -146,7 +187,7 @@ export async function exportInquiriesEditableXlsx({
   inquiries,
   statuses,
   filenamePrefix = 'inquiries',
-  sheetName = '询价明细',
+  sheetName = i18n.t('inquiryExport.sheetName', { defaultValue: '询价明细' }),
 }: {
   inquiries: Inquiry[];
   statuses: StatusConfig[];
@@ -164,6 +205,6 @@ export async function exportInquiryEditableXlsx({ inquiry, statuses }: { inquiry
     inquiries: [inquiry],
     statuses,
     filenamePrefix: `inquiry_${inquiry.id.slice(0, 8)}`,
-    sheetName: '询价明细',
+    sheetName: i18n.t('inquiryExport.sheetName', { defaultValue: '询价明细' }),
   });
 }

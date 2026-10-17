@@ -7,6 +7,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import DialogOverlay from '../shared/DialogOverlay';
 import Icon from '../shared/Icon';
 import { useToast } from '../shared/Toast';
+import { useTranslation } from 'react-i18next';
 
 export interface AdminUserDetail {
   id: string;
@@ -35,10 +36,10 @@ interface AuditItem {
 }
 
 const ROLE_OPTIONS = [
-  { value: 'ADMIN', label: '管理员' },
-  { value: 'EDITOR', label: '编辑者' },
-  { value: 'VIEWER', label: '访客' },
-  { value: 'INTERNAL', label: '内部' },
+  { value: 'ADMIN', labelKey: 'userAdmin.roleLabel.ADMIN' },
+  { value: 'EDITOR', labelKey: 'userAdmin.roleLabel.EDITOR' },
+  { value: 'VIEWER', labelKey: 'userAdmin.roleLabel.VIEWER' },
+  { value: 'INTERNAL', labelKey: 'userAdmin.roleLabel.INTERNAL' },
 ];
 
 const ROLE_BADGE: Record<string, string> = {
@@ -49,10 +50,10 @@ const ROLE_BADGE: Record<string, string> = {
 };
 
 const ROLE_LABEL: Record<string, string> = {
-  ADMIN: '管理员',
-  EDITOR: '编辑者',
-  VIEWER: '访客',
-  INTERNAL: '内部',
+  ADMIN: 'userAdmin.roleLabel.ADMIN',
+  EDITOR: 'userAdmin.roleLabel.EDITOR',
+  VIEWER: 'userAdmin.roleLabel.VIEWER',
+  INTERNAL: 'userAdmin.roleLabel.INTERNAL',
 };
 
 function formatDate(value: string | null): string {
@@ -73,6 +74,7 @@ export default function UserEditDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [email, setEmail] = useState(user.email);
   const [role, setRole] = useState(user.role);
@@ -137,14 +139,14 @@ export default function UserEditDialog({
           .updateUser({ canInvite, ...(emailChanged ? { email: email.trim().toLowerCase() } : {}) });
       }
       toast(
-        emailChanged ? '已保存。邮箱已更换，该账号需用新邮箱重新登录' : '已保存',
+        emailChanged ? t('userAdmin.edit.savedWithEmail') : t('userAdmin.edit.saved'),
         'success',
         emailChanged ? 6000 : undefined,
       );
       onSaved();
       onClose();
     } catch (err) {
-      toast(getErrorMessage(err, '保存失败'), 'error');
+      toast(getErrorMessage(err, t('userAdmin.edit.saveFailed')), 'error');
     } finally {
       setSaving(false);
     }
@@ -152,17 +154,17 @@ export default function UserEditDialog({
 
   async function handleResetPassword() {
     if (tempPassword.length < 8) {
-      toast('密码至少 8 位', 'error');
+      toast(t('userAdmin.edit.passwordMinLen'), 'error');
       return;
     }
     setResetting(true);
     try {
       await client.post(`/admin/users/${user.id}/reset-password`, { password: tempPassword });
-      toast('已重置密码并强制该用户重新登录', 'success');
+      toast(t('userAdmin.edit.passwordResetDone'), 'success');
       setTempPassword('');
       setMustChangePassword(true);
     } catch (err) {
-      toast(getErrorMessage(err, '重置失败'), 'error');
+      toast(getErrorMessage(err, t('userAdmin.edit.resetFailed')), 'error');
     } finally {
       setResetting(false);
     }
@@ -172,9 +174,9 @@ export default function UserEditDialog({
     setSendingEmail(true);
     try {
       await client.post(`/admin/users/${user.id}/send-reset-email`);
-      toast('重置邮件已发送', 'success');
+      toast(t('userAdmin.edit.resetEmailSent'), 'success');
     } catch (err) {
-      toast(getErrorMessage(err, '发送失败'), 'error');
+      toast(getErrorMessage(err, t('userAdmin.edit.sendFailed')), 'error');
     } finally {
       setSendingEmail(false);
     }
@@ -192,10 +194,12 @@ export default function UserEditDialog({
             <div className="flex items-center gap-2">
               <span className="truncate text-sm font-semibold text-on-surface">{user.username}</span>
               <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${ROLE_BADGE[user.role] || ''}`}>
-                {ROLE_LABEL[user.role] || user.role}
+                {t(ROLE_LABEL[user.role] || '', { defaultValue: user.role })}
               </span>
               {user.disabled ? (
-                <span className="rounded bg-error/15 px-1.5 py-0.5 text-[10px] font-medium text-error">已禁用</span>
+                <span className="rounded bg-error/15 px-1.5 py-0.5 text-[10px] font-medium text-error">
+                  {t('userAdmin.disabled')}
+                </span>
               ) : null}
             </div>
             <p className="truncate text-xs text-on-surface-variant">{user.email}</p>
@@ -204,7 +208,7 @@ export default function UserEditDialog({
             type="button"
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high"
-            aria-label="关闭"
+            aria-label={t('common.close')}
           >
             <Icon name="close" size={18} />
           </button>
@@ -213,7 +217,7 @@ export default function UserEditDialog({
         {/* Body */}
         <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
           <div>
-            <span className={labelClass}>邮箱（登录账号）</span>
+            <span className={labelClass}>{t('userAdmin.edit.emailLabel')}</span>
             <input
               name="email"
               type="email"
@@ -222,16 +226,16 @@ export default function UserEditDialog({
               className={inputClass}
             />
             {emailChanged ? (
-              <p className="mt-1 text-[11px] text-error">邮箱已修改：保存后该账号将登出，需用新邮箱重新登录</p>
+              <p className="mt-1 text-[11px] text-error">{t('userAdmin.edit.emailChangedHint')}</p>
             ) : null}
           </div>
 
           <div>
-            <span className={labelClass}>角色</span>
+            <span className={labelClass}>{t('userAdmin.edit.roleLabel')}</span>
             <select name="role" value={role} onChange={(e) => setRole(e.target.value)} className={inputClass}>
               {ROLE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
-                  {o.label}
+                  {t(o.labelKey)}
                 </option>
               ))}
             </select>
@@ -239,7 +243,7 @@ export default function UserEditDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <span className={labelClass}>公司</span>
+              <span className={labelClass}>{t('userAdmin.edit.company')}</span>
               <input
                 name="company"
                 value={company}
@@ -248,7 +252,7 @@ export default function UserEditDialog({
               />
             </div>
             <div>
-              <span className={labelClass}>部门</span>
+              <span className={labelClass}>{t('userAdmin.edit.department')}</span>
               <input
                 name="department"
                 value={department}
@@ -259,12 +263,12 @@ export default function UserEditDialog({
           </div>
 
           <div>
-            <span className={labelClass}>电话</span>
+            <span className={labelClass}>{t('userAdmin.edit.phone')}</span>
             <input name="phone" value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} />
           </div>
 
           <div>
-            <span className={labelClass}>备注</span>
+            <span className={labelClass}>{t('userAdmin.edit.bio')}</span>
             <textarea
               name="bio"
               value={bio}
@@ -283,7 +287,7 @@ export default function UserEditDialog({
                 onChange={(e) => setMustChangePassword(e.target.checked)}
                 className="h-4 w-4"
               />
-              下次登录强制改密
+              {t('userAdmin.edit.mustChangePassword')}
             </label>
             <label className="flex cursor-pointer items-center gap-2 text-sm text-on-surface">
               <input
@@ -293,7 +297,7 @@ export default function UserEditDialog({
                 onChange={(e) => setDisabled(e.target.checked)}
                 className="h-4 w-4"
               />
-              <span className={disabled ? 'text-error' : ''}>禁用账号</span>
+              <span className={disabled ? 'text-error' : ''}>{t('userAdmin.edit.disableAccount')}</span>
             </label>
             <label className="flex cursor-pointer items-center gap-2 text-sm text-on-surface">
               <input
@@ -303,27 +307,27 @@ export default function UserEditDialog({
                 onChange={(e) => setCanInvite(e.target.checked)}
                 className="h-4 w-4"
               />
-              可生成邀请码
+              {t('userAdmin.edit.canInvite')}
             </label>
           </div>
 
           {disabledChanged && disabled ? (
             <p className="rounded-md bg-error/10 px-2.5 py-1.5 text-xs text-error">
-              保存后该用户将立即登出且无法登录。
+              {t('userAdmin.edit.disableWarning')}
             </p>
           ) : null}
 
           <div className="rounded-md border border-outline-variant/10 bg-surface-container-low px-3 py-2.5">
             <div className="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
               <Icon name="vpn_key" size={14} />
-              重置密码
+              {t('userAdmin.edit.resetPassword')}
             </div>
             <div className="mt-2 flex gap-2">
               <input
                 id="user-edit-temp-password"
                 value={tempPassword}
                 onChange={(e) => setTempPassword(e.target.value)}
-                placeholder="设临时密码（≥8 位）"
+                placeholder={t('userAdmin.edit.tempPasswordPlaceholder')}
                 className={inputClass}
                 type="password"
                 autoComplete="new-password"
@@ -334,7 +338,7 @@ export default function UserEditDialog({
                 disabled={resetting || !tempPassword}
                 className="shrink-0 rounded-md bg-primary-container px-3 py-1.5 text-xs font-medium text-on-primary-container disabled:opacity-50"
               >
-                {resetting ? '处理中' : '设密码'}
+                {resetting ? t('userAdmin.edit.processing') : t('userAdmin.edit.setPassword')}
               </button>
             </div>
             <button
@@ -343,14 +347,14 @@ export default function UserEditDialog({
               disabled={sendingEmail}
               className="mt-2 text-xs font-medium text-primary hover:underline disabled:opacity-50"
             >
-              {sendingEmail ? '发送中…' : '或发送重置邮件 →'}
+              {sendingEmail ? t('userAdmin.edit.sending') : t('userAdmin.edit.sendResetEmail')}
             </button>
           </div>
 
           <div>
             <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
               <Icon name="history" size={14} />
-              最近管理操作
+              {t('userAdmin.edit.recentOps')}
             </div>
             <div className="space-y-1 rounded-md bg-surface-container-low px-2.5 py-2 text-xs">
               {audit?.items?.length ? (
@@ -361,15 +365,19 @@ export default function UserEditDialog({
                   </div>
                 ))
               ) : (
-                <p className="text-on-surface-variant/60">暂无记录</p>
+                <p className="text-on-surface-variant/60">{t('userAdmin.edit.noRecords')}</p>
               )}
             </div>
           </div>
 
           <p className="text-[11px] text-on-surface-variant/60">
-            下载 {user._count.downloads} · 收藏 {user._count.favorites} · 注册 {formatDate(user.createdAt)} · 最近登录{' '}
-            {formatDate(user.lastLoginAt)}
-            {user.lastActiveAt ? ` · 最近活跃 ${formatDate(user.lastActiveAt)}` : ''}
+            {t('userAdmin.edit.statsLine', {
+              downloads: user._count.downloads,
+              favorites: user._count.favorites,
+              createdAt: formatDate(user.createdAt),
+              lastLogin: formatDate(user.lastLoginAt),
+            })}
+            {user.lastActiveAt ? t('userAdmin.edit.lastActiveSegment', { time: formatDate(user.lastActiveAt) }) : ''}
           </p>
         </div>
 
@@ -380,7 +388,7 @@ export default function UserEditDialog({
             onClick={onClose}
             className="rounded-md px-3 py-1.5 text-sm text-on-surface-variant hover:bg-surface-container-high"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -388,7 +396,7 @@ export default function UserEditDialog({
             disabled={saving}
             className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-on-primary disabled:opacity-50"
           >
-            {saving ? '保存中…' : '保存'}
+            {saving ? t('userAdmin.edit.saving') : t('common.save')}
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { useCallback, useRef, useState } from 'react';
 import { modelApi } from '../../api/models';
 import { dialogPanelMotion } from '../../lib/motion';
@@ -20,6 +21,7 @@ export default function ImportPreviewDialog({
   onImported: () => void;
 }) {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -36,13 +38,18 @@ export default function ImportPreviewDialog({
         },
       });
       toast(
-        `已导入「${model.name}」${result.has_original ? '（含原始文件）' : '（未含原始文件，下载原件不可用）'}`,
+        t('modelAdminComp.importedToast', {
+          name: model.name,
+          extra: result.has_original
+            ? t('modelAdminComp.importedWithOriginal')
+            : t('modelAdminComp.importedWithoutOriginal'),
+        }),
         'success',
       );
       onImported();
       onClose();
     } catch (err) {
-      toast(err instanceof Error ? err.message : '导入失败', 'error');
+      toast(err instanceof Error ? err.message : t('modelAdminComp.importFail'), 'error');
       setUploading(false);
     }
   }, [file, model.model_id, model.name, onClose, onImported, toast, uploading]);
@@ -61,13 +68,15 @@ export default function ImportPreviewDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-outline-variant/10 px-5 py-4">
-          <h3 className="font-headline text-base font-bold text-on-surface">导入离线转换产物</h3>
+          <h3 className="font-headline text-base font-bold text-on-surface">
+            {t('modelAdminComp.importOfflineTitle')}
+          </h3>
           <button
             type="button"
             onClick={onClose}
             disabled={uploading}
             className="text-on-surface-variant hover:text-on-surface disabled:opacity-40"
-            aria-label="关闭"
+            aria-label={t('common.close')}
           >
             <Icon name="close" size={18} />
           </button>
@@ -76,12 +85,12 @@ export default function ImportPreviewDialog({
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <p className="text-sm font-medium text-on-surface">{model.name}</p>
           <div className="mt-3 rounded-sm bg-surface-container-high px-3 py-2.5 text-xs leading-relaxed text-on-surface-variant">
-            <p className="mb-1 font-medium text-on-surface">操作步骤</p>
-            <p>1. 在本地仓库 server 目录执行：</p>
+            <p className="mb-1 font-medium text-on-surface">{t('modelAdminComp.stepsTitle')}</p>
+            <p>{t('modelAdminComp.offlineStep1')}</p>
             <code className="mt-1 block break-all rounded-sm bg-surface-container-highest px-2 py-1 font-mono text-[11px] text-on-surface">
               npm run convert:offline -- /path/模型文件.STEP
             </code>
-            <p className="mt-1.5">2. 选择产出的 .offline.zip 上传，模型将直接恢复为可用。</p>
+            <p className="mt-1.5">{t('modelAdminComp.offlineStep2')}</p>
           </div>
 
           <button
@@ -102,7 +111,7 @@ export default function ImportPreviewDialog({
             {file ? (
               <span className="break-all text-sm font-medium text-on-surface">{file.name}</span>
             ) : (
-              <span className="text-sm text-on-surface-variant">点击选择 .offline.zip 文件</span>
+              <span className="text-sm text-on-surface-variant">{t('modelAdminComp.chooseOfflineZip')}</span>
             )}
             <input
               name="file"
@@ -123,7 +132,7 @@ export default function ImportPreviewDialog({
                 <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
               </div>
               <p className="mt-1 text-center text-xs text-on-surface-variant">
-                上传中 {progress}%，导入后服务器处理需几秒...
+                {t('modelAdminComp.offlineUploadingProgress', { progress })}
               </p>
             </div>
           )}
@@ -136,7 +145,7 @@ export default function ImportPreviewDialog({
             disabled={uploading}
             className="flex-1 rounded-sm border border-outline-variant/20 px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-50"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -144,7 +153,7 @@ export default function ImportPreviewDialog({
             disabled={!file || uploading}
             className="flex-1 rounded-sm bg-primary-container px-4 py-2 text-sm font-medium text-on-primary hover:opacity-90 disabled:opacity-50"
           >
-            {uploading ? '导入中...' : '开始导入'}
+            {uploading ? t('modelAdminComp.importing') : t('modelAdminComp.startImport')}
           </button>
         </div>
       </motion.div>

@@ -1,4 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import JSZip from 'jszip';
 import { useState, useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import useSWR from 'swr';
@@ -98,8 +100,8 @@ function formatUploadBytes(bytes: number) {
   return `${value.toFixed(digits)} ${units[unitIndex]}`;
 }
 
-function formatUploadSpeed(bytesPerSecond: number) {
-  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return '计算中';
+function formatUploadSpeed(t: TFunction, bytesPerSecond: number) {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return t('uploadModal.speedCalculating');
   return `${formatUploadBytes(bytesPerSecond)}/s`;
 }
 
@@ -133,14 +135,15 @@ function unmatchedDrawingNames(
     .map((file) => file.name);
 }
 
-function drawingMatchError(names: string[]) {
+function drawingMatchError(t: TFunction, names: string[]) {
   if (names.length === 0) return null;
   const preview = names.slice(0, 3).join('、');
-  const more = names.length > 3 ? ` 等 ${names.length} 个 PDF` : '';
-  return `PDF 图纸未找到同名模型：${preview}${more}。请同时选择同名模型文件，或移除这些 PDF 后再上传`;
+  const more = names.length > 3 ? t('uploadModal.drawingUnmatchedMore', { count: names.length }) : '';
+  return t('uploadModal.drawingUnmatched', { names: preview, more });
 }
 
 export default function UploadModal({ open, onClose, onConverted }: UploadModalProps) {
+  const { t } = useTranslation();
   const isMobile = useMediaQuery('(max-width: 639px)');
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -185,8 +188,8 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   const formats = useMemo(() => modelFormats.map((f) => f.toLowerCase()), [modelFormats]);
   const formatLabel = useMemo(() => modelFormats.map((f) => f.toUpperCase()).join(' / '), [modelFormats]);
   const unsupportedFormatMessage = useMemo(
-    () => `不支持的格式，请上传 ${modelFormats.map((f) => `.${f}`).join(' / ')}、同名 .pdf 或 .zip / .rar 文件`,
-    [modelFormats],
+    () => t('uploadModal.unsupportedFormat', { formats: modelFormats.map((f) => `.${f}`).join(' / ') }),
+    [modelFormats, t],
   );
 
   const { data: categoryData } = useSWR(open ? '/categories' : null, () => categoriesApi.tree());
@@ -238,8 +241,12 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
 
   const uploadStatsLine = useMemo(() => {
     if (!uploadStats || uploadStats.total <= 0) return null;
-    return `已上传 ${formatUploadBytes(uploadStats.loaded)} / ${formatUploadBytes(uploadStats.total)} · 速度 ${formatUploadSpeed(uploadStats.speedBps)}`;
-  }, [uploadStats]);
+    return t('uploadModal.uploadStatsLine', {
+      loaded: formatUploadBytes(uploadStats.loaded),
+      total: formatUploadBytes(uploadStats.total),
+      speed: formatUploadSpeed(t, uploadStats.speedBps),
+    });
+  }, [t, uploadStats]);
 
   useEffect(() => {
     return () => {
@@ -388,7 +395,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
           });
           setProgress(75);
           finishUploadStats();
-          setProgressLabel('上传完成，正在转换中...');
+          setProgressLabel(t('uploadModal.uploadConverting'));
           res = await converterApi.uploadLocal(
             uploadResult.filePath,
             uploadResult.fileName || file.name,
@@ -402,7 +409,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
               reportUploadStats(loaded, file.size);
               const pct = Math.round((loaded / Math.max(1, file.size)) * 80);
               paintProgress(5 + pct);
-              if (loaded >= file.size) setProgressLabel('上传完成，正在转换中...');
+              if (loaded >= file.size) setProgressLabel(t('uploadModal.uploadConverting'));
             },
           });
         }
@@ -416,7 +423,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         setResult(uploadRes);
         onConverted?.(res);
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : '上传失败';
+        const message = err instanceof Error ? err.message : t('uploadModal.uploadFailed');
         if (isCurrentUploadRun(runId)) setError(message);
       } finally {
         finishUploadRun(runId);
@@ -433,6 +440,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       onConverted,
       paintProgress,
       reportUploadStats,
+      t,
       uploadChunked,
     ],
   );
@@ -440,29 +448,33 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   const isArchiveFile = useCallback((file: File) => /\.(zip|rar)$/i.test(file.name), []);
   const isDrawingFile = useCallback((file: File) => /\.pdf$/i.test(file.name), []);
   const getDrawingMatchError = useCallback(
-    (files: File[]) => drawingMatchError(unmatchedDrawingNames(files, isArchiveFile, isDrawingFile)),
-    [isArchiveFile, isDrawingFile],
+    (files: File[]) => drawingMatchError(t, unmatchedDrawingNames(files, isArchiveFile, isDrawingFile)),
+    [isArchiveFile, isDrawingFile, t],
   );
   const getArchiveSizeError = useCallback(
     (files: File[]) => {
       const oversized = files.find((file) => isArchiveFile(file) && file.size > archiveMaxBytes);
-      return oversized ? `${oversized.name} 超过 ZIP/RAR 上限 ${archiveMaxSizeMb}MB` : null;
+      return oversized ? t('uploadModal.archiveSizeError', { name: oversized.name, limit: archiveMaxSizeMb }) : null;
     },
-    [archiveMaxBytes, archiveMaxSizeMb, isArchiveFile],
+    [archiveMaxBytes, archiveMaxSizeMb, isArchiveFile, t],
   );
   const getFileSizeError = useCallback(
     (files: File[]) => {
       const oversizedModel = files.find(
         (file) => !isArchiveFile(file) && !isDrawingFile(file) && file.size > modelMaxBytes,
       );
-      if (oversizedModel) return `${oversizedModel.name} 超过模型上限 ${modelMaxSizeMb}MB`;
+      if (oversizedModel) return t('uploadModal.modelSizeError', { name: oversizedModel.name, limit: modelMaxSizeMb });
 
       const oversizedDrawing = files.find((file) => isDrawingFile(file) && file.size > drawingMaxBytes);
-      if (oversizedDrawing) return `${oversizedDrawing.name} 超过 PDF 图纸上限 ${drawingMaxSizeMb}MB`;
+      if (oversizedDrawing)
+        return t('uploadModal.drawingSizeError', {
+          name: oversizedDrawing.name,
+          limit: drawingMaxSizeMb,
+        });
 
       return null;
     },
-    [drawingMaxBytes, drawingMaxSizeMb, isArchiveFile, isDrawingFile, modelMaxBytes, modelMaxSizeMb],
+    [drawingMaxBytes, drawingMaxSizeMb, isArchiveFile, isDrawingFile, modelMaxBytes, modelMaxSizeMb, t],
   );
 
   const uploadQueuedModelFile = useCallback(
@@ -549,7 +561,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       const markInputDone = () => {
         doneInputs += 1;
         paintProgress(Math.round((doneInputs / inputTotal) * 100), true);
-        setProgressLabel(`上传中 ${doneInputs}/${inputTotal}`);
+        setProgressLabel(t('uploadModal.uploadingCount', { done: doneInputs, total: inputTotal }));
       };
 
       for (let i = 0; i < modelFiles.length; i += CONCURRENCY) {
@@ -588,7 +600,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       }
 
       for (const archive of archiveFiles) {
-        setProgressLabel(`正在处理 ${archive.name}...`);
+        setProgressLabel(t('uploadModal.processingFile', { name: archive.name }));
         try {
           const resp = await modelApi.batchUploadFromArchive(archive, {
             categoryId: categoryId || undefined,
@@ -600,7 +612,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
               const uploadRatio = loaded / Math.max(1, archive.size);
               paintProgress(Math.round((base + span * 0.5 * uploadRatio) * 100));
               if (loaded >= archive.size) {
-                setProgressLabel(`服务器处理中 ${archive.name}...`);
+                setProgressLabel(t('uploadModal.serverProcessingName', { name: archive.name }));
               }
             },
             onProcessingProgress: (serverProgress) => {
@@ -609,7 +621,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
               const span = 1 / inputTotal;
               const processingRatio = Math.max(0, Math.min(100, serverProgress.percent)) / 100;
               paintProgress(Math.round((base + span * (0.5 + 0.48 * processingRatio)) * 100));
-              setProgressLabel(serverProgress.message || `服务器处理中 ${archive.name}...`);
+              setProgressLabel(serverProgress.message || t('uploadModal.serverProcessingName', { name: archive.name }));
             },
           });
           const archiveOk = resp.results.filter((r) => r.status === 'queued' || r.status === 'completed').length;
@@ -651,6 +663,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       onConverted,
       paintProgress,
       reportUploadStats,
+      t,
       uploadMatchedDrawing,
       uploadQueuedModelFile,
     ],
@@ -685,21 +698,21 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       // 多文件夹队列场景：清掉上一组的结果面板，切换回进度视图
       setResult(null);
       setProgress(5);
-      setProgressLabel(`正在上传 ${file.name}...`);
+      setProgressLabel(t('uploadModal.uploadingFile', { name: file.name }));
       beginUploadStats(file.size);
       let processingProgress = 55;
       let processingTimer: ReturnType<typeof setInterval> | null = null;
       const startProcessingFeedback = () => {
         if (processingTimer) return;
-        setProgressLabel('服务器处理中...');
+        setProgressLabel(t('uploadModal.serverProcessing'));
         processingTimer = setInterval(() => {
           if (!isCurrentUploadRun(runId)) return;
           processingProgress = Math.min(92, processingProgress + (processingProgress < 75 ? 1.4 : 0.5));
           paintProgress(processingProgress);
           if (processingProgress > 84) {
-            setProgressLabel('正在绑定分类和图纸...');
+            setProgressLabel(t('uploadModal.bindingCategory'));
           } else if (processingProgress > 68) {
-            setProgressLabel('正在解压并识别模型...');
+            setProgressLabel(t('uploadModal.extractingModel'));
           }
         }, 900);
       };
@@ -726,7 +739,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
             }
             const mappedProgress = 55 + (Math.max(0, Math.min(100, serverProgress.percent)) / 100) * 42;
             paintProgress(mappedProgress, serverProgress.stage === 'done' || serverProgress.stage === 'error');
-            setProgressLabel(serverProgress.message || '服务器处理中...');
+            setProgressLabel(serverProgress.message || t('uploadModal.serverProcessing'));
           },
         });
         if (processingTimer) {
@@ -735,7 +748,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         }
         finishUploadStats();
         paintProgress(Math.max(processingProgress, 94), true);
-        setProgressLabel('正在整理结果...');
+        setProgressLabel(t('uploadModal.organizingResult'));
         const ok = resp.results.filter((r) => r.status === 'queued' || r.status === 'completed').length;
         // 子文件夹变体（零件目录已有直接模型文件）被服务端跳过，不计入失败
         const skipped = resp.results.filter((r) => r.status === 'skipped').length;
@@ -766,7 +779,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         onConverted?.();
         return true;
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : '压缩包上传失败';
+        const message = err instanceof Error ? err.message : t('uploadModal.archiveUploadFailed');
         if (isCurrentUploadRun(runId)) setError(message);
         return false;
       } finally {
@@ -789,6 +802,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       onConverted,
       paintProgress,
       reportUploadStats,
+      t,
     ],
   );
 
@@ -826,12 +840,15 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
       if (blob.size > archiveMaxBytes) {
         return {
-          error: `文件夹打包后 ${Math.round(blob.size / 1024 / 1024)}MB，超过 ZIP/RAR 上限 ${archiveMaxSizeMb}MB，请分批拖入`,
+          error: t('uploadModal.folderOversize', {
+            size: Math.round(blob.size / 1024 / 1024),
+            limit: archiveMaxSizeMb,
+          }),
         };
       }
       return { file: new File([blob], 'folder-upload.zip', { type: 'application/zip' }) };
     },
-    [archiveMaxBytes, archiveMaxSizeMb, filterFolderEntries, formats],
+    [archiveMaxBytes, archiveMaxSizeMb, filterFolderEntries, formats, t],
   );
 
   const startUpload = useCallback(() => {
@@ -847,14 +864,14 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         setResult(null);
         setUploading(true);
         setProgress(3);
-        setProgressLabel('正在打包文件夹...');
+        setProgressLabel(t('uploadModal.packingFolders'));
         const acc = { ok: 0, fail: 0, total: 0, drawings: 0, drawingFail: 0, skipped: 0 };
         for (let i = 0; i < groups.length; i++) {
           const isLast = i === groups.length - 1;
-          setProgressLabel(`正在打包第 ${i + 1}/${groups.length} 个文件夹...`);
+          setProgressLabel(t('uploadModal.packingNthFolder', { index: i + 1, total: groups.length }));
           const result = await buildFolderUploadZip(groups[i]);
           if ('empty' in result || 'error' in result) {
-            setError('empty' in result ? '文件夹为空或没有可上传的模型文件' : result.error);
+            setError('empty' in result ? t('uploadModal.emptyFolder') : result.error);
             setUploading(false);
             setProgress(0);
             setProgressLabel('');
@@ -889,7 +906,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         for (let i = 0; i < pendingFolderGroups.length; i++) {
           const result = await buildFolderUploadZip(pendingFolderGroups[i]);
           if ('empty' in result || 'error' in result) {
-            setError('empty' in result ? '文件夹为空或没有可上传的模型文件' : result.error);
+            setError('empty' in result ? t('uploadModal.emptyFolder') : result.error);
             return;
           }
           zipEntries.push(result.file);
@@ -905,7 +922,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       return;
     }
     if (!hasUploadableModelInput(pendingFiles)) {
-      setError('PDF 图纸需要和同名模型文件一起上传');
+      setError(t('uploadModal.pdfNeedsModel'));
       return;
     }
     const fileSizeError = getFileSizeError(pendingFiles);
@@ -937,6 +954,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     handleArchiveFile,
     hasUploadableModelInput,
     isArchiveFile,
+    t,
   ]);
 
   const filterFiles = useCallback(
@@ -977,7 +995,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
               return formats.includes(ext);
             });
             if (!hasModel) {
-              setError('文件夹为空或没有可上传的模型文件');
+              setError(t('uploadModal.emptyFolder'));
               return;
             }
             const byRoot = new Map<string, FileWithPath[]>();
@@ -991,7 +1009,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
               ([, list]) => list.reduce((sum, { file }) => sum + file.size, 0) > archiveMaxBytes,
             );
             if (oversizedRoot) {
-              setError(`文件夹「${oversizedRoot[0]}」内容超过 ZIP/RAR 上限 ${archiveMaxSizeMb}MB，请单独压缩后上传`);
+              setError(t('uploadModal.folderRootOversize', { name: oversizedRoot[0], limit: archiveMaxSizeMb }));
               return;
             }
             // 每个根文件夹一组；纯散文件（无目录层级）合为一组
@@ -1010,7 +1028,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
             if (looseFiles) groups.push(looseFiles);
             setPendingFolderGroups((prev) => [...prev, ...groups]);
           } catch (err) {
-            setError(err instanceof Error ? err.message : '文件夹上传失败，请重试');
+            setError(err instanceof Error ? err.message : t('uploadModal.folderUploadFailed'));
           } finally {
             setExpandingFolders(false);
           }
@@ -1030,7 +1048,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         return;
       }
       if (!hasUploadableModelInput(filtered)) {
-        setError('PDF 图纸需要和同名模型文件一起上传');
+        setError(t('uploadModal.pdfNeedsModel'));
         return;
       }
       const fileSizeError = getFileSizeError(filtered);
@@ -1066,6 +1084,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       hasUploadableModelInput,
       isArchiveFile,
       isDrawingFile,
+      t,
       unsupportedFormatMessage,
     ],
   );
@@ -1086,7 +1105,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         return;
       }
       if (!hasUploadableModelInput(filtered)) {
-        setError('PDF 图纸需要和同名模型文件一起上传');
+        setError(t('uploadModal.pdfNeedsModel'));
         e.target.value = '';
         return;
       }
@@ -1121,6 +1140,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       hasUploadableModelInput,
       isArchiveFile,
       isDrawingFile,
+      t,
       unsupportedFormatMessage,
     ],
   );
@@ -1154,7 +1174,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-outline-variant/10 shrink-0">
-              <h2 className="font-headline text-lg font-bold text-on-surface">上传模型文件</h2>
+              <h2 className="font-headline text-lg font-bold text-on-surface">{t('uploadModal.title')}</h2>
               <button
                 type="button"
                 onClick={handleClose}
@@ -1182,24 +1202,28 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                         <p className="text-on-surface font-medium break-all">{result.data.original_name}</p>
                         <p className="text-sm text-on-surface-variant mt-1">
                           {result.data.status === 'completed'
-                            ? `已生成 GLB 预览 (${(result.data.gltf_size / 1024).toFixed(1)} KB)`
-                            : '文件已上传，正在转换中'}
+                            ? t('uploadModal.glbDone', { size: (result.data.gltf_size / 1024).toFixed(1) })
+                            : t('uploadModal.uploadedConverting')}
                         </p>
                       </>
                     ) : (
                       <>
                         <p className="text-on-surface font-medium">
-                          {result.type === 'archive' ? `${result.archiveType} 批量上传完成` : '批量上传完成'}
+                          {result.type === 'archive'
+                            ? t('uploadModal.archiveDone', { type: result.archiveType })
+                            : t('uploadModal.batchDone')}
                         </p>
                         <p className="text-sm text-on-surface-variant mt-1">
-                          共 {result.total} 个文件：{result.ok} 成功
-                          {result.fail > 0 ? `，${result.fail} 失败` : ''}
-                          {result.skipped ? `，${result.skipped} 跳过（零件目录已有直接模型文件）` : ''}
+                          {t('uploadModal.batchSummary', { total: result.total, ok: result.ok })}
+                          {result.fail > 0 ? t('uploadModal.failSuffix', { count: result.fail }) : ''}
+                          {result.skipped ? t('uploadModal.skipSuffix', { count: result.skipped }) : ''}
                         </p>
                         {(result.drawings || result.drawingFail) && (
                           <p className="text-sm text-on-surface-variant mt-1">
-                            PDF 图纸：{result.drawings || 0} 已绑定
-                            {result.drawingFail ? `，${result.drawingFail} 未绑定` : ''}
+                            {t('uploadModal.drawingLine', { count: result.drawings || 0 })}
+                            {result.drawingFail
+                              ? t('uploadModal.drawingFailSuffix', { count: result.drawingFail })
+                              : ''}
                           </p>
                         )}
                       </>
@@ -1210,7 +1234,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                     onClick={handleResultClose}
                     className="mt-2 bg-primary-container text-on-primary rounded-sm px-6 py-2 text-sm font-medium hover:opacity-90"
                   >
-                    完成
+                    {t('uploadModal.doneBtn')}
                   </button>
                 </div>
               ) : pendingFiles.length > 0 || pendingFolderGroups.length > 0 || expandingFolders ? (
@@ -1218,13 +1242,13 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                   {!uploading && categoryData?.items && categoryData.items.length > 0 && (
                     <div className="mb-4">
                       <label className="text-xs uppercase tracking-wider text-on-surface-variant mb-1.5 block">
-                        分类
+                        {t('uploadModal.labelCategory')}
                       </label>
                       <CategorySelect
                         categories={categoryData.items}
                         value={categoryId}
                         onChange={changeCategory}
-                        placeholder="选择分类（可选）"
+                        placeholder={t('uploadModal.categoryPlaceholder')}
                         autoFocusSearch={false}
                         portalDropdown
                       />
@@ -1234,7 +1258,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                     {expandingFolders && (
                       <div className="flex items-center gap-2 px-3 py-2 text-sm text-on-surface-variant">
                         <Icon name="hourglass_top" size={18} className="shrink-0 animate-spin" />
-                        <span className="flex-1">正在展开拖入的文件夹...</span>
+                        <span className="flex-1">{t('uploadModal.expandingFolders')}</span>
                       </div>
                     )}
                     {pendingFolderGroups.map((group, i) => {
@@ -1242,8 +1266,14 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                       const totalMb = group.reduce((sum, { file }) => sum + file.size, 0) / 1024 / 1024;
                       const label =
                         rootNames.size === 1
-                          ? `${[...rootNames][0]}（${group.length} 个文件）`
-                          : `${rootNames.size} 个文件夹 / ${group.length} 个文件`;
+                          ? t('uploadModal.folderGroupSingle', {
+                              name: [...rootNames][0],
+                              count: group.length,
+                            })
+                          : t('uploadModal.folderGroupMulti', {
+                              folders: rootNames.size,
+                              files: group.length,
+                            });
                       return (
                         <div key={`folder-${i}`} className="flex items-center gap-2 px-3 py-2 text-sm">
                           <Icon name="folder" size={18} className="text-on-surface-variant shrink-0" />
@@ -1309,7 +1339,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                         className="hidden"
                       />
                       <Icon name="add" size={18} />
-                      <span>继续拖入或点击添加（文件夹 / 压缩包 / 文件）</span>
+                      <span>{t('uploadModal.addMore')}</span>
                     </div>
                   )}
                   {error && (
@@ -1324,7 +1354,9 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                   )}
                   {uploading ? (
                     <div className="flex flex-col items-center gap-2">
-                      <p className="text-sm text-on-surface-variant">{progressLabel || `上传中... ${progress}%`}</p>
+                      <p className="text-sm text-on-surface-variant">
+                        {progressLabel || t('uploadModal.uploadingProgress', { progress })}
+                      </p>
                       {uploadStatsLine && (
                         <p className="text-xs tabular-nums text-on-surface-variant/80">{uploadStatsLine}</p>
                       )}
@@ -1344,7 +1376,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                         onClick={clearPendingQueue}
                         className="flex-1 border border-outline-variant/30 text-on-surface-variant rounded-sm px-4 py-2 text-sm font-medium hover:bg-surface-container-high"
                       >
-                        取消
+                        {t('common.cancel')}
                       </button>
                       <button
                         type="button"
@@ -1352,14 +1384,16 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                         disabled={expandingFolders || (pendingFiles.length === 0 && pendingFolderGroups.length === 0)}
                         className="flex-1 bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
                       >
-                        开始上传 (
-                        {[
-                          pendingFolderGroups.length > 0 ? `${pendingFolderGroups.length} 个文件夹` : '',
-                          pendingFiles.length > 0 ? `${pendingFiles.length} 个文件` : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' + ')}
-                        )
+                        {t('uploadModal.startUpload', {
+                          parts: [
+                            pendingFolderGroups.length > 0
+                              ? t('uploadModal.folderCount', { count: pendingFolderGroups.length })
+                              : '',
+                            pendingFiles.length > 0 ? t('uploadModal.fileCount', { count: pendingFiles.length }) : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' + '),
+                        })}
                       </button>
                     </div>
                   )}
@@ -1369,13 +1403,13 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                   {!uploading && categoryData?.items && categoryData.items.length > 0 && (
                     <div className="mb-4">
                       <label className="text-xs uppercase tracking-wider text-on-surface-variant mb-1.5 block">
-                        分类
+                        {t('uploadModal.labelCategory')}
                       </label>
                       <CategorySelect
                         categories={categoryData.items}
                         value={categoryId}
                         onChange={changeCategory}
-                        placeholder="选择分类（可选）"
+                        placeholder={t('uploadModal.categoryPlaceholder')}
                         autoFocusSearch={false}
                         portalDropdown
                       />
@@ -1412,7 +1446,10 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                     {uploading ? (
                       <div className="flex flex-col items-center gap-2">
                         <p className="text-sm text-on-surface-variant">
-                          {progressLabel || (progress < 80 ? `上传中... ${progress}%` : '正在转换中...')}
+                          {progressLabel ||
+                            (progress < 80
+                              ? t('uploadModal.uploadingProgress', { progress })
+                              : t('uploadModal.convertingOnly'))}
                         </p>
                         {uploadStatsLine && (
                           <p className="text-xs tabular-nums text-on-surface-variant/80">{uploadStatsLine}</p>
@@ -1428,13 +1465,14 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                       </div>
                     ) : (
                       <>
-                        <p className="text-sm text-on-surface mb-1">拖放文件或文件夹到此处，或点击选择</p>
+                        <p className="text-sm text-on-surface mb-1">{t('uploadModal.dropHint')}</p>
                         <p className="text-xs text-on-surface-variant">
-                          支持 {formatLabel} 模型和同名 PDF，可多选或上传 ZIP/RAR 压缩包（上限 {archiveMaxSizeMb}MB）
+                          {t('uploadModal.dropFormats', {
+                            formats: formatLabel,
+                            limit: archiveMaxSizeMb,
+                          })}
                         </p>
-                        <p className="mt-1 text-[11px] text-on-surface-variant/80">
-                          可连续拖入多个文件夹/压缩包，确认列表后再点「开始上传」
-                        </p>
+                        <p className="mt-1 text-[11px] text-on-surface-variant/80">{t('uploadModal.dropQueueHint')}</p>
                       </>
                     )}
                   </div>

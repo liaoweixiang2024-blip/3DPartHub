@@ -1,4 +1,5 @@
 import type { SelectionComponent } from '../../api/selections';
+import { useTranslation } from 'react-i18next';
 import { AdminTableHeadCell, AdminTableHeadRow, ADMIN_TABLE_HEAD_CLASS } from '../shared/AdminDataTable';
 import Icon from '../shared/Icon';
 import type { SelectionImportPolicy } from './selectionAdminUtils';
@@ -40,6 +41,7 @@ export function BatchImportModal({
   downloadProductImportTemplate,
   uploadPolicy,
 }: BatchImportModalProps) {
+  const { t } = useTranslation();
   if (!showBatchModal) return null;
 
   return (
@@ -56,20 +58,18 @@ export function BatchImportModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 space-y-2">
-          <h2 className="text-base font-bold text-on-surface">批量导入产品</h2>
-          <p className="text-xs text-on-surface-variant">
-            支持 .xlsx / .csv。按当前分类参数列生成模板；相同"型号编号"的产品会自动更新。
-          </p>
+          <h2 className="text-base font-bold text-on-surface">{t('selectionAdmin.batchImportTitle')}</h2>
+          <p className="text-xs text-on-surface-variant">{t('selectionAdmin.batchImportDesc')}</p>
           <div className="rounded-lg bg-surface-container-high/40 px-3 py-2 text-[11px] leading-5 text-on-surface-variant">
-            <span className="font-bold text-on-surface">填写规则：</span>
-            名称只写产品名称，不要带型号编号；型号编号单独填在"型号编号"列。后面的参数列必须和当前分类参数列对应。
+            <span className="font-bold text-on-surface">{t('selectionAdmin.importRulesTitle')}</span>
+            {t('selectionAdmin.importRules')}
           </div>
           <button
             type="button"
             onClick={downloadProductImportTemplate}
             className="inline-flex items-center gap-1 rounded-md border border-outline-variant/20 px-2.5 py-1.5 text-xs font-bold text-on-surface-variant hover:bg-surface-container-high"
           >
-            <Icon name="download" size={14} /> 下载当前分类模板
+            <Icon name="download" size={14} /> {t('selectionAdmin.downloadCatTemplate')}
           </button>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto pr-0.5 space-y-4">
@@ -93,10 +93,12 @@ export function BatchImportModal({
                 }}
               >
                 <Icon name="upload_file" size={28} className="text-on-surface-variant/40 mb-2" />
-                <span className="text-sm text-on-surface-variant">点击选择或拖拽导入文件</span>
+                <span className="text-sm text-on-surface-variant">{t('selectionAdmin.chooseOrDropFile')}</span>
                 <span className="text-[10px] text-on-surface-variant/50 mt-1">
-                  .xlsx / .csv，最大 {uploadPolicy.selectionImportMaxSizeMb}MB，最多{' '}
-                  {uploadPolicy.selectionImportMaxRows} 行
+                  {t('selectionAdmin.importFileLimits', {
+                    size: uploadPolicy.selectionImportMaxSizeMb,
+                    rows: uploadPolicy.selectionImportMaxRows,
+                  })}
                 </span>
                 <input
                   name="file"
@@ -127,7 +129,9 @@ export function BatchImportModal({
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm">
                 <Icon name="check_circle" size={16} className="text-green-500" />
-                <span className="text-on-surface font-medium">解析成功：{batchParsed.length} 条产品</span>
+                <span className="text-on-surface font-medium">
+                  {t('selectionAdmin.parsedSuccess', { count: batchParsed.length })}
+                </span>
               </div>
               <button
                 type="button"
@@ -137,15 +141,17 @@ export function BatchImportModal({
                 }}
                 className="text-xs text-primary-container hover:underline"
               >
-                重新选择文件
+                {t('selectionAdmin.reselectFile')}
               </button>
               <div className="max-h-48 overflow-y-auto scrollbar-hidden rounded-lg border border-outline-variant/10">
                 <table className="w-full border-separate border-spacing-0 text-xs">
                   <thead className={ADMIN_TABLE_HEAD_CLASS}>
                     <AdminTableHeadRow>
                       <AdminTableHeadCell className="h-8 px-2 py-1.5">#</AdminTableHeadCell>
-                      <AdminTableHeadCell className="h-8 px-2 py-1.5">名称</AdminTableHeadCell>
-                      <AdminTableHeadCell className="h-8 px-2 py-1.5">型号</AdminTableHeadCell>
+                      <AdminTableHeadCell className="h-8 px-2 py-1.5">{t('selectionAdmin.colName')}</AdminTableHeadCell>
+                      <AdminTableHeadCell className="h-8 px-2 py-1.5">
+                        {t('selectionAdmin.colModel')}
+                      </AdminTableHeadCell>
                     </AdminTableHeadRow>
                   </thead>
                   <tbody>
@@ -159,7 +165,7 @@ export function BatchImportModal({
                     {batchParsed.length > 20 && (
                       <tr className="border-t border-outline-variant/5">
                         <td colSpan={3} className="px-2 py-1 text-on-surface-variant text-center">
-                          ... 还有 {batchParsed.length - 20} 条
+                          {t('selectionAdmin.moreRowsLeft', { count: batchParsed.length - 20 })}
                         </td>
                       </tr>
                     )}
@@ -188,7 +194,7 @@ export function BatchImportModal({
             }}
             className="px-4 py-2.5 sm:py-2 text-sm text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg sm:rounded"
           >
-            {batchParsed ? '取消' : '关闭'}
+            {batchParsed ? t('common.cancel') : t('common.close')}
           </button>
           {batchParsed && (
             <button
@@ -196,7 +202,9 @@ export function BatchImportModal({
               disabled={batchImporting}
               className="px-4 py-2.5 sm:py-2 text-sm font-bold bg-primary-container text-on-primary rounded-lg sm:rounded hover:opacity-90 disabled:opacity-50"
             >
-              {batchImporting ? '导入中...' : `确认导入 ${batchParsed.length} 条`}
+              {batchImporting
+                ? t('selectionAdmin.importing')
+                : t('selectionAdmin.importConfirm', { count: batchParsed.length })}
             </button>
           )}
         </div>

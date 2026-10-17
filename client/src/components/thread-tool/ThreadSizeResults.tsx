@@ -389,7 +389,7 @@ export default function ThreadSizeResults({
                         </span>
                       </td>
                       <td className={TABLE_TD}>
-                        {item.kind === '气管' ? t('threadSize.hose.air') : item.kind || t('threadSize.hose.hydraulic')}
+                        {item.kind === '气管' ? t('threadSize.hose.air') : t('threadSize.hose.hydraulic')}
                       </td>
                       <td className={TABLE_TD}>{item.kind === '气管' ? item.nominalInch : `${item.nominalInch}"`}</td>
                       <td className={`${TABLE_TD} tabular-nums`}>{item.innerMm.toFixed(1)} mm</td>

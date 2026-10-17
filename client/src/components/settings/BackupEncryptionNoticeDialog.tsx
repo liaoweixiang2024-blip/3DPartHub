@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import { copyText } from '../../lib/clipboard';
 import { dialogPanelMotion } from '../../lib/motion';
@@ -24,6 +25,7 @@ export default function BackupEncryptionNoticeDialog({
   onClose,
   secretEnvName = 'BACKUP_ENCRYPTION_SECRET',
 }: BackupEncryptionNoticeDialogProps) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [copyingEnvName, setCopyingEnvName] = useState(false);
 
@@ -31,9 +33,9 @@ export default function BackupEncryptionNoticeDialog({
     try {
       setCopyingEnvName(true);
       await copyText(secretEnvName);
-      toast('已复制环境变量名', 'success');
+      toast(t('settingsWidgets.envNameCopied'), 'success');
     } catch {
-      toast('复制失败', 'error');
+      toast(t('settingsWidgets.copyFailed'), 'error');
     } finally {
       setCopyingEnvName(false);
     }
@@ -55,30 +57,30 @@ export default function BackupEncryptionNoticeDialog({
               <div className="w-10 h-10 rounded-full bg-green-500/15 flex items-center justify-center shrink-0">
                 <Icon name="enhanced_encryption" size={20} className="text-green-500" />
               </div>
-              <h3 className="text-lg font-bold text-on-surface">备份已加密保存</h3>
+              <h3 className="text-lg font-bold text-on-surface">{t('settingsWidgets.backupEncryptedTitle')}</h3>
             </div>
 
             <div className="text-sm text-on-surface-variant space-y-2.5 mb-4">
               <p>
-                本次备份已用 <span className="font-medium text-on-surface">aes-256-gcm</span>{' '}
-                加密后写入磁盘，下载或恢复时系统会自动解密，操作方式不变。
+                {t('settingsWidgets.encryptedBodyPrefix')}{' '}
+                <span className="font-medium text-on-surface">aes-256-gcm</span>{' '}
+                {t('settingsWidgets.encryptedBodySuffix')}
               </p>
               <div className="rounded-lg border border-yellow-500/25 bg-yellow-500/10 px-3 py-2.5">
                 <p className="flex items-start gap-1.5 text-xs leading-relaxed text-on-surface">
                   <Icon name="key" size={14} className="mt-0.5 shrink-0 text-yellow-600" />
                   <span>
-                    <span className="font-medium">请务必把加密密钥另存一份</span>
-                    （密码管理器 / 纸质抄录）。密钥在服务器的{' '}
+                    <span className="font-medium">{t('settingsWidgets.saveKeyElsewhere')}</span>
+                    {t('settingsWidgets.keyStoreSuffix')}{' '}
                     <code className="font-mono text-[11px] bg-surface-container-lowest/60 px-1 py-0.5 rounded">
                       {secretEnvName}
                     </code>{' '}
-                    环境变量里——<span className="font-medium">丢失密钥 = 加密备份永久无法恢复</span>。
+                    {t('settingsWidgets.keyLocationSuffix')}
+                    <span className="font-medium">{t('settingsWidgets.lostKeyUnrecoverable')}</span>.
                   </span>
                 </p>
               </div>
-              <p className="text-xs leading-relaxed">
-                在其他服务器恢复时，目标服务器的环境变量需配置同一密钥；想关闭加密，删除该环境变量并重启容器即可（旧加密备份仍需密钥）。
-              </p>
+              <p className="text-xs leading-relaxed">{t('settingsWidgets.restoreSameKeyNote')}</p>
             </div>
 
             <div className="flex gap-2">
@@ -89,7 +91,7 @@ export default function BackupEncryptionNoticeDialog({
                 className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-outline-variant/20 bg-surface-container-lowest/30 px-3 py-2 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high/65 hover:text-on-surface disabled:opacity-50"
               >
                 <Icon name="content_copy" size={14} />
-                复制变量名
+                {t('settingsWidgets.copyEnvName')}
               </button>
               <button
                 type="button"
@@ -97,7 +99,7 @@ export default function BackupEncryptionNoticeDialog({
                 className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-transparent bg-primary-container px-3 py-2 text-xs font-medium text-on-primary shadow-sm transition-colors hover:opacity-90"
               >
                 <Icon name="check" size={14} />
-                我知道了
+                {t('settingsWidgets.gotIt')}
               </button>
             </div>
           </motion.div>

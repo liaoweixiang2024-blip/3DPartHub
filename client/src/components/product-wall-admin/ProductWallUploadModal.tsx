@@ -546,7 +546,9 @@ export function ProductWallUploadModal({
               {errorBlock}
               {uploading ? (
                 <div className="flex flex-col items-center gap-2">
-                  <p className="text-sm text-on-surface-variant">{progressLabel || `上传中... ${progress}%`}</p>
+                  <p className="text-sm text-on-surface-variant">
+                    {progressLabel || t('productWallAdmin.uploadingProgress', { progress })}
+                  </p>
                   {statsLine && <p className="text-xs tabular-nums text-on-surface-variant/80">{statsLine}</p>}
                   <div className="h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-surface-container-high">
                     <motion.div

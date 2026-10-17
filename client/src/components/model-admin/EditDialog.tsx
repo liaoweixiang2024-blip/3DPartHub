@@ -12,6 +12,7 @@ import ModelThumbnail from '../../components/shared/ModelThumbnail';
 import { useToast } from '../../components/shared/Toast';
 import { getBusinessConfig } from '../../lib/businessConfig';
 import { MODEL_SOURCE_ACCEPT, MODEL_SOURCE_FORMATS, MODEL_SOURCE_LABEL } from './shared';
+import { useTranslation } from 'react-i18next';
 
 export default function EditDialog({
   open,
@@ -27,6 +28,7 @@ export default function EditDialog({
   onSaved: () => void;
 }) {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState<string>('');
@@ -55,7 +57,7 @@ export default function EditDialog({
 
   const handleSave = async () => {
     if (!name.trim()) {
-      toast('名称不能为空', 'error');
+      toast(t('modelAdminComp.nameRequired'), 'error');
       return;
     }
     setSaving(true);
@@ -66,10 +68,10 @@ export default function EditDialog({
         description: description.trim() || undefined,
         categoryId: categoryId || null,
       });
-      toast('保存成功', 'success');
+      toast(t('modelAdminComp.saveSuccess'), 'success');
       ok = true;
     } catch {
-      toast('保存失败', 'error');
+      toast(t('modelAdminComp.saveFail'), 'error');
     } finally {
       setSaving(false);
     }
@@ -81,11 +83,11 @@ export default function EditDialog({
 
   const handleThumbnailUpload = async (file: File) => {
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
-      toast('仅支持 PNG/JPEG/WebP 图片', 'error');
+      toast(t('modelAdminComp.imageTypeInvalid'), 'error');
       return;
     }
     if (file.size > imageMaxBytes) {
-      toast(`图片不能超过 ${uploadPolicy.productWallImageMaxSizeMb}MB`, 'error');
+      toast(t('modelAdminComp.imageTooLarge', { mb: uploadPolicy.productWallImageMaxSizeMb }), 'error');
       return;
     }
     setThumbnailUploading(true);
@@ -93,10 +95,10 @@ export default function EditDialog({
     try {
       const result = await modelApi.uploadThumbnail(model.model_id, file);
       setThumbnailUrl(result.thumbnail_url);
-      toast('预览图已更新', 'success');
+      toast(t('modelAdminComp.thumbnailUpdated'), 'success');
       ok = true;
     } catch {
-      toast('上传预览图失败', 'error');
+      toast(t('modelAdminComp.thumbnailUploadFail'), 'error');
     } finally {
       setThumbnailUploading(false);
     }
@@ -116,18 +118,18 @@ export default function EditDialog({
           final = job;
           break;
         }
-        if (job.stage === 'error') throw new Error(job.error || '重新生成失败');
+        if (job.stage === 'error') throw new Error(job.error || t('modelAdminComp.regenFail'));
       }
-      if (!final) throw new Error('转换超时');
+      if (!final) throw new Error(t('modelAdminComp.convertTimeout'));
       if (final.result?.thumbnail_url) setThumbnailUrl(final.result.thumbnail_url);
       toast(
-        final.result?.thumbnail_warning || '预览图已重新生成',
+        final.result?.thumbnail_warning || t('modelAdminComp.thumbnailRegenerated'),
         final.result?.thumbnail_warning ? 'info' : 'success',
       );
       ok = true;
     } catch (err) {
       // 带上真实原因（如「转换子进程异常退出」「gmsh 转换失败」），只弹「重新生成失败」无法定位
-      toast(err instanceof Error && err.message ? err.message : '重新生成失败', 'error');
+      toast(err instanceof Error && err.message ? err.message : t('modelAdminComp.regenFail'), 'error');
     } finally {
       setRegenerating(false);
     }
@@ -151,13 +153,15 @@ export default function EditDialog({
             className="bg-surface-container-low rounded-t-2xl sm:rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-md p-4 sm:p-6 max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="font-headline text-lg font-semibold text-on-surface">编辑模型</h3>
-              <AdminIconButton icon="close" onClick={onClose} variant="ghost" aria-label="关闭" />
+              <h3 className="font-headline text-lg font-semibold text-on-surface">
+                {t('modelAdminComp.editModelTitle')}
+              </h3>
+              <AdminIconButton icon="close" onClick={onClose} variant="ghost" aria-label={t('common.close')} />
             </div>
             <div className="space-y-4">
               <div className="flex flex-col gap-1.5">
                 <AppFormLabel uppercase className="mb-0">
-                  预览图
+                  {t('modelAdminComp.previewImageLabel')}
                 </AppFormLabel>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <div className="w-16 h-16 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
@@ -183,7 +187,7 @@ export default function EditDialog({
                       variant="secondary"
                       className="w-full sm:w-auto"
                     >
-                      {thumbnailUploading ? '上传中...' : '上传图片'}
+                      {thumbnailUploading ? t('modelAdminComp.uploading') : t('modelAdminComp.uploadImage')}
                     </AdminButton>
                     <AdminButton
                       onClick={handleRegenerate}
@@ -193,37 +197,37 @@ export default function EditDialog({
                       variant="secondary"
                       className="w-full sm:w-auto"
                     >
-                      {regenerating ? '生成中...' : '从模型重新生成'}
+                      {regenerating ? t('modelAdminComp.generating') : t('modelAdminComp.regenFromModel')}
                     </AdminButton>
                   </div>
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
                 <AppFormLabel uppercase className="mb-0">
-                  名称
+                  {t('modelAdminComp.nameLabel')}
                 </AppFormLabel>
                 <AppTextInput value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <AppFormLabel uppercase className="mb-0">
-                  描述
+                  {t('modelAdminComp.descriptionLabel')}
                 </AppFormLabel>
                 <AppTextArea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <AppFormLabel uppercase className="mb-0">
-                  分类
+                  {t('modelAdminComp.categoryLabel')}
                 </AppFormLabel>
                 <CategorySelect
                   categories={categories}
                   value={categoryId}
                   onChange={setCategoryId}
-                  placeholder="选择分类"
+                  placeholder={t('modelAdminComp.selectCategory')}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
                 <AppFormLabel uppercase className="mb-0">
-                  产品图纸 (PDF)
+                  {t('modelAdminComp.drawingTitle')}
                 </AppFormLabel>
                 <div className="flex flex-col gap-2 min-w-0">
                   {drawings.map((drawing) => (
@@ -235,26 +239,28 @@ export default function EditDialog({
                       <button
                         type="button"
                         onClick={() =>
-                          void openModelDrawing(model.model_id, drawing.id).catch(() => toast('打开图纸失败', 'error'))
+                          void openModelDrawing(model.model_id, drawing.id).catch(() =>
+                            toast(t('modelAdminComp.openDrawingFail'), 'error'),
+                          )
                         }
                         className="text-xs text-primary hover:underline shrink-0"
                       >
-                        查看
+                        {t('modelAdminComp.view')}
                       </button>
                       <button
                         onClick={async () => {
                           try {
                             const r = await modelApi.deleteDrawing(model.model_id, drawing.id);
                             setDrawings(r.drawings);
-                            toast('图纸已删除', 'success');
+                            toast(t('modelAdminComp.drawingDeleted'), 'success');
                             onSaved();
                           } catch {
-                            toast('删除失败', 'error');
+                            toast(t('modelAdminComp.deleteFail'), 'error');
                           }
                         }}
                         className="text-xs text-error hover:underline shrink-0"
                       >
-                        删除
+                        {t('common.delete')}
                       </button>
                     </div>
                   ))}
@@ -267,12 +273,12 @@ export default function EditDialog({
                       const f = e.target.files?.[0];
                       if (!f) return;
                       if (f.type !== 'application/pdf') {
-                        toast('仅支持 PDF 格式', 'error');
+                        toast(t('modelAdminComp.pdfOnly'), 'error');
                         e.target.value = '';
                         return;
                       }
                       if (f.size > drawingMaxBytes) {
-                        toast(`PDF 图纸不能超过 ${uploadPolicy.modelDrawingMaxSizeMb}MB`, 'error');
+                        toast(t('modelAdminComp.pdfTooLarge', { mb: uploadPolicy.modelDrawingMaxSizeMb }), 'error');
                         e.target.value = '';
                         return;
                       }
@@ -280,10 +286,10 @@ export default function EditDialog({
                       try {
                         const r = await modelApi.uploadDrawing(model.model_id, f);
                         setDrawings(r.drawings);
-                        toast('图纸上传成功', 'success');
+                        toast(t('modelAdminComp.drawingUploadSuccess'), 'success');
                         onSaved();
                       } catch {
-                        toast('上传失败', 'error');
+                        toast(t('modelAdminComp.uploadFail'), 'error');
                       } finally {
                         setDrawingUploading(false);
                       }
@@ -298,13 +304,19 @@ export default function EditDialog({
                     variant="secondary"
                     className="w-full justify-center"
                   >
-                    {drawingUploading ? '上传中...' : drawings.length > 0 ? '继续添加 PDF 图纸' : '上传 PDF 图纸'}
+                    {drawingUploading
+                      ? t('modelAdminComp.uploading')
+                      : drawings.length > 0
+                        ? t('modelAdminComp.continueAddDrawing')
+                        : t('modelAdminComp.uploadDrawing')}
                   </AdminButton>
                 </div>
               </div>
               <div className="border-t border-outline-variant/20 pt-4 mt-1">
-                <AppFormLabel uppercase>替换模型文件</AppFormLabel>
-                <p className="text-[10px] text-on-surface-variant/60 mt-1 mb-2">替换后将重新转换，预计耗时 30 秒</p>
+                <AppFormLabel uppercase>{t('modelAdminComp.replaceFileTitle')}</AppFormLabel>
+                <p className="text-[10px] text-on-surface-variant/60 mt-1 mb-2">
+                  {t('modelAdminComp.replaceFileHint')}
+                </p>
                 <input
                   type="file"
                   accept={MODEL_SOURCE_ACCEPT}
@@ -315,17 +327,22 @@ export default function EditDialog({
                     if (!f) return;
                     const ext = f.name.split('.').pop()?.toLowerCase() || '';
                     if (!MODEL_SOURCE_FORMATS.includes(ext)) {
-                      toast(`仅支持 ${MODEL_SOURCE_LABEL} 格式`, 'error');
+                      toast(t('modelAdminComp.sourceFormatOnly', { formats: MODEL_SOURCE_LABEL }), 'error');
                       return;
                     }
                     setFileReplacing(true);
                     let ok = false;
                     try {
                       const result = await modelApi.replaceFile(model.model_id, f);
-                      toast(result.status === 'completed' ? '文件已更新' : '文件已上传，正在转换中...', 'success');
+                      toast(
+                        result.status === 'completed'
+                          ? t('modelAdminComp.fileUpdated')
+                          : t('modelAdminComp.fileUploadedConverting'),
+                        'success',
+                      );
                       ok = true;
                     } catch {
-                      toast('替换文件失败', 'error');
+                      toast(t('modelAdminComp.replaceFileFail'), 'error');
                     } finally {
                       setFileReplacing(false);
                     }
@@ -344,15 +361,15 @@ export default function EditDialog({
                   variant="secondary"
                   className="w-full"
                 >
-                  {fileReplacing ? '上传中...' : '选择新模型文件'}
+                  {fileReplacing ? t('modelAdminComp.uploading') : t('modelAdminComp.chooseNewFile')}
                 </AdminButton>
               </div>
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 pt-2">
                 <AdminButton onClick={onClose} variant="secondary">
-                  取消
+                  {t('common.cancel')}
                 </AdminButton>
                 <AdminButton onClick={handleSave} disabled={saving} variant="primary">
-                  {saving ? '保存中...' : '保存'}
+                  {saving ? t('modelAdminComp.saving') : t('common.save')}
                 </AdminButton>
               </div>
             </div>

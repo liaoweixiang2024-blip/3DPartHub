@@ -1,5 +1,7 @@
 /**
  * Preset color schemes for the application.
+ * label 字段存 settingsWidgets 命名空间的 i18n 键，渲染处用 t() 取文案。
+
  * Each preset defines CSS variable overrides for both dark and light modes.
  * Variables follow the Material Design 3 tonal palette approach.
  */
@@ -104,7 +106,7 @@ const tealSurface = createSurfacePalette(176, 28);
 
 export const COLOR_PRESETS: Record<string, ColorPreset> = {
   orange: {
-    label: '橙色',
+    label: 'settingsWidgets.presetOrange',
     primary: '#f97316',
     dark: {
       ...orangeSurface.dark,
@@ -146,7 +148,7 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     },
   },
   blue: {
-    label: '蓝色',
+    label: 'settingsWidgets.presetBlue',
     primary: '#3b82f6',
     dark: {
       ...blueSurface.dark,
@@ -188,7 +190,7 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     },
   },
   green: {
-    label: '绿色',
+    label: 'settingsWidgets.presetGreen',
     primary: '#10b981',
     dark: {
       ...greenSurface.dark,
@@ -230,7 +232,7 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     },
   },
   purple: {
-    label: '紫色',
+    label: 'settingsWidgets.presetPurple',
     primary: '#8b5cf6',
     dark: {
       ...purpleSurface.dark,
@@ -272,7 +274,7 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     },
   },
   red: {
-    label: '红色',
+    label: 'settingsWidgets.presetRed',
     primary: '#ef4444',
     dark: {
       ...redSurface.dark,
@@ -314,7 +316,7 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
     },
   },
   teal: {
-    label: '青色',
+    label: 'settingsWidgets.presetTeal',
     primary: '#14b8a6',
     dark: {
       ...tealSurface.dark,

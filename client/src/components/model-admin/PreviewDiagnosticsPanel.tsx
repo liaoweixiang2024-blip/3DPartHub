@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { modelApi, type ModelPreviewDiagnosticItem, type PreviewDiagnosticFilter } from '../../api/models';
@@ -21,9 +22,10 @@ import {
 // ── Loading states ─────────────────────────────────────────────────────────
 
 function PreviewDiagnosticsListLoadingState({ compact }: { compact: boolean }) {
+  const { t } = useTranslation();
   return (
     <div className={`flex flex-1 ${compact ? 'min-h-[224px]' : 'min-h-[280px]'}`}>
-      <PageRefreshIndicator label="预览诊断刷新中" />
+      <PageRefreshIndicator label={t('modelAdminComp.diagnosticsRefreshing')} />
     </div>
   );
 }
@@ -41,8 +43,9 @@ function DiagnosticStatusBadge({ item }: { item: ModelPreviewDiagnosticItem }) {
 }
 
 function PerformanceBadge({ level }: { level?: ModelPreviewDiagnosticItem['performance_level'] }) {
+  const { t } = useTranslation();
   if (!level || level === 'normal') return null;
-  const label = level === 'huge' ? '超大模型' : '大模型';
+  const label = level === 'huge' ? t('modelAdminComp.hugeModel') : t('modelAdminComp.largeModel');
   const className =
     level === 'huge' ? 'border-error/20 bg-error/10 text-error' : 'border-amber-500/20 bg-amber-500/10 text-amber-600';
   return (
@@ -64,6 +67,7 @@ export default function PreviewDiagnosticsPanel({
   embedded?: boolean;
 }) {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [status, setStatus] = useState<PreviewDiagnosticFilter>('problem');
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildingAll, setRebuildingAll] = useState(false);
@@ -93,12 +97,13 @@ export default function PreviewDiagnosticsPanel({
     try {
       const result = await modelApi.rebuildPreviewDiagnostics({ status, limit });
       toast(
-        `已加入队列 ${result.queued} 个${result.skipped ? `，跳过 ${result.skipped} 个` : ''}`,
+        t('modelAdminComp.queuedToast', { count: result.queued }) +
+          (result.skipped ? t('modelAdminComp.skippedPart', { count: result.skipped }) : ''),
         result.failed ? 'error' : 'success',
       );
       mutate();
     } catch {
-      toast('加入重建队列失败', 'error');
+      toast(t('modelAdminComp.queueRebuildFail'), 'error');
     } finally {
       setRebuilding(false);
     }
@@ -118,12 +123,13 @@ export default function PreviewDiagnosticsPanel({
     try {
       const result = await modelApi.rebuildPreviewDiagnostics({ all: true, status: 'all', limit: total });
       toast(
-        `已加入队列 ${result.queued} 个${result.skipped ? `，跳过 ${result.skipped} 个` : ''}`,
+        t('modelAdminComp.queuedToast', { count: result.queued }) +
+          (result.skipped ? t('modelAdminComp.skippedPart', { count: result.skipped }) : ''),
         result.failed ? 'error' : 'success',
       );
       mutate();
     } catch {
-      toast('一键重建全部失败', 'error');
+      toast(t('modelAdminComp.rebuildAllFail'), 'error');
     } finally {
       setRebuildingAll(false);
     }
@@ -148,13 +154,15 @@ export default function PreviewDiagnosticsPanel({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <Icon name="data_usage" size={17} className="text-primary" />
-              <h3 className="text-sm font-semibold text-on-surface">预览诊断</h3>
-              {summary && <span className="text-[10px] text-on-surface-variant">{summary.total} 个模型</span>}
+              <h3 className="text-sm font-semibold text-on-surface">{t('modelAdminComp.previewDiagnostics')}</h3>
+              {summary && (
+                <span className="text-[10px] text-on-surface-variant">
+                  {t('modelAdminComp.totalModels', { count: summary.total })}
+                </span>
+              )}
             </div>
             {!embedded && (
-              <p className="mt-1 text-xs text-on-surface-variant">
-                扫描现有 GLB/glTF 诊断，快速定位缩略图异常、面片为空或包围盒异常的模型。
-              </p>
+              <p className="mt-1 text-xs text-on-surface-variant">{t('modelAdminComp.diagnosticsSubtitle')}</p>
             )}
           </div>
           <div className={previewOpsActionRowClass(compact)}>
@@ -164,7 +172,7 @@ export default function PreviewDiagnosticsPanel({
               className={`${previewOpsButtonClass(compact)} border border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface`}
             >
               <Icon name="refresh" size={14} className={isLoading ? 'animate-spin' : ''} />
-              {embedded ? '扫描' : '重新扫描'}
+              {embedded ? t('modelAdminComp.scan') : t('modelAdminComp.rescan')}
             </button>
             <button
               onClick={handleRebuild}
@@ -172,7 +180,13 @@ export default function PreviewDiagnosticsPanel({
               className={`${previewOpsButtonClass(compact)} bg-primary-container text-on-primary hover:bg-primary`}
             >
               <Icon name="autorenew" size={14} className={rebuilding ? 'animate-spin' : ''} />
-              {rebuilding ? '加入中...' : embedded ? '重建当前' : compact ? '重建异常' : '加入重建队列'}
+              {rebuilding
+                ? t('modelAdminComp.joining')
+                : embedded
+                  ? t('modelAdminComp.rebuildCurrent')
+                  : compact
+                    ? t('modelAdminComp.rebuildAbnormal')
+                    : t('modelAdminComp.joinRebuildQueue')}
             </button>
             <button
               onClick={handleRebuildAll}
@@ -180,7 +194,13 @@ export default function PreviewDiagnosticsPanel({
               className={`${previewOpsButtonClass(compact)} border border-primary/25 bg-primary/10 text-primary hover:bg-primary-container hover:text-on-primary`}
             >
               <Icon name="sync" size={14} className={rebuildingAll ? 'animate-spin' : ''} />
-              {rebuildingAll ? '加入中...' : embedded ? '全部重建' : compact ? '一键全部' : '一键重建全部'}
+              {rebuildingAll
+                ? t('modelAdminComp.joining')
+                : embedded
+                  ? t('modelAdminComp.rebuildAll')
+                  : compact
+                    ? t('modelAdminComp.rebuildAllOneKey')
+                    : t('modelAdminComp.rebuildAllFull')}
             </button>
           </div>
         </div>
@@ -195,7 +215,7 @@ export default function PreviewDiagnosticsPanel({
                   onClick={() => setStatus(item.key)}
                   className={previewOpsFilterButtonClass(compact, active)}
                 >
-                  <span>{item.label}</span>
+                  <span>{t(item.label)}</span>
                   <span className="font-mono font-semibold">{formatCount(getValue(item.key))}</span>
                 </button>
               );
@@ -210,7 +230,7 @@ export default function PreviewDiagnosticsPanel({
                 className={`flex min-h-[68px] items-center justify-between rounded-sm border px-3 py-2 text-left transition-colors ${getDiagnosticTone(item.key, status === item.key)}`}
               >
                 <span className="min-w-0">
-                  <span className="block text-[11px] font-medium">{item.label}</span>
+                  <span className="block text-[11px] font-medium">{t(item.label)}</span>
                   <span className="mt-1 block font-mono text-lg font-semibold">{formatCount(getValue(item.key))}</span>
                 </span>
                 <Icon name={item.icon} size={18} className="shrink-0 opacity-80" />
@@ -222,11 +242,11 @@ export default function PreviewDiagnosticsPanel({
         <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-outline-variant/10 pt-3">
           <div className="mb-2 flex items-center justify-between gap-3">
             <span className="text-[11px] uppercase tracking-wider text-on-surface-variant font-medium">
-              {status === 'ok' ? '正常模型' : '异常模型'}
+              {status === 'ok' ? t('modelAdminComp.normalModels') : t('modelAdminComp.abnormalModels')}
             </span>
             {data && (
               <span className="text-[10px] text-on-surface-variant">
-                显示 {visibleItems.length} / {data.total}
+                {t('modelAdminComp.showingCount', { shown: visibleItems.length, total: data.total })}
               </span>
             )}
           </div>
@@ -255,13 +275,25 @@ export default function PreviewDiagnosticsPanel({
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-on-surface-variant">
                       <span className="font-mono">{item.format?.toUpperCase() || '-'}</span>
-                      <span>面片 {formatCount(item.face_count)}</span>
-                      <span>顶点 {formatCount(item.vertex_count)}</span>
-                      <span>跳过 {formatCount(item.skipped_mesh_count)}</span>
+                      <span>
+                        {t('modelAdminComp.facesLabel')} {formatCount(item.face_count)}
+                      </span>
+                      <span>
+                        {t('modelAdminComp.verticesLabel')} {formatCount(item.vertex_count)}
+                      </span>
+                      <span>
+                        {t('modelAdminComp.skippedLabel')} {formatCount(item.skipped_mesh_count)}
+                      </span>
                       {!!item.estimated_peak_memory_mb && item.estimated_peak_memory_mb >= 512 && (
-                        <span>预估内存 {formatCount(item.estimated_peak_memory_mb)} MB</span>
+                        <span>
+                          {t('modelAdminComp.estMemory', { count: formatCount(item.estimated_peak_memory_mb) })}
+                        </span>
                       )}
-                      {!compact && <span>包围盒 {formatBoundsSize(item.bounds_size)}</span>}
+                      {!compact && (
+                        <span>
+                          {t('modelAdminComp.boundingBoxLabel')} {formatBoundsSize(item.bounds_size)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   {!compact && (
@@ -277,7 +309,7 @@ export default function PreviewDiagnosticsPanel({
             <div
               className={`flex flex-1 items-center justify-center rounded-sm border border-outline-variant/10 bg-surface-container-lowest px-3 py-4 text-center text-xs text-on-surface-variant ${compact ? 'min-h-[224px]' : 'min-h-[280px]'}`}
             >
-              {status === 'ok' ? '暂时没有正常诊断记录' : '当前没有需要处理的预览异常'}
+              {status === 'ok' ? t('modelAdminComp.noNormalRecords') : t('modelAdminComp.noAbnormalRecords')}
             </div>
           )}
         </div>
@@ -290,13 +322,19 @@ export default function PreviewDiagnosticsPanel({
           if (confirmAction === 'rebuild-all') void confirmRebuildAll();
         }}
         icon="autorenew"
-        title={confirmAction === 'rebuild-all' ? '确认重建全部预览' : '确认重建预览'}
+        title={
+          confirmAction === 'rebuild-all'
+            ? t('modelAdminComp.confirmRebuildAllTitle')
+            : t('modelAdminComp.confirmRebuildTitle')
+        }
         description={
           confirmAction === 'rebuild-all'
-            ? `将把全部 ${summary?.total || 0} 个模型加入预览重建队列，重新生成 GLB 与缩略图。任务会按后台队列慢慢执行，耗时可能较长。`
-            : `将把当前筛选的前 ${Math.min(compact ? 20 : 50, data?.total || 0)} 个模型加入预览重建队列，生成新的 GLB 与缩略图。`
+            ? t('modelAdminComp.confirmRebuildAllDesc', { count: summary?.total || 0 })
+            : t('modelAdminComp.confirmRebuildDesc', {
+                count: Math.min(compact ? 20 : 50, data?.total || 0),
+              })
         }
-        confirmLabel="确认加入队列"
+        confirmLabel={t('modelAdminComp.confirmQueueLabel')}
         confirmDisabled={rebuilding || rebuildingAll}
       />
     </>

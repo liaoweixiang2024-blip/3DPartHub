@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { deleteTicket, getTickets, updateTicketStatus, type Ticket } from '../api/tickets';
 import { AdminButton } from '../components/shared/AdminControls';
@@ -85,6 +86,7 @@ function ticketMatchesSearch(
 }
 
 function useTicketAdminData() {
+  const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const { toast } = useToast();
   const {
@@ -102,10 +104,10 @@ function useTicketAdminData() {
   const statuses = business.ticketStatuses;
   const statusTabs = useMemo(
     () => [
-      { value: 'all', label: '全部' },
+      { value: 'all', label: t('ticketAdminPage.tabAll') },
       ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label })),
     ],
-    [statuses],
+    [statuses, t],
   );
   const classificationMap = useMemo(
     () => new Map(business.ticketClassifications.map((item) => [item.value, item.label])),
@@ -132,9 +134,9 @@ function useTicketAdminData() {
     try {
       const data = await getTickets();
       setTickets(data);
-      toast('工单数据已刷新', 'success');
+      toast(t('ticketAdminPage.dataRefreshed'), 'success');
     } catch (err) {
-      toast(getErrorMessage(err, '刷新工单失败'), 'error');
+      toast(getErrorMessage(err, t('ticketAdminPage.refreshFail')), 'error');
     }
   }
 
@@ -152,9 +154,9 @@ function useTicketAdminData() {
     try {
       await deleteTicket(id);
       setTickets((prev) => prev.filter((ticket) => ticket.id !== id));
-      toast('工单已删除', 'success');
+      toast(t('ticketAdminPage.ticketDeleted'), 'success');
     } catch (err) {
-      toast(getErrorMessage(err, '删除工单失败'), 'error');
+      toast(getErrorMessage(err, t('ticketAdminPage.deleteFail')), 'error');
     } finally {
       setDeletingId(null);
     }
@@ -216,6 +218,7 @@ function TicketStatusTabs({
   counts: Record<string, number>;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <ResponsiveSectionTabs
       tabs={tabs.map((tab) => ({
@@ -226,8 +229,8 @@ function TicketStatusTabs({
       }))}
       value={active}
       onChange={onChange}
-      mobileTitle="工单状态"
-      countUnit="单"
+      mobileTitle={t('ticketAdminPage.statusTitle')}
+      countUnit={t('ticketAdminPage.countUnit')}
     />
   );
 }
@@ -249,6 +252,7 @@ function TicketAdminToolbar({
   searchInputValue: string;
   onClearSearch: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex min-h-10 min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
       <div className="min-w-0 flex-1">
@@ -258,17 +262,25 @@ function TicketAdminToolbar({
         inputProps={searchInputProps}
         value={searchInputValue}
         onClear={onClearSearch}
-        placeholder="搜索工单、用户、基准零件"
+        placeholder={t('ticketAdminPage.searchPlaceholder')}
       />
     </div>
   );
 }
 
 function EmptyTickets() {
-  return <AdminEmptyState icon="inbox" title="暂无工单" description="切换状态或等待用户提交新的技术支持工单。" />;
+  const { t } = useTranslation();
+  return (
+    <AdminEmptyState
+      icon="inbox"
+      title={t('ticketAdminPage.emptyTitle')}
+      description={t('ticketAdminPage.emptyDesc')}
+    />
+  );
 }
 
 function DesktopContent() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [deleteTarget, setDeleteTarget] = useState<Ticket | null>(null);
   const {
@@ -296,7 +308,7 @@ function DesktopContent() {
   if (user?.role !== 'ADMIN') {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-on-surface-variant">无访问权限</p>
+        <p className="text-on-surface-variant">{t('ticketAdminPage.noAccess')}</p>
       </div>
     );
   }
@@ -304,8 +316,8 @@ function DesktopContent() {
   return (
     <>
       <AdminManagementPage
-        title="工单处理"
-        description="管理用户提交的模型需求工单"
+        title={t('ticketAdminPage.title')}
+        description={t('ticketAdminPage.description')}
         actions={<AdminRefreshButton onRefresh={refreshTickets} />}
         toolbar={
           <TicketAdminToolbar
@@ -321,7 +333,7 @@ function DesktopContent() {
       >
         <div key={filter} className="admin-tab-panel">
           {loading ? (
-            <AdminLoadingState variant="list" label="工单加载中" />
+            <AdminLoadingState variant="list" label={t('ticketAdminPage.loadingLabel')} />
           ) : filtered.length === 0 ? (
             <EmptyTickets />
           ) : (
@@ -337,15 +349,17 @@ function DesktopContent() {
                     <span
                       className={`shrink-0 inline-flex items-center text-[11px] px-2.5 py-1 rounded-lg font-bold ${info.color || ''} ${info.bg || ''}`}
                     >
-                      {info.label}
+                      {t(`ticketStatus.${ticket.status}`, { defaultValue: info.label })}
                     </span>
                     <span className="shrink-0 text-xs text-on-surface-variant bg-surface-container-high/80 px-2 py-0.5 rounded-md">
-                      {classificationMap.get(ticket.classification) || ticket.classification}
+                      {t(`ticketClassification.${ticket.classification}.label`, {
+                        defaultValue: classificationMap.get(ticket.classification) || ticket.classification,
+                      })}
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-on-surface truncate">{ticket.description}</p>
                       <p className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] text-on-surface-variant/70">
-                        <span className="shrink-0">{ticket.user?.username || '未知用户'}</span>
+                        <span className="shrink-0">{ticket.user?.username || t('ticketAdminPage.unknownUser')}</span>
                         {ticket.basePart || ticket.sourceUrl ? (
                           <>
                             <span className="shrink-0">·</span>
@@ -368,7 +382,7 @@ function DesktopContent() {
                           size="sm"
                           variant="warning"
                         >
-                          处理
+                          {t('ticketAdminPage.actionProcess')}
                         </AdminButton>
                       )}
                       {ticket.status === 'in_progress' && (
@@ -377,7 +391,7 @@ function DesktopContent() {
                           size="sm"
                           variant="success"
                         >
-                          解决
+                          {t('ticketAdminPage.actionResolve')}
                         </AdminButton>
                       )}
                       {ticket.status !== 'closed' && (
@@ -386,12 +400,12 @@ function DesktopContent() {
                           size="sm"
                           variant="secondary"
                         >
-                          关闭
+                          {t('ticketAdminPage.actionClose')}
                         </AdminButton>
                       )}
                       {ticket.status === 'closed' && (
                         <AdminButton onClick={() => handleStatusChange(ticket.id, 'open')} size="sm" variant="tonal">
-                          重开
+                          {t('ticketAdminPage.actionReopen')}
                         </AdminButton>
                       )}
                       <AdminButton
@@ -400,7 +414,7 @@ function DesktopContent() {
                         size="sm"
                         variant="danger"
                       >
-                        {deletingId === ticket.id ? '删除中' : '删除工单'}
+                        {deletingId === ticket.id ? t('ticketAdminPage.deleting') : t('ticketAdminPage.deleteTicket')}
                       </AdminButton>
                       <span className="ml-0.5 text-on-surface-variant/30 group-hover:text-on-surface-variant/60 transition-colors">
                         <Icon name="chevron_right" size={16} />
@@ -423,15 +437,16 @@ function DesktopContent() {
           setDeleteTarget(null);
           handleDeleteTicket(targetId);
         }}
-        title="确认删除工单"
-        description="删除后工单、回复记录和附件将不可恢复。"
-        confirmLabel="删除工单"
+        title={t('ticketAdminPage.confirmTitle')}
+        description={t('ticketAdminPage.confirmDesc')}
+        confirmLabel={t('ticketAdminPage.deleteTicket')}
       />
     </>
   );
 }
 
 function MobileContent() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [deleteTarget, setDeleteTarget] = useState<Ticket | null>(null);
   const {
@@ -459,7 +474,7 @@ function MobileContent() {
   if (user?.role !== 'ADMIN') {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-on-surface-variant">无访问权限</p>
+        <p className="text-on-surface-variant">{t('ticketAdminPage.noAccess')}</p>
       </div>
     );
   }
@@ -467,8 +482,8 @@ function MobileContent() {
   return (
     <>
       <AdminManagementPage
-        title="工单处理"
-        description="管理用户提交的模型需求工单"
+        title={t('ticketAdminPage.title')}
+        description={t('ticketAdminPage.description')}
         actions={<AdminRefreshButton onRefresh={refreshTickets} mobileIconOnly />}
         toolbar={
           <TicketAdminToolbar
@@ -484,7 +499,7 @@ function MobileContent() {
       >
         <div key={filter} className="admin-tab-panel">
           {loading ? (
-            <AdminLoadingState variant="list" rows={5} label="工单加载中" />
+            <AdminLoadingState variant="list" rows={5} label={t('ticketAdminPage.loadingLabel')} />
           ) : filtered.length === 0 ? (
             <EmptyTickets />
           ) : (
@@ -504,10 +519,12 @@ function MobileContent() {
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${info.color || ''} ${info.bg || ''}`}
                         >
-                          {info.label}
+                          {t(`ticketStatus.${ticket.status}`, { defaultValue: info.label })}
                         </span>
                         <span className="text-[10px] text-on-surface-variant bg-surface-container-highest/80 px-2 py-0.5 rounded-md">
-                          {classificationMap.get(ticket.classification) || ticket.classification}
+                          {t(`ticketClassification.${ticket.classification}.label`, {
+                            defaultValue: classificationMap.get(ticket.classification) || ticket.classification,
+                          })}
                         </span>
                         <span className="text-[10px] text-on-surface-variant/50 ml-auto tabular-nums">
                           {new Date(ticket.createdAt).toLocaleDateString('zh-CN')}
@@ -517,7 +534,7 @@ function MobileContent() {
                         {ticket.description}
                       </p>
                       <div className="flex items-center justify-between gap-2 text-xs text-on-surface-variant/60">
-                        <span className="truncate">{ticket.user?.username || '未知用户'}</span>
+                        <span className="truncate">{ticket.user?.username || t('ticketAdminPage.unknownUser')}</span>
                         <Icon name="chevron_right" size={14} className="shrink-0 text-on-surface-variant/30" />
                       </div>
                     </div>
@@ -528,7 +545,7 @@ function MobileContent() {
                           size="sm"
                           variant="warning"
                         >
-                          开始处理
+                          {t('ticketAdminPage.actionProcessLong')}
                         </AdminButton>
                       )}
                       {ticket.status === 'in_progress' && (
@@ -537,7 +554,7 @@ function MobileContent() {
                           size="sm"
                           variant="success"
                         >
-                          标记解决
+                          {t('ticketAdminPage.actionResolveLong')}
                         </AdminButton>
                       )}
                       {ticket.status !== 'closed' ? (
@@ -546,11 +563,11 @@ function MobileContent() {
                           size="sm"
                           variant="secondary"
                         >
-                          关闭
+                          {t('ticketAdminPage.actionClose')}
                         </AdminButton>
                       ) : (
                         <AdminButton onClick={() => handleStatusChange(ticket.id, 'open')} size="sm" variant="tonal">
-                          重新打开
+                          {t('ticketAdminPage.actionReopenLong')}
                         </AdminButton>
                       )}
                       <AdminButton
@@ -559,7 +576,7 @@ function MobileContent() {
                         size="sm"
                         variant="danger"
                       >
-                        {deletingId === ticket.id ? '删除中' : '删除工单'}
+                        {deletingId === ticket.id ? t('ticketAdminPage.deleting') : t('ticketAdminPage.deleteTicket')}
                       </AdminButton>
                     </div>
                   </div>
@@ -579,16 +596,17 @@ function MobileContent() {
           setDeleteTarget(null);
           handleDeleteTicket(targetId);
         }}
-        title="确认删除工单"
-        description="删除后工单、回复记录和附件将不可恢复。"
-        confirmLabel="删除工单"
+        title={t('ticketAdminPage.confirmTitle')}
+        description={t('ticketAdminPage.confirmDesc')}
+        confirmLabel={t('ticketAdminPage.deleteTicket')}
       />
     </>
   );
 }
 
 export default function TicketAdminPage() {
-  useDocumentTitle('工单处理');
+  const { t } = useTranslation();
+  useDocumentTitle(t('ticketAdminPage.title'));
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   return <AdminPageShell>{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>;

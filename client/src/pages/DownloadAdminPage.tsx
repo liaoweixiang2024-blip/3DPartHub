@@ -2,6 +2,7 @@ import { useCallback, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import useSWRInfinite, { type SWRInfiniteResponse } from 'swr/infinite';
+import { useTranslation } from 'react-i18next';
 import {
   downloadsApi,
   type DownloadAdminRecord,
@@ -35,32 +36,33 @@ const numberFormatter = new Intl.NumberFormat('zh-CN');
 /** 下载记录 tab 的无限滚动页大小（与服务端 /admin/downloads/records 上限一致） */
 const RECORDS_PAGE_SIZE = 20;
 
-const TAB_META: Record<DownloadStatsTab, { label: string; icon: string; title: string; description: string }> = {
-  trend: {
-    label: '下载趋势',
-    icon: 'data_usage',
-    title: '近 14 天下载趋势',
-    description: '按全部下载事件统计（含未登录与分享下载），展示每日下载量和文件体积。',
-  },
-  formats: {
-    label: '格式分布',
-    icon: 'inventory_2',
-    title: '下载格式分布',
-    description: '按文件格式汇总下载次数、占比和累计体积。',
-  },
-  models: {
-    label: '热门模型',
-    icon: 'download',
-    title: '热门下载模型',
-    description: '按模型累计下载量排序，便于发现高频需求。',
-  },
-  recent: {
-    label: '下载记录',
-    icon: 'schedule',
-    title: '最近下载记录',
-    description: '展示最近产生的下载事件和文件信息（含未登录与分享下载）。',
-  },
-};
+const TAB_META: Record<DownloadStatsTab, { labelKey: string; icon: string; titleKey: string; descriptionKey: string }> =
+  {
+    trend: {
+      labelKey: 'downloadAdminPage.tab.trend.label',
+      icon: 'data_usage',
+      titleKey: 'downloadAdminPage.tab.trend.title',
+      descriptionKey: 'downloadAdminPage.tab.trend.description',
+    },
+    formats: {
+      labelKey: 'downloadAdminPage.tab.formats.label',
+      icon: 'inventory_2',
+      titleKey: 'downloadAdminPage.tab.formats.title',
+      descriptionKey: 'downloadAdminPage.tab.formats.description',
+    },
+    models: {
+      labelKey: 'downloadAdminPage.tab.models.label',
+      icon: 'download',
+      titleKey: 'downloadAdminPage.tab.models.title',
+      descriptionKey: 'downloadAdminPage.tab.models.description',
+    },
+    recent: {
+      labelKey: 'downloadAdminPage.tab.recent.label',
+      icon: 'schedule',
+      titleKey: 'downloadAdminPage.tab.recent.title',
+      descriptionKey: 'downloadAdminPage.tab.recent.description',
+    },
+  };
 
 function formatNumber(value: number | null | undefined) {
   return numberFormatter.format(value || 0);
@@ -101,12 +103,13 @@ function AdminSearchField({
   value: string;
   onClear: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <SearchField
       inputProps={inputProps}
       value={value}
       onClear={onClear}
-      placeholder="搜索模型、用户、格式..."
+      placeholder={t('downloadAdminPage.searchPlaceholder')}
       className="md:w-72 md:shrink-0"
     />
   );
@@ -121,17 +124,18 @@ function DownloadStatsTabs({
   counts: Record<DownloadStatsTab, number>;
   onChange: (value: DownloadStatsTab) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <ResponsiveSectionTabs
       tabs={(Object.keys(TAB_META) as DownloadStatsTab[]).map((value) => ({
         value,
-        label: TAB_META[value].label,
+        label: t(TAB_META[value].labelKey),
         icon: TAB_META[value].icon,
         count: counts[value] || 0,
       }))}
       value={active}
       onChange={(value) => onChange(value as DownloadStatsTab)}
-      mobileTitle="统计维度"
+      mobileTitle={t('downloadAdminPage.mobileTabsTitle')}
     />
   );
 }
@@ -189,49 +193,50 @@ function MetricCard({
 }
 
 function SummaryCards({ stats }: { stats: DownloadAdminStats }) {
+  const { t } = useTranslation();
   const summary = stats.summary;
   const downloadedBytes =
     summary.downloadedBytes ?? stats.formatStats.reduce((total, item) => total + (item.bytes || 0), 0);
   const cards = [
     {
-      label: '累计下载',
+      label: t('downloadAdminPage.card.total'),
       value: formatNumber(summary.totalModelDownloads),
-      hint: '模型累计计数',
+      hint: t('downloadAdminPage.card.totalHint'),
       icon: 'download',
       accentClassName: 'bg-primary-container/10 text-primary-container',
     },
     {
-      label: '下载记录',
+      label: t('downloadAdminPage.card.records'),
       value: formatNumber(summary.historyRecords),
-      hint: '全部下载事件',
+      hint: t('downloadAdminPage.card.recordsHint'),
       icon: 'schedule',
       accentClassName: 'bg-blue-500/10 text-blue-500',
     },
     {
-      label: '今日下载',
+      label: t('downloadAdminPage.card.today'),
       value: formatNumber(summary.todayDownloads),
-      hint: '今天新增记录',
+      hint: t('downloadAdminPage.card.todayHint'),
       icon: 'calendar_today',
       accentClassName: 'bg-emerald-500/10 text-emerald-500',
     },
     {
-      label: '近 7 天',
+      label: t('downloadAdminPage.card.week'),
       value: formatNumber(summary.weekDownloads),
-      hint: '一周下载热度',
+      hint: t('downloadAdminPage.card.weekHint'),
       icon: 'data_usage',
       accentClassName: 'bg-amber-500/10 text-amber-500',
     },
     {
-      label: '活跃用户',
+      label: t('downloadAdminPage.card.activeUsers'),
       value: formatNumber(summary.activeDownloaders),
-      hint: '近 7 天去重',
+      hint: t('downloadAdminPage.card.activeUsersHint'),
       icon: 'group',
       accentClassName: 'bg-cyan-500/10 text-cyan-500',
     },
     {
-      label: '文件体积',
+      label: t('downloadAdminPage.card.bytes'),
       value: formatBytes(downloadedBytes),
-      hint: '全部事件合计',
+      hint: t('downloadAdminPage.card.bytesHint'),
       icon: 'storage',
       accentClassName: 'bg-purple-500/10 text-purple-500',
     },
@@ -248,6 +253,7 @@ function SummaryCards({ stats }: { stats: DownloadAdminStats }) {
 
 /** 设备分布条：移动端/PC 端下载占比（跟随搜索过滤，与格式分布同口径）。unknown 为上线前的历史数据 */
 function DeviceSplitBar({ items }: { items: DownloadAdminStats['deviceStats'] }) {
+  const { t } = useTranslation();
   const byDevice = new Map((items ?? []).map((item) => [item.device, item]));
   const total = (items ?? []).reduce((sum, item) => sum + item.downloads, 0);
   if (total === 0) return null;
@@ -256,13 +262,25 @@ function DeviceSplitBar({ items }: { items: DownloadAdminStats['deviceStats'] })
   const desktop = byDevice.get('desktop')?.downloads ?? 0;
   const unknown = byDevice.get('unknown')?.downloads ?? 0;
   const segments = [
-    { key: 'mobile', label: '移动端', icon: 'smartphone', count: mobile, barClassName: 'bg-primary-container' },
-    { key: 'desktop', label: 'PC 端', icon: 'computer', count: desktop, barClassName: 'bg-blue-500/80' },
+    {
+      key: 'mobile',
+      label: t('downloadAdminPage.device.mobile'),
+      icon: 'smartphone',
+      count: mobile,
+      barClassName: 'bg-primary-container',
+    },
+    {
+      key: 'desktop',
+      label: t('downloadAdminPage.device.desktop'),
+      icon: 'computer',
+      count: desktop,
+      barClassName: 'bg-blue-500/80',
+    },
   ];
   if (unknown > 0) {
     segments.push({
       key: 'unknown',
-      label: '未知',
+      label: t('downloadAdminPage.device.unknown'),
       icon: 'help',
       count: unknown,
       barClassName: 'bg-outline-variant/50',
@@ -277,10 +295,10 @@ function DeviceSplitBar({ items }: { items: DownloadAdminStats['deviceStats'] })
             <Icon name="devices" size={17} />
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-on-surface">设备分布</p>
+            <p className="text-sm font-semibold text-on-surface">{t('downloadAdminPage.device.title')}</p>
             <p className="mt-0.5 truncate text-xs text-on-surface-variant">
-              按下载事件统计下载方使用的设备类型
-              {unknown > 0 ? '（上线前的历史下载记为未知）' : ''}
+              {t('downloadAdminPage.device.description')}
+              {unknown > 0 ? t('downloadAdminPage.device.historyNote') : ''}
             </p>
           </div>
         </div>
@@ -290,8 +308,10 @@ function DeviceSplitBar({ items }: { items: DownloadAdminStats['deviceStats'] })
               <span className={`h-2 w-2 rounded-full ${segment.barClassName}`} />
               <Icon name={segment.icon} size={13} />
               <span className="font-medium text-on-surface">{segment.label}</span>
-              {formatNumber(segment.count)} 次 ·{' '}
-              <span className="tabular-nums">{formatPercent((segment.count / total) * 100)}</span>
+              {t('downloadAdminPage.metaCountBytes', {
+                count: formatNumber(segment.count),
+                size: formatPercent((segment.count / total) * 100),
+              })}
             </span>
           ))}
         </div>
@@ -302,7 +322,10 @@ function DeviceSplitBar({ items }: { items: DownloadAdminStats['deviceStats'] })
             key={segment.key}
             className={segment.barClassName}
             style={{ width: `${(segment.count / total) * 100}%` }}
-            title={`${segment.label} ${formatNumber(segment.count)} 次`}
+            title={t('downloadAdminPage.barTitle', {
+              label: segment.label,
+              count: formatNumber(segment.count),
+            })}
           />
         ))}
       </div>
@@ -311,6 +334,7 @@ function DeviceSplitBar({ items }: { items: DownloadAdminStats['deviceStats'] })
 }
 
 function DownloadTabPanel({ tab, badge, children }: { tab: DownloadStatsTab; badge: string; children: ReactNode }) {
+  const { t } = useTranslation();
   const meta = TAB_META[tab];
   return (
     <section className="overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low">
@@ -320,8 +344,8 @@ function DownloadTabPanel({ tab, badge, children }: { tab: DownloadStatsTab; bad
             <Icon name={meta.icon} size={20} />
           </span>
           <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold text-on-surface">{meta.title}</h2>
-            <p className="mt-1 text-sm leading-relaxed text-on-surface-variant">{meta.description}</p>
+            <h2 className="truncate text-base font-semibold text-on-surface">{t(meta.titleKey)}</h2>
+            <p className="mt-1 text-sm leading-relaxed text-on-surface-variant">{t(meta.descriptionKey)}</p>
           </div>
         </div>
         <span className="hidden shrink-0 rounded-full bg-surface-container-high px-3 py-1 text-xs font-medium text-on-surface-variant md:inline-flex">
@@ -334,6 +358,7 @@ function DownloadTabPanel({ tab, badge, children }: { tab: DownloadStatsTab; bad
 }
 
 function TrendPanel({ data }: { data: DownloadAdminStats['dailyStats'] }) {
+  const { t } = useTranslation();
   const totalDownloads = data.reduce((total, item) => total + item.downloads, 0);
   const totalBytes = data.reduce((total, item) => total + item.bytes, 0);
   const maxDownloads = Math.max(1, ...data.map((item) => item.downloads));
@@ -347,15 +372,26 @@ function TrendPanel({ data }: { data: DownloadAdminStats['dailyStats'] }) {
   );
 
   return (
-    <DownloadTabPanel tab="trend" badge={`共 ${formatNumber(totalDownloads)} 次`}>
+    <DownloadTabPanel
+      tab="trend"
+      badge={t('downloadAdminPage.trend.totalBadge', { count: formatNumber(totalDownloads) })}
+    >
       <div className="grid gap-3 md:grid-cols-3">
-        <MetricMini label="区间下载" value={`${formatNumber(totalDownloads)} 次`} icon="download" />
         <MetricMini
-          label="峰值日期"
-          value={peak.date ? `${formatDate(peak.date)} · ${peak.downloads} 次` : '暂无'}
+          label={t('downloadAdminPage.trend.rangeDownloads')}
+          value={t('downloadAdminPage.timesSuffix', { count: formatNumber(totalDownloads) })}
+          icon="download"
+        />
+        <MetricMini
+          label={t('downloadAdminPage.trend.peakDate')}
+          value={
+            peak.date
+              ? t('downloadAdminPage.trend.peakValue', { date: formatDate(peak.date), count: peak.downloads })
+              : t('downloadAdminPage.trend.noPeak')
+          }
           icon="bolt"
         />
-        <MetricMini label="区间体积" value={formatBytes(totalBytes)} icon="storage" />
+        <MetricMini label={t('downloadAdminPage.trend.rangeBytes')} value={formatBytes(totalBytes)} icon="storage" />
       </div>
       {/* 列必须撑满图表高度（不能靠容器 items-end 收缩）：轨道的 flex 高度、柱子的
           height:% 都依赖父级有确定高度，否则整列塌成 padding、柱子恒为 0。
@@ -371,7 +407,11 @@ function TrendPanel({ data }: { data: DownloadAdminStats['dailyStats'] }) {
                   <div
                     className="relative w-full rounded-t bg-primary-container/85 transition-all group-hover:bg-primary-container"
                     style={{ height: `${height}%` }}
-                    title={`${item.date}: ${item.downloads} 次 · ${formatBytes(item.bytes)}`}
+                    title={t('downloadAdminPage.trend.barTitle', {
+                      date: item.date,
+                      count: item.downloads,
+                      size: formatBytes(item.bytes),
+                    })}
                   >
                     <span className="absolute inset-x-0 -top-4 text-center text-[10px] font-medium leading-none tabular-nums text-on-surface-variant">
                       {item.downloads}
@@ -405,16 +445,17 @@ function MetricMini({ label, value, icon }: { label: string; value: string; icon
 }
 
 function FormatPanel({ items }: { items: DownloadAdminStats['formatStats'] }) {
+  const { t } = useTranslation();
   const totalDownloads = items.reduce((total, item) => total + item.downloads, 0);
   const maxDownloads = Math.max(1, ...items.map((item) => item.downloads));
 
   return (
-    <DownloadTabPanel tab="formats" badge={`${formatNumber(items.length)} 种格式`}>
+    <DownloadTabPanel tab="formats" badge={t('downloadAdminPage.formats.badge', { count: formatNumber(items.length) })}>
       {items.length === 0 ? (
         <AdminEmptyState
           icon="inventory_2"
-          title="暂无格式统计"
-          description="有用户下载模型后，这里会显示格式分布。"
+          title={t('downloadAdminPage.formats.emptyTitle')}
+          description={t('downloadAdminPage.formats.emptyDescription')}
           className="min-h-[280px] py-12"
         />
       ) : (
@@ -428,7 +469,10 @@ function FormatPanel({ items }: { items: DownloadAdminStats['formatStats'] }) {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-on-surface">{item.format.toUpperCase()}</p>
                     <p className="mt-1 text-xs text-on-surface-variant">
-                      {formatNumber(item.downloads)} 次 · {formatBytes(item.bytes)}
+                      {t('downloadAdminPage.metaCountBytes', {
+                        count: formatNumber(item.downloads),
+                        size: formatBytes(item.bytes),
+                      })}
                     </p>
                   </div>
                   <span className="shrink-0 rounded-full bg-primary-container/10 px-2.5 py-1 text-xs font-semibold text-primary-container">
@@ -448,15 +492,16 @@ function FormatPanel({ items }: { items: DownloadAdminStats['formatStats'] }) {
 }
 
 function TopModelsPanel({ models }: { models: DownloadAdminStats['topModels'] }) {
+  const { t } = useTranslation();
   const maxDownloads = Math.max(1, ...models.map((model) => model.download_count));
 
   return (
-    <DownloadTabPanel tab="models" badge={`${formatNumber(models.length)} 个模型`}>
+    <DownloadTabPanel tab="models" badge={t('downloadAdminPage.models.badge', { count: formatNumber(models.length) })}>
       {models.length === 0 ? (
         <AdminEmptyState
           icon="download"
-          title="暂无热门模型"
-          description="换个关键词试试，或等待用户下载模型。"
+          title={t('downloadAdminPage.models.emptyTitle')}
+          description={t('downloadAdminPage.emptyHint')}
           className="min-h-[280px] py-12"
         />
       ) : (
@@ -484,7 +529,9 @@ function TopModelsPanel({ models }: { models: DownloadAdminStats['topModels'] })
                       {model.format?.toUpperCase() || 'MODEL'}
                     </span>
                   </div>
-                  <p className="mt-1 truncate text-xs text-on-surface-variant">{model.category || '未分类'}</p>
+                  <p className="mt-1 truncate text-xs text-on-surface-variant">
+                    {model.category || t('downloadAdminPage.models.uncategorized')}
+                  </p>
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-container-high">
                     <div className="h-full rounded-full bg-primary-container" style={{ width: `${width}%` }} />
                   </div>
@@ -493,7 +540,7 @@ function TopModelsPanel({ models }: { models: DownloadAdminStats['topModels'] })
                   <p className="text-base font-semibold tabular-nums text-on-surface">
                     {formatNumber(model.download_count)}
                   </p>
-                  <p className="text-[10px] text-on-surface-variant">下载</p>
+                  <p className="text-[10px] text-on-surface-variant">{t('downloadAdminPage.models.downloadUnit')}</p>
                 </div>
               </Link>
             );
@@ -506,26 +553,34 @@ function TopModelsPanel({ models }: { models: DownloadAdminStats['topModels'] })
 
 /** 来源徽章：批量打包标注渠道；分享下载由图标 + 创建者用户名归因（图标已表意，不再写"分享"字样） */
 function DownloadSourceBadge({ source }: { source: string }) {
+  const { t } = useTranslation();
   if (source !== 'batch') return null;
   return (
     <span className="inline-flex shrink-0 items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-500">
-      批量
+      {t('downloadAdminPage.badge.batch')}
     </span>
   );
 }
 
 /** 设备徽章：中性色纯图标（手机/电脑）标注下载设备，与行内其他小图标同色；unknown（历史数据）不显示 */
 function DownloadDeviceBadge({ device }: { device?: string }) {
+  const { t } = useTranslation();
   if (device === 'mobile') {
     return (
-      <span className="inline-flex shrink-0 items-center text-on-surface-variant" title="移动端下载">
+      <span
+        className="inline-flex shrink-0 items-center text-on-surface-variant"
+        title={t('downloadAdminPage.device.mobileTitle')}
+      >
         <Icon name="smartphone" size={12} />
       </span>
     );
   }
   if (device === 'desktop') {
     return (
-      <span className="inline-flex shrink-0 items-center text-on-surface-variant" title="PC 端下载">
+      <span
+        className="inline-flex shrink-0 items-center text-on-surface-variant"
+        title={t('downloadAdminPage.device.desktopTitle')}
+      >
         <Icon name="computer" size={12} />
       </span>
     );
@@ -534,12 +589,13 @@ function DownloadDeviceBadge({ device }: { device?: string }) {
 }
 
 function RecentDownloadRow({ item }: { item: DownloadAdminRecord }) {
+  const { t } = useTranslation();
   // 分享下载：下载者固定是匿名访客；分享图标已表意，行内只显示分享创建者用户名
   const actor =
     item.source === 'share' ? (
       <span className="inline-flex min-w-0 items-center gap-1">
         <Icon name="share" size={12} />
-        <span className="truncate">{item.shared_by || '分享访客'}</span>
+        <span className="truncate">{item.shared_by || t('downloadAdminPage.shareGuest')}</span>
       </span>
     ) : (
       <>
@@ -584,6 +640,7 @@ function RecentDownloadRow({ item }: { item: DownloadAdminRecord }) {
  * InfiniteLoadTrigger（滚动到底自动加载 + 「加载更多」按钮）。
  */
 function RecentDownloadsSection({ records }: { records: SWRInfiniteResponse<DownloadAdminRecordsPage, Error> }) {
+  const { t } = useTranslation();
   const { data, error, isLoading, size, setSize } = records;
   const pages = data ?? [];
   const items = pages.flatMap((page) => page.items);
@@ -596,14 +653,21 @@ function RecentDownloadsSection({ records }: { records: SWRInfiniteResponse<Down
   }, [hasMore, isLoadingMore, setSize]);
 
   if (isLoading) {
-    return <AdminLoadingState variant="list" rows={5} label="下载记录加载中" className="min-h-[240px]" />;
+    return (
+      <AdminLoadingState
+        variant="list"
+        rows={5}
+        label={t('downloadAdminPage.records.loading')}
+        className="min-h-[240px]"
+      />
+    );
   }
 
   if (error) {
     return (
       <AdminErrorState
-        title="下载记录加载失败"
-        description="请稍后重试，或使用右上角刷新按钮。"
+        title={t('downloadAdminPage.records.errorTitle')}
+        description={t('downloadAdminPage.records.errorDescription')}
         onRetry={() => void records.mutate()}
       />
     );
@@ -613,8 +677,8 @@ function RecentDownloadsSection({ records }: { records: SWRInfiniteResponse<Down
     return (
       <AdminEmptyState
         icon="schedule"
-        title="暂无下载记录"
-        description="换个关键词试试，或等待用户下载模型。"
+        title={t('downloadAdminPage.records.emptyTitle')}
+        description={t('downloadAdminPage.emptyHint')}
         className="min-h-[280px] py-12"
       />
     );
@@ -640,22 +704,24 @@ function getTabCounts(data?: DownloadAdminStats, recordsTotal = 0): Record<Downl
 }
 
 function LoadingState({ actions, toolbar }: { actions: ReactNode; toolbar: ReactNode }) {
+  const { t } = useTranslation();
   return (
     <AdminManagementPage
-      title="下载统计"
-      description="统计模型下载量、用户下载历史、热门模型和格式分布"
+      title={t('downloadAdminPage.title')}
+      description={t('downloadAdminPage.description')}
       actions={actions}
       toolbar={toolbar}
       contentClassName="min-h-0"
     >
       <AdminContentPanel scroll className="p-4">
-        <AdminLoadingState variant="dashboard" label="下载统计加载中" />
+        <AdminLoadingState variant="dashboard" label={t('downloadAdminPage.dashboardLoading')} />
       </AdminContentPanel>
     </AdminManagementPage>
   );
 }
 
 function Content() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<DownloadStatsTab>('trend');
   const {
@@ -681,9 +747,9 @@ function Content() {
   async function handleRefresh() {
     try {
       await Promise.all([mutate(undefined, { revalidate: true }), recordsQuery.mutate()]);
-      toast('下载统计已刷新', 'success');
+      toast(t('downloadAdminPage.toastRefreshed'), 'success');
     } catch (err: unknown) {
-      toast(getErrorMessage(err, '刷新下载统计失败'), 'error');
+      toast(getErrorMessage(err, t('downloadAdminPage.toastRefreshFailed')), 'error');
     }
   }
 
@@ -704,16 +770,16 @@ function Content() {
   if (error || !data) {
     return (
       <AdminManagementPage
-        title="下载统计"
-        description="统计模型下载量、用户下载历史、热门模型和格式分布"
+        title={t('downloadAdminPage.title')}
+        description={t('downloadAdminPage.description')}
         actions={actions}
         toolbar={toolbar}
         contentClassName="min-h-0"
       >
         <AdminContentPanel scroll>
           <AdminErrorState
-            title="下载统计加载失败"
-            description="请检查服务状态，或稍后重新加载。"
+            title={t('downloadAdminPage.errorTitle')}
+            description={t('downloadAdminPage.errorDescription')}
             onRetry={handleRefresh}
           />
         </AdminContentPanel>
@@ -723,8 +789,8 @@ function Content() {
 
   return (
     <AdminManagementPage
-      title="下载统计"
-      description="统计模型下载量、用户下载历史、热门模型和格式分布"
+      title={t('downloadAdminPage.title')}
+      description={t('downloadAdminPage.description')}
       actions={actions}
       toolbar={toolbar}
       contentClassName="min-h-0"
@@ -739,7 +805,10 @@ function Content() {
               {activeTab === 'formats' ? <FormatPanel items={data.formatStats} /> : null}
               {activeTab === 'models' ? <TopModelsPanel models={data.topModels} /> : null}
               {activeTab === 'recent' ? (
-                <DownloadTabPanel tab="recent" badge={`共 ${formatNumber(recordsTotal)} 条记录`}>
+                <DownloadTabPanel
+                  tab="recent"
+                  badge={t('downloadAdminPage.recordsBadge', { count: formatNumber(recordsTotal) })}
+                >
                   <RecentDownloadsSection records={recordsQuery} />
                 </DownloadTabPanel>
               ) : null}
@@ -752,7 +821,8 @@ function Content() {
 }
 
 export default function DownloadAdminPage() {
-  useDocumentTitle('下载统计');
+  const { t } = useTranslation();
+  useDocumentTitle(t('downloadAdminPage.title'));
   return (
     <AdminPageShell
       desktopContentClassName="min-h-0 overflow-hidden"

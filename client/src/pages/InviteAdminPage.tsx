@@ -69,15 +69,15 @@ export default function InviteAdminPage() {
              空状态的 absolute inset-0 覆盖层位于内容区内部，会把 children 里的 tabs 盖死 */
           <ResponsiveSectionTabs
             tabs={[
-              { value: '', label: '全部', count: items.length, icon: 'card_giftcard' },
+              { value: '', label: t('inviteAdmin.tabAll'), count: items.length, icon: 'card_giftcard' },
               { value: 'active', label: t('invites.status.active'), count: activeCount, icon: 'hourglass_empty' },
               { value: 'used', label: t('invites.status.used'), count: usedCount, icon: 'check_circle' },
               { value: 'revoked', label: t('invites.status.revoked'), count: revokedCount, icon: 'block' },
             ]}
             value={statusFilter}
             onChange={setStatusFilter}
-            mobileTitle="邀请码状态"
-            countUnit="个"
+            mobileTitle={t('inviteAdmin.statusTitle')}
+            countUnit={t('inviteAdmin.countUnit')}
           />
         }
       >
@@ -86,8 +86,8 @@ export default function InviteAdminPage() {
         ) : filteredItems.length === 0 ? (
           <AdminEmptyState
             icon="card_giftcard"
-            title="该状态下暂无邀请码"
-            description="切换上方状态分类查看其他邀请码。"
+            title={t('inviteAdmin.emptyFilteredTitle')}
+            description={t('inviteAdmin.emptyFilteredDesc')}
           />
         ) : (
           <div className="flex flex-col gap-2 pt-3">

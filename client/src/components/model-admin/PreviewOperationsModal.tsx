@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import { modelApi } from '../../api/models';
@@ -43,6 +44,7 @@ function PreviewOpsMetricCard({
 
 function ConversionConcurrencyControl({ compact = false }: { compact?: boolean }) {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [saving, setSaving] = useState(false);
   const [localValue, setLocalValue] = useState(1);
   const { data: settings, mutate: mutateSettings } = useSWR('/settings/conversion-worker-concurrency', getSettings, {
@@ -62,9 +64,9 @@ function ConversionConcurrencyControl({ compact = false }: { compact?: boolean }
       const nextSettings = await updateSettings({ conversion_worker_concurrency: nextValue });
       await mutateSettings(nextSettings, false);
       setLocalValue(nextValue);
-      toast(`转换并发数已设为 ${nextValue}，Worker 会在约 15 秒内生效`, 'success');
+      toast(t('modelAdminComp.concurrencySaved', { value: nextValue }), 'success');
     } catch {
-      toast('保存转换并发数失败', 'error');
+      toast(t('modelAdminComp.concurrencySaveFail'), 'error');
     } finally {
       setSaving(false);
     }
@@ -78,12 +80,12 @@ function ConversionConcurrencyControl({ compact = false }: { compact?: boolean }
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Icon name="tune" size={15} className="text-primary" />
-            <span className="text-xs font-medium text-on-surface">转换并发数</span>
+            <span className="text-xs font-medium text-on-surface">{t('modelAdminComp.concurrencyLabel')}</span>
             <span className="rounded-sm bg-surface-container-high px-1.5 py-0.5 text-[10px] text-on-surface-variant">
-              当前 {savedValue}
+              {t('modelAdminComp.currentValue', { value: savedValue })}
             </span>
             {!compact && (
-              <span className="text-[10px] text-on-surface-variant">建议先设为 2，大模型较多时不要过高。</span>
+              <span className="text-[10px] text-on-surface-variant">{t('modelAdminComp.concurrencyHint')}</span>
             )}
           </div>
         </div>
@@ -97,7 +99,7 @@ function ConversionConcurrencyControl({ compact = false }: { compact?: boolean }
             value={localValue}
             onChange={(event) => setLocalValue(Number(event.target.value))}
             className={`${compact ? 'min-w-0 flex-1' : 'w-36'} accent-[var(--color-primary)]`}
-            aria-label="转换并发数"
+            aria-label={t('modelAdminComp.concurrencyLabel')}
           />
           <input
             name="local-value"
@@ -115,7 +117,7 @@ function ConversionConcurrencyControl({ compact = false }: { compact?: boolean }
             className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-sm bg-primary-container px-2.5 text-[11px] font-medium text-on-primary transition-colors hover:bg-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Icon name="save" size={13} className={saving ? 'animate-pulse' : ''} />
-            保存
+            {t('common.save')}
           </button>
         </div>
       </div>
@@ -126,6 +128,7 @@ function ConversionConcurrencyControl({ compact = false }: { compact?: boolean }
 // ── Preview operations panel (inner content) ───────────────────────────────
 
 export function PreviewOperationsPanel({ compact = false }: { compact?: boolean }) {
+  const { t } = useTranslation();
   const [compactPanel, setCompactPanel] = useState<'diagnostics' | 'queue'>('diagnostics');
   const { data: opsData, isLoading: opsLoading } = useSWR(
     ['/models/preview-operations-dashboard', compact],
@@ -155,8 +158,8 @@ export function PreviewOperationsPanel({ compact = false }: { compact?: boolean 
                 <Icon name="view_in_ar" size={16} />
               </span>
               <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-on-surface">预览运维工作台</h3>
-                <p className="mt-0.5 text-[11px] text-on-surface-variant">诊断、重建、队列状态</p>
+                <h3 className="text-sm font-semibold text-on-surface">{t('modelAdminComp.opsTitle')}</h3>
+                <p className="mt-0.5 text-[11px] text-on-surface-variant">{t('modelAdminComp.opsSubtitle')}</p>
               </div>
             </div>
           </div>
@@ -164,21 +167,25 @@ export function PreviewOperationsPanel({ compact = false }: { compact?: boolean 
       )}
 
       <div className={`grid gap-2 ${compact ? 'grid-cols-2' : 'grid-cols-2 pt-3 lg:grid-cols-4'}`}>
-        <PreviewOpsMetricCard label="全部模型" value={diagnosticsSummary?.total} loading={opsLoading} />
         <PreviewOpsMetricCard
-          label="待处理"
+          label={t('modelAdminComp.filterAll')}
+          value={diagnosticsSummary?.total}
+          loading={opsLoading}
+        />
+        <PreviewOpsMetricCard
+          label={t('modelAdminComp.filterProblem')}
           value={diagnosticsSummary?.problem}
           tone={(diagnosticsSummary?.problem || 0) > 0 ? 'warning' : 'primary'}
           loading={opsLoading}
         />
         <PreviewOpsMetricCard
-          label="队列"
+          label={t('modelAdminComp.queueMetric')}
           value={pendingQueueCount}
           tone={pendingQueueCount > 0 ? 'primary' : 'neutral'}
           loading={opsLoading}
         />
         <PreviewOpsMetricCard
-          label="失败"
+          label={t('modelAdminComp.queueFailed')}
           value={failedQueueCount}
           tone={failedQueueCount > 0 ? 'error' : 'neutral'}
           loading={opsLoading}
@@ -200,7 +207,7 @@ export function PreviewOperationsPanel({ compact = false }: { compact?: boolean 
               }`}
             >
               <Icon name="data_usage" size={14} />
-              预览诊断
+              {t('modelAdminComp.previewDiagnostics')}
             </button>
             <button
               type="button"
@@ -212,7 +219,7 @@ export function PreviewOperationsPanel({ compact = false }: { compact?: boolean 
               }`}
             >
               <Icon name="hourglass_top" size={14} />
-              转换队列
+              {t('modelAdminComp.queueTitle')}
             </button>
           </div>
           <div className="mt-3 min-w-0">
@@ -248,6 +255,7 @@ export default function PreviewOperationsModal({
   onClose: () => void;
   compact?: boolean;
 }) {
+  const { t } = useTranslation();
   const backdropClassName = compact
     ? 'fixed inset-0 z-[500] flex items-stretch justify-center bg-surface-dim/75 backdrop-blur-sm'
     : 'fixed inset-0 z-[500] flex items-end justify-center bg-surface-dim/70 px-3 py-4 backdrop-blur-sm sm:items-center sm:px-5';
@@ -277,14 +285,16 @@ export default function PreviewOperationsModal({
               <>
                 <div className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 bg-surface-container-low/95 px-4 py-3 backdrop-blur">
                   <div className="min-w-0">
-                    <h2 className="truncate text-base font-semibold text-on-surface">预览运维工作台</h2>
-                    <p className="mt-0.5 truncate text-xs text-on-surface-variant">诊断、重建、转换队列</p>
+                    <h2 className="truncate text-base font-semibold text-on-surface">{t('modelAdminComp.opsTitle')}</h2>
+                    <p className="mt-0.5 truncate text-xs text-on-surface-variant">
+                      {t('modelAdminComp.opsSubtitleCompact')}
+                    </p>
                   </div>
                   <button
                     onClick={onClose}
                     className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-outline-variant/20 bg-surface-container-lowest text-on-surface-variant shadow-sm"
                     data-tooltip-ignore
-                    aria-label="关闭预览运维工作台"
+                    aria-label={t('modelAdminComp.closeWorkbench')}
                   >
                     <Icon name="close" size={17} />
                   </button>
@@ -299,7 +309,7 @@ export default function PreviewOperationsModal({
                   onClick={onClose}
                   className="absolute right-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant/20 bg-surface-container-lowest text-on-surface-variant shadow-sm hover:bg-surface-container-high hover:text-on-surface"
                   data-tooltip-ignore
-                  aria-label="关闭预览运维工作台"
+                  aria-label={t('modelAdminComp.closeWorkbench')}
                 >
                   <Icon name="close" size={16} />
                 </button>

@@ -631,7 +631,7 @@ export default function ModelDetailPage() {
         await modelApi.delete(modelData!.id);
         navigate('/', { replace: true });
       } catch {
-        toast('删除失败，请稍后重试', 'error');
+        toast(t('sharedMisc.deleteFailedRetry'), 'error');
         setDeletingFailedRecord(false);
       }
     };

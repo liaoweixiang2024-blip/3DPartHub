@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import type { ModelPreviewMeta } from '../../api/models';
 import Icon from '../shared/Icon';
 
@@ -29,12 +30,15 @@ function formatPreviewSize(meta?: ModelPreviewMeta | null): string {
   return `${size.map((value) => value.toFixed(value >= 100 ? 0 : 1)).join(' x ')} ${meta?.unit || 'mm'}`;
 }
 
-function getPreviewHealth(meta?: ModelPreviewMeta | null): { label: string; className: string; hint: string } {
+function getPreviewHealth(
+  t: (key: string) => string,
+  meta?: ModelPreviewMeta | null,
+): { label: string; className: string; hint: string } {
   if (!meta) {
     return {
-      label: '缺少诊断',
+      label: t('modelAdminComp.filterMissing'),
       className: 'bg-amber-500/10 text-amber-500',
-      hint: '当前模型没有可用的预览诊断，建议重新生成 GLB 和缩略图。',
+      hint: t('modelAdminComp.healthMissingHint'),
     };
   }
   const totals = meta.totals;
@@ -42,22 +46,22 @@ function getPreviewHealth(meta?: ModelPreviewMeta | null): { label: string; clas
   const skipped = meta.diagnostics?.skippedMeshCount || 0;
   if (!totals?.faceCount || !totals?.vertexCount) {
     return {
-      label: '转换异常',
+      label: t('modelAdminComp.filterInvalid'),
       className: 'bg-error/10 text-error',
-      hint: '没有检测到有效面片，优先检查源文件或重新转换。',
+      hint: t('modelAdminComp.healthInvalidHint'),
     };
   }
   if (warnings.length > 0 || skipped > 0) {
     return {
-      label: '需复核',
+      label: t('modelAdminComp.filterWarning'),
       className: 'bg-amber-500/10 text-amber-500',
-      hint: '转换时有网格被跳过或修复，可能影响缩略图或局部显示。',
+      hint: t('modelAdminComp.healthWarningHint'),
     };
   }
   return {
-    label: '正常',
+    label: t('modelAdminComp.filterOk'),
     className: 'bg-primary-container/10 text-primary',
-    hint: '当前 GLB 已生成转换诊断，可用于判断显示和缩略图问题。',
+    hint: t('modelAdminComp.healthOkHint'),
   };
 }
 
@@ -68,7 +72,8 @@ export default function PreviewDiagnosticsDialog({
   onClose,
   onRegenerate,
 }: PreviewDiagnosticsDialogProps) {
-  const health = getPreviewHealth(meta);
+  const { t } = useTranslation();
+  const health = getPreviewHealth(t, meta);
   const warnings = meta?.diagnostics?.warnings || [];
   const performanceHints = [
     ...(meta?.diagnostics?.precheck?.hints || []),
@@ -83,7 +88,11 @@ export default function PreviewDiagnosticsDialog({
       ? `${(asset.compressionRatio * 100).toFixed(1)}%`
       : '-';
   const optimizationText = optimization
-    ? `${formatBytes(optimization.indexBytesSaved)} / U16 ${formatCompactNumber(optimization.indexComponentTypes?.uint16)} / 材质 ${formatCompactNumber(optimization.duplicateMaterialsMerged)}`
+    ? t('modelAdminComp.optimizationText', {
+        saved: formatBytes(optimization.indexBytesSaved),
+        u16: formatCompactNumber(optimization.indexComponentTypes?.uint16),
+        materials: formatCompactNumber(optimization.duplicateMaterialsMerged),
+      })
     : '-';
 
   return (
@@ -110,14 +119,14 @@ export default function PreviewDiagnosticsDialog({
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <Icon name="data_usage" size={18} className="text-primary" />
-                  <h2 className="text-base font-semibold text-on-surface">预览诊断</h2>
+                  <h2 className="text-base font-semibold text-on-surface">{t('modelAdminComp.previewDiagnostics')}</h2>
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-on-surface-variant">{health.hint}</p>
               </div>
               <button
                 onClick={onClose}
                 className="shrink-0 rounded-sm p-1 text-on-surface-variant hover:text-on-surface"
-                aria-label="关闭"
+                aria-label={t('common.close')}
               >
                 <Icon name="close" size={18} />
               </button>
@@ -129,31 +138,33 @@ export default function PreviewDiagnosticsDialog({
                 <span className="text-[11px] text-on-surface-variant">
                   {meta?.diagnostics?.generatedAt
                     ? new Date(meta.diagnostics.generatedAt).toLocaleString('zh-CN')
-                    : '未生成'}
+                    : t('modelAdminComp.notGenerated')}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <div className="rounded-sm bg-surface-container-lowest p-3">
-                  <span className="block text-[10px] text-on-surface-variant">零件</span>
+                  <span className="block text-[10px] text-on-surface-variant">{t('modelAdminComp.partsLabel')}</span>
                   <span className="font-mono text-sm text-on-surface">
                     {formatCompactNumber(meta?.totals?.partCount)}
                   </span>
                 </div>
                 <div className="rounded-sm bg-surface-container-lowest p-3">
-                  <span className="block text-[10px] text-on-surface-variant">面片</span>
+                  <span className="block text-[10px] text-on-surface-variant">{t('modelAdminComp.facesLabel')}</span>
                   <span className="font-mono text-sm text-on-surface">
                     {formatCompactNumber(meta?.totals?.faceCount)}
                   </span>
                 </div>
                 <div className="rounded-sm bg-surface-container-lowest p-3">
-                  <span className="block text-[10px] text-on-surface-variant">顶点</span>
+                  <span className="block text-[10px] text-on-surface-variant">{t('modelAdminComp.verticesLabel')}</span>
                   <span className="font-mono text-sm text-on-surface">
                     {formatCompactNumber(meta?.totals?.vertexCount)}
                   </span>
                 </div>
                 <div className="rounded-sm bg-surface-container-lowest p-3">
-                  <span className="block text-[10px] text-on-surface-variant">跳过网格</span>
+                  <span className="block text-[10px] text-on-surface-variant">
+                    {t('modelAdminComp.skippedMeshLabel')}
+                  </span>
                   <span className="font-mono text-sm text-on-surface">
                     {formatCompactNumber(meta?.diagnostics?.skippedMeshCount)}
                   </span>
@@ -162,37 +173,37 @@ export default function PreviewDiagnosticsDialog({
 
               <div className="mt-4 rounded-sm bg-surface-container-lowest p-3 text-xs text-on-surface-variant">
                 <div className="flex items-center justify-between gap-3 py-1">
-                  <span>包围盒</span>
+                  <span>{t('modelAdminComp.boundingBoxLabel')}</span>
                   <span className="text-right font-mono text-on-surface">{formatPreviewSize(meta)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
-                  <span>转换耗时</span>
+                  <span>{t('modelAdminComp.conversionTimeLabel')}</span>
                   <span className="font-mono text-on-surface">
                     {typeof conversionMs === 'number' ? `${(conversionMs / 1000).toFixed(2)}s` : '-'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
-                  <span>转换器</span>
+                  <span>{t('modelAdminComp.converterLabel')}</span>
                   <span className="font-mono text-on-surface">{meta?.diagnostics?.converter || '-'}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
-                  <span>GLB 大小</span>
+                  <span>{t('modelAdminComp.glbSizeLabel')}</span>
                   <span className="font-mono text-on-surface">{formatBytes(asset?.gltfSize)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
-                  <span>原文件大小</span>
+                  <span>{t('modelAdminComp.originalSizeLabel')}</span>
                   <span className="font-mono text-on-surface">{formatBytes(asset?.originalSize)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
-                  <span>体积比例</span>
+                  <span>{t('modelAdminComp.volumeRatioLabel')}</span>
                   <span className="font-mono text-on-surface">{ratio}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
-                  <span>索引优化</span>
+                  <span>{t('modelAdminComp.indexOptimizationLabel')}</span>
                   <span className="text-right font-mono text-on-surface">{optimizationText}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
-                  <span>预检查</span>
+                  <span>{t('modelAdminComp.precheckLabel')}</span>
                   <span className="text-right font-mono text-on-surface">
                     {precheck
                       ? `${precheck.sourceLevel || '-'} / ${formatCompactNumber(precheck.estimatedPeakMemoryMb)} MB`
@@ -200,7 +211,7 @@ export default function PreviewDiagnosticsDialog({
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
-                  <span>缓存版本</span>
+                  <span>{t('modelAdminComp.cacheVersionLabel')}</span>
                   <span
                     className="max-w-[12rem] truncate text-right font-mono text-on-surface"
                     title={asset?.cacheVersion || ''}
@@ -236,7 +247,7 @@ export default function PreviewDiagnosticsDialog({
                 onClick={onClose}
                 className="rounded-sm px-3 py-2 text-xs text-on-surface-variant hover:text-on-surface"
               >
-                关闭
+                {t('common.close')}
               </button>
               {onRegenerate && (
                 <button
@@ -245,7 +256,7 @@ export default function PreviewDiagnosticsDialog({
                   className="flex items-center gap-1.5 rounded-sm bg-primary-container px-3 py-2 text-xs font-medium text-on-primary hover:bg-primary disabled:opacity-50"
                 >
                   <Icon name="refresh" size={14} />
-                  {regenerating ? '生成中...' : '重新生成 GLB / 缩略图'}
+                  {regenerating ? t('modelAdminComp.generating') : t('modelAdminComp.regenGlb')}
                 </button>
               )}
             </div>

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import Icon from '../shared/Icon';
 import { VIEWER_TUNING_FIELDS, VIEWER_TUNING_PRESETS, type ViewerTuning } from './viewerTuning';
 
@@ -20,6 +21,7 @@ export default function ViewerTuningPanel({
   onClose,
   saving,
 }: ViewerTuningPanelProps) {
+  const { t } = useTranslation();
   const update = (key: keyof ViewerTuning, nextValue: string | number) => {
     onChange({ ...value, [key]: nextValue });
   };
@@ -29,7 +31,7 @@ export default function ViewerTuningPanel({
       <div className="flex items-center justify-between px-3 py-2 border-b border-outline-variant/15">
         <div className="flex items-center gap-2">
           <Icon name="tune" size={16} className="text-primary" />
-          <span className="text-xs font-semibold text-on-surface">3D 预览调试</span>
+          <span className="text-xs font-semibold text-on-surface">{t('modelAdminComp.tuningTitle')}</span>
         </div>
         <button onClick={onClose} className="p-1 text-on-surface-variant hover:text-on-surface">
           <Icon name="close" size={15} />
@@ -44,20 +46,20 @@ export default function ViewerTuningPanel({
               onClick={() => onPreset(preset.value)}
               className="rounded-sm border border-outline-variant/20 bg-surface-container-high/50 px-2 py-1.5 text-[10px] text-on-surface-variant hover:border-primary/40 hover:text-primary"
             >
-              {preset.label}
+              {t(preset.label)}
             </button>
           ))}
         </div>
 
         <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
-          <label className="text-[10px] text-on-surface-variant">背景</label>
+          <label className="text-[10px] text-on-surface-variant">{t('modelAdminComp.bgColorLabel')}</label>
           <input
             name="viewer-bg-color"
             value={value.viewer_bg_color}
             onChange={(event) => update('viewer_bg_color', event.target.value)}
             className="w-44 min-w-0 rounded-sm border border-outline-variant/20 bg-surface-container-lowest px-2 py-1 text-[10px] text-on-surface outline-none focus:border-primary"
           />
-          <label className="text-[10px] text-on-surface-variant">材质色</label>
+          <label className="text-[10px] text-on-surface-variant">{t('modelAdminComp.matColorLabel')}</label>
           <div className="flex items-center gap-2">
             <input
               name="mat-default-color"
@@ -73,7 +75,7 @@ export default function ViewerTuningPanel({
         <div className="space-y-2">
           {VIEWER_TUNING_FIELDS.map((field) => (
             <div key={field.key} className="grid grid-cols-[52px_1fr_38px] items-center gap-2">
-              <label className="text-[10px] text-on-surface-variant">{field.label}</label>
+              <label className="text-[10px] text-on-surface-variant">{t(field.label)}</label>
               <input
                 name="number"
                 type="range"
@@ -93,7 +95,7 @@ export default function ViewerTuningPanel({
 
         <div className="flex items-center justify-between gap-2 pt-2 border-t border-outline-variant/15">
           <button onClick={onReset} className="px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-on-surface">
-            还原
+            {t('modelAdminComp.resetTuning')}
           </button>
           <button
             onClick={onSave}
@@ -101,7 +103,7 @@ export default function ViewerTuningPanel({
             className="flex items-center gap-1.5 rounded-sm bg-primary-container px-3 py-1.5 text-xs font-medium text-on-primary hover:bg-primary disabled:opacity-50"
           >
             <Icon name="save" size={13} />
-            {saving ? '保存中' : '保存'}
+            {saving ? t('modelAdminComp.savingShort') : t('common.save')}
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import type { SelectionProduct } from '../api/selections';
+import { i18n } from '../i18n';
 
 export const INQUIRY_CART_LIMIT = 100;
 export const INQUIRY_CART_CHANGED_EVENT = 'selection:inquiry-cart:changed';
@@ -52,7 +53,9 @@ function normalizeItem(value: unknown): InquiryCartItem | null {
   if (!productId) return null;
 
   const qty = Math.max(1, Math.floor(Number(raw.qty) || 1));
-  const productName = String(raw.productName || raw.modelNo || '未知产品').trim();
+  const productName = String(
+    raw.productName || raw.modelNo || i18n.t('bizConfig.unknownProduct', { defaultValue: '未知产品' }),
+  ).trim();
   const now = new Date().toISOString();
 
   return {
@@ -61,7 +64,7 @@ function normalizeItem(value: unknown): InquiryCartItem | null {
     productName,
     modelNo: raw.modelNo ? String(raw.modelNo) : null,
     specs: normalizeSpecs(raw.specs),
-    unit: raw.unit ? String(raw.unit) : '个',
+    unit: raw.unit ? String(raw.unit) : i18n.t('bizConfig.unitPiece', { defaultValue: '个' }),
     image: raw.image ? String(raw.image) : null,
     categoryId: raw.categoryId ? String(raw.categoryId) : null,
     qty,
@@ -104,7 +107,8 @@ export function writeInquiryCartItems(items: InquiryCartItem[]): boolean {
 export function productToInquiryCartItem(product: SelectionProduct): InquiryCartItem {
   const specs = normalizeSpecs(product.specs);
   const modelNo = product.modelNo?.trim() || null;
-  const productName = product.name?.trim() || modelNo || '未知产品';
+  const productName =
+    product.name?.trim() || modelNo || i18n.t('bizConfig.unknownProduct', { defaultValue: '未知产品' });
   const fingerprint = stableJson({
     productId: product.id,
     productName,
@@ -119,7 +123,7 @@ export function productToInquiryCartItem(product: SelectionProduct): InquiryCart
     productName,
     modelNo,
     specs,
-    unit: product.unit || '个',
+    unit: product.unit || i18n.t('bizConfig.unitPiece', { defaultValue: '个' }),
     image: product.image || product.matchedModelThumbnail || null,
     categoryId: product.categoryId || null,
     qty: 1,
@@ -137,7 +141,7 @@ export function cartItemToInquiryProduct(item: InquiryCartItem): SelectionProduc
     modelNo: item.modelNo || null,
     specs: item.specs || {},
     image: item.image || null,
-    unit: item.unit || '个',
+    unit: item.unit || i18n.t('bizConfig.unitPiece', { defaultValue: '个' }),
     sortOrder: 0,
     isKit: false,
   };
