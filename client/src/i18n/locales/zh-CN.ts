@@ -1602,6 +1602,7 @@ export const zhCN: { translation: TranslationMap } = {
         copiedList: '已复制{{title}}',
         copiedModel: '已复制型号和名称',
         downloadedList: '已下载{{title}}',
+        downloadListFailed: '下载{{title}}失败',
       },
     },
     inquirySubmit: {

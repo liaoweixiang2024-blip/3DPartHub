@@ -1402,6 +1402,8 @@ export const enUSAdmin: TranslationMap = {
     imageRemoved: 'Image removed',
     catalogUploaded: 'Catalog uploaded',
     catalogRemoved: 'Catalog removed',
+    catalogBadgeHint: 'Catalog uploaded',
+    catalogUpdatedAt: 'Updated {{time}}',
     settingsSaved: 'Settings saved',
     pickFieldFirst: 'Select a field to configure first',
     saveSettings: 'Save Settings',

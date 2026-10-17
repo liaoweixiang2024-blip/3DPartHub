@@ -2027,6 +2027,7 @@ export const deDEMajorFormsTranslation: TranslationMap = {
       copiedList: '{{title}} kopiert',
       copiedModel: 'Modell und Name kopiert',
       downloadedList: '{{title}} heruntergeladen',
+      downloadListFailed: '{{title}} Download fehlgeschlagen',
     },
   },
   inquirySubmit: {

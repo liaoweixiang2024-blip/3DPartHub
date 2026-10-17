@@ -77,9 +77,13 @@ export function ResultCard({
     await copyText(formatKitList(product, comps, kitListTitle));
     toast(t('selectionResult.toasts.copiedList', { title: kitListTitle }), 'success');
   };
-  const handleDownloadKitList = () => {
-    downloadKitList(product, comps, kitListTitle);
-    toast(t('selectionResult.toasts.downloadedList', { title: kitListTitle }), 'success');
+  const handleDownloadKitList = async () => {
+    try {
+      await downloadKitList(product, comps, kitListTitle);
+      toast(t('selectionResult.toasts.downloadedList', { title: kitListTitle }), 'success');
+    } catch {
+      toast(t('selectionResult.toasts.downloadListFailed', { title: kitListTitle }), 'error');
+    }
   };
 
   return (
@@ -148,7 +152,9 @@ export function ResultCard({
       {product.isKit && comps.length > 0 && (
         <div className="border-t border-outline-variant/10">
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 md:px-4 py-2 md:py-2.5 text-xs md:text-sm text-on-surface-variant">
-            <span>
+            {/* 与下方画册资料标题行同构：图标 + 标题（数量） */}
+            <span className="flex items-center gap-1">
+              <Icon name="inventory_2" size={14} />
               {kitListTitle}（{comps.length}）
             </span>
             <div className="flex flex-wrap items-center gap-1.5">

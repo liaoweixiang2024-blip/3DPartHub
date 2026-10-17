@@ -1614,6 +1614,7 @@ export const enUS: { translation: TranslationMap } = {
         copiedList: '{{title}} copied',
         copiedModel: 'Model and name copied',
         downloadedList: '{{title}} downloaded',
+        downloadListFailed: 'Failed to download {{title}}',
       },
     },
     inquirySubmit: {

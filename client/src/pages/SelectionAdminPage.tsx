@@ -26,6 +26,9 @@ import {
   type SelectionProduct,
   type SelectionComponent,
   type ColumnDef,
+  type OptionCatalogEntry,
+  optionCatalogUrl,
+  optionCatalogUpdatedAt,
 } from '../api/selections';
 import { CatalogZoomModal } from '../components/selection/CatalogZoomModal';
 import { isSafeUrl } from '../lib/sanitizeHtml';
@@ -1453,7 +1456,7 @@ function Content() {
 
   // ---- Option Image handlers ----
   const optImages = (activeCat?.optionImages ?? {}) as Record<string, Record<string, string>>;
-  const optCatalogs = (activeCat?.optionCatalogs ?? {}) as Record<string, Record<string, string>>;
+  const optCatalogs = (activeCat?.optionCatalogs ?? {}) as Record<string, Record<string, OptionCatalogEntry>>;
 
   // Extract unique option values per field from product data
   const fieldOptions = useMemo(() => {
@@ -1730,7 +1733,10 @@ function Content() {
         try {
           const updated = {
             ...optCatalogs,
-            [optImgField]: { ...(optCatalogs[optImgField] || {}), [targetVal]: text },
+            [optImgField]: {
+              ...(optCatalogs[optImgField] || {}),
+              [targetVal]: { url: text, updatedAt: new Date().toISOString() },
+            },
           };
           await updateCategory(activeCat!.id, { optionCatalogs: updated });
           mutateCats();
@@ -1777,7 +1783,11 @@ function Content() {
     if (!activeCat) return;
     // 画册走 product-asset 端点（接受图片和 PDF）；option-image 端点只收图片，传 PDF 会 400
     const { url } = await uploadSelectionProductAsset(file);
-    const updated = { ...optCatalogs, [field]: { ...(optCatalogs[field] || {}), [val]: url } };
+    // 新 shape 带上传时间：管理端卡片/弹窗展示「何时上传/更换」（旧数据是纯 URL 字符串）
+    const updated = {
+      ...optCatalogs,
+      [field]: { ...(optCatalogs[field] || {}), [val]: { url, updatedAt: new Date().toISOString() } },
+    };
     await updateCategory(activeCat.id, { optionCatalogs: updated });
     mutateCats();
     toast(t('selectionAdmin.catalogUploaded'), 'success');
@@ -3351,6 +3361,9 @@ function Content() {
                   {visibleOrderItems.map((val) => {
                     const i = orderItems.indexOf(val);
                     const imgUrl = optImages[optImgField]?.[val];
+                    const catalogEntry = optCatalogs[optImgField]?.[val];
+                    const catalogUrl = optionCatalogUrl(catalogEntry);
+                    const catalogUpdatedAt = optionCatalogUpdatedAt(catalogEntry);
                     const isUploading = uploadingVal === `${optImgField}::${val}`;
                     const valueProductCount = productsByOptionValue.get(`${optImgField}\u0000${val}`)?.length ?? 0;
                     return (
@@ -3373,7 +3386,23 @@ function Content() {
                         }`}
                       >
                         <div className="flex items-center gap-1.5">
-                          <span className="text-on-surface-variant/40 select-none text-xs shrink-0">⠿</span>
+                          {/* 画册状态：有画册 → 拖拽手柄着主题色；没有 → 默认弱化色。悬停手柄看更新时间 */}
+                          <span
+                            title={
+                              catalogUrl
+                                ? catalogUpdatedAt
+                                  ? `${t('selectionAdmin.catalogBadgeHint')} · ${t('selectionAdmin.catalogUpdatedAt', {
+                                      time: new Date(catalogUpdatedAt).toLocaleString(),
+                                    })}`
+                                  : t('selectionAdmin.catalogBadgeHint')
+                                : undefined
+                            }
+                            className={`select-none text-xs shrink-0 ${
+                              catalogUrl ? 'text-primary-container' : 'text-on-surface-variant/40'
+                            }`}
+                          >
+                            ⠿
+                          </span>
                           <span className="text-xs font-medium text-on-surface break-words line-clamp-2 flex-1 min-w-0">
                             {val}
                           </span>
@@ -3431,6 +3460,9 @@ function Content() {
                 <div className="space-y-1">
                   {visibleOrderItems.map((val) => {
                     const i = orderItems.indexOf(val);
+                    const catalogEntry = optCatalogs[optImgField]?.[val];
+                    const catalogUrl = optionCatalogUrl(catalogEntry);
+                    const catalogUpdatedAt = optionCatalogUpdatedAt(catalogEntry);
                     const valueProductCount = productsByOptionValue.get(`${optImgField}\u0000${val}`)?.length ?? 0;
                     return (
                       <div
@@ -3453,7 +3485,21 @@ function Content() {
                             : 'border-outline-variant/20 bg-surface-container-lowest hover:border-outline-variant/40'
                         }`}
                       >
-                        <span className="cursor-grab active:cursor-grabbing text-on-surface-variant/40 select-none text-sm shrink-0">
+                        {/* 画册状态同卡片网格视图：有画册 → 手柄主题色，悬停看更新时间 */}
+                        <span
+                          title={
+                            catalogUrl
+                              ? catalogUpdatedAt
+                                ? `${t('selectionAdmin.catalogBadgeHint')} · ${t('selectionAdmin.catalogUpdatedAt', {
+                                    time: new Date(catalogUpdatedAt).toLocaleString(),
+                                  })}`
+                                : t('selectionAdmin.catalogBadgeHint')
+                              : undefined
+                          }
+                          className={`cursor-grab active:cursor-grabbing select-none text-sm shrink-0 ${
+                            catalogUrl ? 'text-primary-container' : 'text-on-surface-variant/40'
+                          }`}
+                        >
                           ⠿
                         </span>
                         <span className="text-sm font-medium text-on-surface flex-1 min-w-0 break-words">{val}</span>
@@ -3635,7 +3681,9 @@ function Content() {
                 </div>
                 {(() => {
                   const imgUrl = optImages[optImgField]?.[editOptVal];
-                  const catalogUrl = optCatalogs[optImgField]?.[editOptVal];
+                  const optCatalogEntry = optCatalogs[optImgField]?.[editOptVal];
+                  const catalogUrl = optionCatalogUrl(optCatalogEntry);
+                  const catalogUpdatedAt = optionCatalogUpdatedAt(optCatalogEntry);
                   const isUploading = uploadingVal === `${optImgField}::${editOptVal}`;
                   return (
                     <>
@@ -3812,9 +3860,20 @@ function Content() {
                                       size={20}
                                       className="shrink-0 text-primary-container"
                                     />
-                                    <span className="flex-1 truncate text-xs text-on-surface-variant">
+                                    <span className="min-w-0 flex-1 truncate text-xs text-on-surface-variant">
                                       {catalogUrl.split('/').pop()?.split('?')[0] || t('selectionAdmin.uploaded')}
                                     </span>
+                                    {/* 上传/更新时间：旧数据（纯 URL 字符串）没有时间则不显示 */}
+                                    {catalogUpdatedAt && (
+                                      <span
+                                        title={new Date(catalogUpdatedAt).toLocaleString()}
+                                        className="shrink-0 text-[10px] tabular-nums text-on-surface-variant/60"
+                                      >
+                                        {t('selectionAdmin.catalogUpdatedAt', {
+                                          time: new Date(catalogUpdatedAt).toLocaleString(),
+                                        })}
+                                      </span>
+                                    )}
                                   </div>
                                   <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/45 py-1 text-center text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
                                     {t('selectionAdmin.clickReplaceCatalog')}

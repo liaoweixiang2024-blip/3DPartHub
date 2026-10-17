@@ -10,6 +10,7 @@ import { normalizeSearchParam, searchCacheToken } from '../../lib/searchQuery.js
 import { getAllSettings } from '../../lib/settings.js';
 import { getVerifiedRequestUser, type AuthRequest } from '../../middleware/auth.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
+import { optionCatalogUrl } from './common.js';
 
 /** 选型缓存 TTL：读后台 cache_selection_ttl_seconds（秒），非法回退 TTL.SELECTION_*。 */
 async function selectionCacheTtl(): Promise<number> {
@@ -247,12 +248,13 @@ export function createSelectionPublicRouter() {
         const catalogByProductId = new Map<string, string | null>();
         for (const p of items) {
           const specs = specsRecord(p.specs);
-          const optionCatalogs = (p.category.optionCatalogs || {}) as Record<string, Record<string, string>>;
+          const optionCatalogs = (p.category.optionCatalogs || {}) as Record<string, Record<string, unknown>>;
           let matchedCatalog: string | null = null;
           for (const [field, valueMap] of Object.entries(optionCatalogs)) {
             const specVal = typeof specs[field] === 'string' ? specs[field] : null;
-            if (specVal && valueMap[specVal]) {
-              matchedCatalog = valueMap[specVal];
+            const catalogUrl = specVal ? optionCatalogUrl(valueMap[specVal]) : null;
+            if (specVal && catalogUrl) {
+              matchedCatalog = catalogUrl;
               break;
             }
           }
@@ -485,7 +487,7 @@ export function createSelectionPublicRouter() {
               select: { catalogPdf: true, optionCatalogs: true },
             });
             const ownPdf = category?.catalogPdf || null;
-            const optionCatalogs = (category?.optionCatalogs || {}) as Record<string, Record<string, string>>;
+            const optionCatalogs = (category?.optionCatalogs || {}) as Record<string, Record<string, unknown>>;
 
             let sharedPdfMap: Record<string, string> | null = null;
             if (!ownPdf) {
@@ -515,8 +517,9 @@ export function createSelectionPublicRouter() {
               let matchedCatalog: string | null = null;
               for (const [field, valueMap] of Object.entries(optionCatalogs)) {
                 const specVal = typeof specs[field] === 'string' ? specs[field] : null;
-                if (specVal && valueMap[specVal]) {
-                  matchedCatalog = valueMap[specVal];
+                const catalogUrl = specVal ? optionCatalogUrl(valueMap[specVal]) : null;
+                if (specVal && catalogUrl) {
+                  matchedCatalog = catalogUrl;
                   break;
                 }
               }

@@ -1463,6 +1463,8 @@ export const deDEAdminTranslation: TranslationMap = {
     imageRemoved: 'Bild entfernt',
     catalogUploaded: 'Katalog hochgeladen',
     catalogRemoved: 'Katalog entfernt',
+    catalogBadgeHint: 'Katalog hinterlegt',
+    catalogUpdatedAt: 'Aktualisiert: {{time}}',
     settingsSaved: 'Einstellungen gespeichert',
     pickFieldFirst: 'Bitte zuerst ein Feld zum Konfigurieren wählen',
     saveSettings: 'Einstellungen speichern',

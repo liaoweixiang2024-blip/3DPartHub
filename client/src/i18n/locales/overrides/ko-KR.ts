@@ -1983,6 +1983,7 @@ export const koKRMajorFormsTranslation: TranslationMap = {
       copiedList: '{{title}} 복사됨',
       copiedModel: '모델과 이름이 복사되었습니다',
       downloadedList: '{{title}} 다운로드됨',
+      downloadListFailed: '{{title}} 다운로드 실패',
     },
   },
   inquirySubmit: {

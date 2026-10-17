@@ -61,20 +61,31 @@ export function formatKitList(
   return lines.join('\n');
 }
 
-export function downloadKitList(
+export async function downloadKitList(
   product: SelectionProduct,
   components: SelectionComponent[],
   title = getKitListTitle(null, product),
 ) {
-  const text = formatKitList(product, components, title);
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${cleanFileName(product.modelNo || product.name || title)}-${cleanFileName(title)}.txt`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  // 延迟回收：同步 revoke 可能赶在浏览器异步读取 blob 前，下载内容被截断
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  const { default: writeXlsxFile } = await import('write-excel-file/browser');
+  // 与选型页清单表同列：序号/名称/型号/数量 + 子零件附加参数列并集（如「编码」）
+  const specKeys = [...new Set(components.flatMap((c) => Object.keys(c.specs || {})))];
+  const headers = [
+    i18n.t('bizConfig.kitListColIndex', { defaultValue: '序号' }),
+    i18n.t('bizConfig.kitListColName', { defaultValue: '名称' }),
+    i18n.t('bizConfig.kitListColModelNo', { defaultValue: '型号' }),
+    i18n.t('bizConfig.kitListColQty', { defaultValue: '数量' }),
+    ...specKeys,
+  ];
+  const rows = components.map((item, index) => [
+    index + 1,
+    item.name || '',
+    item.modelNo || '',
+    item.qty ?? 1,
+    ...specKeys.map((key) => item.specs?.[key] ?? ''),
+  ]);
+  // sheet 名非法字符与 31 字符上限（Excel 约束），超长截断
+  const sheetName = title.replace(/[\\/:*?[\]]/g, ' ').slice(0, 31) || 'Kit List';
+  await writeXlsxFile([headers, ...rows], { sheet: sheetName }).toFile(
+    `${cleanFileName(product.modelNo || product.name || title)}-${cleanFileName(title)}.xlsx`,
+  );
 }

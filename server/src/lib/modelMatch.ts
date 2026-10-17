@@ -12,8 +12,15 @@ function normalizePN(s: string): string {
 }
 
 /**
- * Build a match map: for each selection product modelNo, find the best matching model.
- * Matches against model.name. When multiple versions exist in a group, prefers the primary.
+ * Build a match map: for each selection product modelNo, find the matching model.
+ * Matches against model.name (exact, after normalization; 「中文名_型号」的型号尾段也建了键).
+ * When multiple versions exist in a group, prefers the primary.
+ *
+ * 注意：只做精确匹配。此前的「包含兜底」（型号段互为子串即可匹配）在同号不同物的
+ * 家族/变体/尺寸间大量错配，例如：TKN-PC4-01（铜快拧）↔ 白色直快插_PC4-01（塑料
+ * 快插）、BZHF-W-1 ↔ BZHF-W-1/2（口径不同）、QG-W-20L-B-11 ↔ QG-W-20L（变体不同）、
+ * KP5404-25 ↔ KP5404-25-DC24V（电压配置不同）——差一段就是不同的东西，
+ * 宁可不配（结果卡不显示 3D 缩略图）不可错配。
  */
 export async function buildModelMatchMap(modelNos: string[]) {
   const result = new Map<string, { id: string; thumbnailUrl: string | null }>();
@@ -28,53 +35,10 @@ export async function buildModelMatchMap(modelNos: string[]) {
   );
 
   const normMap = new Map<string, { id: string; thumbnailUrl: string | null }>(matchIndex);
-  const normKeys = Array.from(normMap.keys());
 
   for (const raw of modelNos) {
-    const nq = normalizePN(raw);
-
-    // 1) Exact normalized match
-    const exact = normMap.get(nq);
-    if (exact) {
-      result.set(raw, exact);
-      continue;
-    }
-
-    // 2) Containment match — model name is a complete segment of modelNo
-    //    (or vice versa), longest match wins. The shorter side must cover
-    //    at least 60 % of the longer side so that "SQG-PAU1208-6M-03" will
-    //    never match a bare "SQG" (only 3/18 = 17 %).
-    let best: { id: string; thumbnailUrl: string | null } | undefined;
-    let bestLen = 0;
-    const isSep = (c: string) => c === '_' || c === '-';
-    const longerLen = (a: string, b: string) => Math.max(a.length, b.length);
-    // Check whether `needle` appears as a complete segment in `hay` at least once.
-    const segmentMatch = (hay: string, needle: string) => {
-      let from = 0;
-      let idx = hay.indexOf(needle, from);
-      while (idx !== -1) {
-        const end = idx + needle.length;
-        const precededOk = idx === 0 || isSep(hay[idx - 1]);
-        const followedOk = end === hay.length || isSep(hay[end]);
-        if (precededOk && followedOk) return true;
-        from = idx + 1;
-        idx = hay.indexOf(needle, from);
-      }
-      return false;
-    };
-    for (const nk of normKeys) {
-      // modelNo contains model name → model name must be a complete segment
-      if (nk.length > bestLen && nk.length >= longerLen(nq, nk) * 0.6 && segmentMatch(nq, nk)) {
-        best = normMap.get(nk);
-        bestLen = nk.length;
-      }
-      // model name contains modelNo → modelNo must be a complete segment
-      else if (nk.length > bestLen && nq.length >= longerLen(nq, nk) * 0.6 && segmentMatch(nk, nq)) {
-        best = normMap.get(nk);
-        bestLen = nk.length;
-      }
-    }
-    if (best) result.set(raw, best);
+    const exact = normMap.get(normalizePN(raw));
+    if (exact) result.set(raw, exact);
   }
 
   return result;
@@ -109,7 +73,7 @@ async function buildModelMatchIndex(): Promise<MatchIndexEntry[]> {
     const nk = normalizePN(m.name);
     addBucket(nk, m);
     // 站内命名规约「中文名_型号」（如 白色联管直通_PU8）：型号段单独立 key，
-    // 否则下方 60% 覆盖率门槛会把「短型号 + 长中文名」的组合全部拒掉（PU8 ↔ 白色联管直通_PU8）。
+    // 选型产品的 PU8 才能精确命中（匹配只走精确，见 buildModelMatchMap 注释）。
     // 型号段取「第一个 _ 之后」的整段：型号里的 / 在文件名中被清洗成 _（SLF-3/8 → 不锈钢内牙弯头_SLF-3_8），
     // 按全部 _ 切分会把尾段切碎成 "8"；最后一个 _ 段同时保留，兼容历史「A_B_C 只以 C 为型号」的命名
     const segments = nk.split('_');

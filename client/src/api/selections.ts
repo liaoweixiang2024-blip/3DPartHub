@@ -45,7 +45,7 @@ export interface SelectionCategory {
   hidden?: boolean;
   catalogPdf?: string | null;
   catalogShared?: boolean;
-  optionCatalogs?: Record<string, Record<string, string>> | null;
+  optionCatalogs?: Record<string, Record<string, OptionCatalogEntry>> | null;
   productCount?: number;
 }
 
@@ -54,6 +54,20 @@ export interface SelectionComponent {
   modelNo?: string;
   qty: number;
   specs?: Record<string, string>;
+}
+
+/** 选项画册条目：旧数据是纯 URL 字符串；新写入带更新时间（管理端展示「何时上传/更换」） */
+export type OptionCatalogEntry = string | { url: string; updatedAt: string };
+
+/** 兼容读取新旧两种画册条目，统一取 URL（无效/缺失返回 undefined） */
+export function optionCatalogUrl(entry: OptionCatalogEntry | null | undefined): string | undefined {
+  if (!entry) return undefined;
+  return typeof entry === 'string' ? entry : entry.url;
+}
+
+/** 画册条目的上传/更新时间（旧字符串数据没有时间，返回 undefined） */
+export function optionCatalogUpdatedAt(entry: OptionCatalogEntry | null | undefined): string | undefined {
+  return typeof entry === 'object' && entry ? entry.updatedAt : undefined;
 }
 
 export interface SelectionProduct {
@@ -219,7 +233,7 @@ export async function updateCategory(
     optionOrder: Record<string, string[] | string>;
     catalogPdf: string | null;
     catalogShared: boolean;
-    optionCatalogs: Record<string, Record<string, string>>;
+    optionCatalogs: Record<string, Record<string, OptionCatalogEntry>>;
     groupId: string | null;
     groupName: string | null;
     groupIcon: string | null;

@@ -2266,6 +2266,7 @@ export const jaJPMajorFormsTranslation: TranslationMap = {
       copiedList: '{{title}}をコピーしました',
       copiedModel: '型番と名称をコピーしました',
       downloadedList: '{{title}}をダウンロードしました',
+      downloadListFailed: '{{title}}のダウンロードに失敗しました',
     },
   },
   inquirySubmit: {

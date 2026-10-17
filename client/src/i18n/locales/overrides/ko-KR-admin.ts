@@ -1404,6 +1404,8 @@ export const koKRAdminTranslation: TranslationMap = {
     imageRemoved: '이미지가 제거되었습니다',
     catalogUploaded: '카탈로그가 업로드되었습니다',
     catalogRemoved: '카탈로그가 제거되었습니다',
+    catalogBadgeHint: '카탈로그 등록됨',
+    catalogUpdatedAt: '업데이트: {{time}}',
     settingsSaved: '설정이 저장되었습니다',
     pickFieldFirst: '먼저 설정할 필드를 선택하세요',
     saveSettings: '설정 저장',

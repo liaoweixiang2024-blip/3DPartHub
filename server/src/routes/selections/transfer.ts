@@ -29,7 +29,7 @@ import { UPLOAD_REQUEST_TIMEOUT_MS } from '../../lib/uploadLimits.js';
 import { persistFile } from '../../lib/storageProvider.js';
 import { prisma } from '../../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
-import { adminOnly, invalidateSelectionCache } from './common.js';
+import { adminOnly, invalidateSelectionCache, optionCatalogUrl, type OptionCatalogEntry } from './common.js';
 
 const TRANSFER_EXPORT_MAX_CATEGORIES = 100;
 const TRANSFER_STALE_MS = 60 * 60 * 1000; // 暂存包保留 1 小时
@@ -81,7 +81,7 @@ type TransferCategory = {
   hidden?: boolean;
   catalogPdf?: string | null;
   catalogShared?: boolean;
-  optionCatalogs?: Record<string, Record<string, string>> | null;
+  optionCatalogs?: Record<string, Record<string, OptionCatalogEntry>> | null;
   products: TransferProduct[];
 };
 
@@ -110,7 +110,10 @@ function collectAssetUrls(cat: TransferCategory): string[] {
     if (!map || typeof map !== 'object') continue;
     for (const values of Object.values(map)) {
       if (!values || typeof values !== 'object') continue;
-      for (const url of Object.values(values)) push(url);
+      for (const entry of Object.values(values)) {
+        // 画册条目可能是 { url, updatedAt }（新）或纯 URL 字符串（旧），统一取 URL
+        push(optionCatalogUrl(entry) ?? entry);
+      }
     }
   }
   for (const p of cat.products || []) {

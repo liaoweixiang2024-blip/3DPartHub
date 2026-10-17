@@ -187,7 +187,8 @@ function ShareResultCard({
       {product.isKit && comps.length > 0 && (
         <div className="border-t border-outline-variant/10 px-4 py-2.5">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-on-surface-variant">
+            <p className="flex items-center gap-1 text-xs text-on-surface-variant">
+              <Icon name="inventory_2" size={13} />
               {kitListTitle}（{comps.length}）
             </p>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -199,7 +200,7 @@ function ShareResultCard({
                 <span>{copiedList ? t('selectionShare.copied') : t('selectionShare.copyList')}</span>
               </button>
               <button
-                onClick={() => downloadKitList(displayProduct, comps, kitListTitle)}
+                onClick={() => void downloadKitList(displayProduct, comps, kitListTitle).catch(() => undefined)}
                 className="inline-flex items-center gap-1 rounded-md border border-outline-variant/20 px-2 py-1 text-xs text-on-surface-variant hover:bg-surface-container-high/40"
               >
                 <Icon name="download" size={13} />

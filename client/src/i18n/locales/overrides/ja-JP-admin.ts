@@ -1444,6 +1444,8 @@ export const jaJPAdminTranslation: TranslationMap = {
     imageRemoved: '画像を削除しました',
     catalogUploaded: 'カタログをアップロードしました',
     catalogRemoved: 'カタログを削除しました',
+    catalogBadgeHint: 'カタログ登録済み',
+    catalogUpdatedAt: '更新：{{time}}',
     settingsSaved: '設定を保存しました',
     pickFieldFirst: '先に設定するフィールドを選択してください',
     saveSettings: '設定を保存',

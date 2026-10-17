@@ -1314,6 +1314,8 @@ export const zhCNAdmin: TranslationMap = {
     imageRemoved: '图片已移除',
     catalogUploaded: '画册已上传',
     catalogRemoved: '画册已移除',
+    catalogBadgeHint: '已上传画册',
+    catalogUpdatedAt: '更新于 {{time}}',
     settingsSaved: '设置已保存',
     pickFieldFirst: '请先选择要设置的字段',
     saveSettings: '保存设置',

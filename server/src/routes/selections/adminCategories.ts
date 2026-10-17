@@ -336,6 +336,21 @@ export function createSelectionAdminCategoriesRouter() {
             );
           }
 
+          // 画册映射同样要跟着改键，否则改名的选项画册挂在旧值下失配（此前只迁了 optionImages）
+          const optCatalogs = category.optionCatalogs as Record<string, Record<string, unknown>> | null;
+          if (optCatalogs?.[field]?.[oldValue] !== undefined) {
+            const updatedCatalogs = { ...optCatalogs };
+            updatedCatalogs[field] = { ...updatedCatalogs[field] };
+            updatedCatalogs[field][newValue] = updatedCatalogs[field][oldValue];
+            delete updatedCatalogs[field][oldValue];
+            updateOps.push(
+              tx.selectionCategory.update({
+                where: { id },
+                data: { optionCatalogs: updatedCatalogs as Prisma.InputJsonValue },
+              }),
+            );
+          }
+
           if (updateOps.length > 0) {
             await Promise.all(updateOps);
           }
