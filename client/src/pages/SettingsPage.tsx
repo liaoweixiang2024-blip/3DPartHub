@@ -6567,9 +6567,12 @@ function Content() {
       icon: group.icon,
     })),
     ...cacheStorageSectionTabs,
-    { title: t('adminSettings.tabBackup'), icon: 'cloud_upload' },
-    { title: t('adminSettings.tabCacheCleanup'), icon: 'cleaning_services' },
-    { title: t('adminSettings.tabAboutSystem'), icon: 'info' },
+    // title 必须存键（与 GROUPS/SETTINGS_NAV_GROUPS.sections/activeTab 比较链一致）；
+    // 显示文案由 tabItems 的 t(tab.title, {defaultValue}) 负责。此前误用 t() 返回值，
+    // 键值世界不一致导致 navGroups 匹配失败——备份/缓存清理/关于系统三个 tab 整体消失
+    { title: 'adminSettings.tabBackup', icon: 'cloud_upload' },
+    { title: 'adminSettings.tabCacheCleanup', icon: 'cleaning_services' },
+    { title: 'adminSettings.tabAboutSystem', icon: 'info' },
   ];
   const resolvedActiveTab = activeTab === CACHE_STORAGE_GROUP_TITLE ? CACHE_STORAGE_SECTION_TITLES[0] : activeTab;
   const activeGroup = GROUPS.find((group) => group.title === resolvedActiveTab);
