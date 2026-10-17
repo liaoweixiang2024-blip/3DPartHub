@@ -1,7 +1,8 @@
 {
   "name": "3DPartHub",
   "short_name": "3DPartHub",
-  "description": "Enterprise 3D Part Model Management Platform",
+  "description": "企业级 3D 零件模型管理平台",
+  "lang": "zh-CN",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#faf9f7",

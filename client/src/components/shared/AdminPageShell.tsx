@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { createContext, useContext, useLayoutEffect, useState, type ReactNode, type Ref } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
+import { AdminTranslationsGate } from '../../i18n/AdminTranslationsGate';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { useResolvedAdminInterfaceTheme, useResolvedPublicInterfaceTheme } from '../../lib/interfaceThemePreference';
 import { getFooterCopyright, useFeatureFlags, usePublicSettings } from '../../lib/publicSettings';
@@ -71,6 +72,15 @@ export function AdminLayout() {
   const showDesktopFloatingMenu = ThemePackage.chrome.adminLayout.showDesktopFloatingMenu?.(chromeContext) ?? false;
 
   const bottomNavCtx = { hide: hideBottomNav, setHide: setHideBottomNav };
+  // admin 命名空间文案按需注入：仅 /admin/* 需要闸门（AdminLayout 同时服务
+  // /selection、/downloads 等用户页，不能无差别挂载）
+  const content = isAdminRoute ? (
+    <AdminTranslationsGate>
+      <Outlet />
+    </AdminTranslationsGate>
+  ) : (
+    <Outlet />
+  );
 
   if (isDesktop) {
     return (
@@ -81,7 +91,7 @@ export function AdminLayout() {
             <div className="flex min-h-0 flex-1 overflow-hidden">
               {showDesktopSidebar ? <Sidebar /> : null}
               <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface-dim custom-scrollbar [scrollbar-gutter:stable]">
-                <Outlet />
+                {content}
               </main>
               {showDesktopFloatingMenu && FloatingMenu ? <FloatingMenu {...floatingMenuProps} /> : null}
               <AdminCopyrightBadge />
@@ -102,9 +112,7 @@ export function AdminLayout() {
         >
           <TopNav source="layout" compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
           <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <Outlet />
-          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{content}</div>
           {hideBottomNav ? null : <BottomNav />}
         </div>
       </HideBottomNavContext.Provider>

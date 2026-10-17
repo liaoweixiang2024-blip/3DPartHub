@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { openDocumentUrl } from '../../lib/browserDownload';
+import {
+  cancelPreparedBrowserDownload,
+  downloadBrowserFile,
+  openDocumentUrl,
+  prepareBrowserDownload,
+} from '../../lib/browserDownload';
 import Icon from '../shared/Icon';
 
 const MIN_SCALE = 1;
@@ -27,11 +32,14 @@ export function CatalogZoomModal({
   src,
   isImage,
   onClose,
+  layer = 320,
 }: {
   productTitle: string;
   src: string;
   isImage: boolean;
   onClose: () => void;
+  /** 遮罩 z-index：默认 320（选型页）；嵌在更高层弹窗内（如选型管理的选项弹窗 330）时传更高值 */
+  layer?: number;
 }) {
   const { t } = useTranslation();
   // 图片缩放/平移状态（每次打开弹窗重新挂载，自动回到适应窗口）
@@ -255,7 +263,11 @@ export function CatalogZoomModal({
   );
 
   return createPortal(
-    <div className="fixed inset-0 z-[320] flex items-center justify-center bg-black/70 p-3 sm:p-6" onClick={onClose}>
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-black/70 p-3 sm:p-6"
+      style={{ zIndex: layer }}
+      onClick={onClose}
+    >
       {/* 近全屏：宽度上限 1280（max-w-7xl），高度贴满视口（扣除遮罩内边距）——
           图片/PDF 的可视面积都明显大于原先的 max-w-5xl + 内容自适应高 */}
       <div
@@ -271,6 +283,23 @@ export function CatalogZoomModal({
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {isImage ? zoomControl : null}
+            <button
+              onClick={async () => {
+                // 文件名取 URL 尾段（画册多为 /static/上传文件名），解码失败/外链取不到就用标题兜底
+                const raw = src.split('/').pop()?.split('?')[0] || '';
+                const fileName = raw ? decodeURIComponent(raw) : productTitle;
+                const preparedWindow = prepareBrowserDownload();
+                try {
+                  await downloadBrowserFile(src, { preparedWindow, fileName });
+                } catch {
+                  cancelPreparedBrowserDownload(preparedWindow);
+                }
+              }}
+              aria-label={t('selectionResult.downloadCatalog')}
+              className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+            >
+              <Icon name="download" size={16} />
+            </button>
             <button
               onClick={() => openDocumentUrl(src, { title: t('selectionResult.productCatalog') })}
               aria-label={t('selectionResult.productCatalog')}

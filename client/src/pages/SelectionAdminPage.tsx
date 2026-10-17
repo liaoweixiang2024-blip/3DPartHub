@@ -27,6 +27,8 @@ import {
   type SelectionComponent,
   type ColumnDef,
 } from '../api/selections';
+import { CatalogZoomModal } from '../components/selection/CatalogZoomModal';
+import { isSafeUrl } from '../lib/sanitizeHtml';
 import { BatchImportModal } from '../components/selection-admin/BatchImportModal';
 import { ColumnEditor } from '../components/selection-admin/ColumnEditor';
 import {
@@ -443,6 +445,8 @@ function Content() {
   const [editOptVal, setEditOptVal] = useState<string | null>(null);
   // 画册专属拖拽目标悬停态（区别于整弹窗拖拽态 optDragActive）
   const [optCatalogDragActive, setOptCatalogDragActive] = useState(false);
+  // 画册查看弹窗（复用前台 CatalogZoomModal：管理员所见即用户所见，图片可缩放、PDF 内嵌渲染）
+  const [optCatalogZoom, setOptCatalogZoom] = useState(false);
   // 悬停即粘贴目标：鼠标停在哪个上传区，Cmd+V 就传哪个区（null=弹窗外，走默认分流 图片→选项图/PDF→画册）
   const [optPasteZone, setOptPasteZone] = useState<'image' | 'catalog' | null>(null);
   // 选项设置网格里悬停的选项卡图片：单选项弹窗没开时，悬停哪张卡片粘贴就传哪个选项值
@@ -3831,12 +3835,23 @@ function Content() {
                                   : t('selectionAdmin.catalogShareOffHint')}
                               </p>
                               {catalogUrl && (
-                                <button
-                                  onClick={() => removeOptCatalog(optImgField, editOptVal)}
-                                  className="shrink-0 rounded px-1.5 py-0.5 text-xs text-error/70 transition-colors hover:bg-error/10 hover:text-error"
-                                >
-                                  {t('selectionAdmin.removeCatalog')}
-                                </button>
+                                <div className="flex shrink-0 items-center gap-1">
+                                  {isSafeUrl(catalogUrl) && (
+                                    <button
+                                      onClick={() => setOptCatalogZoom(true)}
+                                      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-primary-container transition-colors hover:bg-primary-container/10"
+                                    >
+                                      <Icon name="visibility" size={13} />
+                                      {t('selectionAdmin.viewCatalog')}
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => removeOptCatalog(optImgField, editOptVal)}
+                                    className="rounded px-1.5 py-0.5 text-xs text-error/70 transition-colors hover:bg-error/10 hover:text-error"
+                                  >
+                                    {t('selectionAdmin.removeCatalog')}
+                                  </button>
+                                </div>
                               )}
                             </div>
                           </section>
@@ -3845,6 +3860,16 @@ function Content() {
                       <p className="shrink-0 text-center text-[10px] leading-snug text-on-surface-variant/70">
                         {t('selectionAdmin.pasteZoneHint')}
                       </p>
+                      {/* 画册查看弹窗：layer 压过选项弹窗的 330；关闭时只收弹窗、不退出选项编辑 */}
+                      {optCatalogZoom && catalogUrl && isSafeUrl(catalogUrl) && (
+                        <CatalogZoomModal
+                          productTitle={`${activeCat?.name ?? ''} · ${editOptVal}`}
+                          src={catalogUrl}
+                          isImage={/\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(catalogUrl)}
+                          onClose={() => setOptCatalogZoom(false)}
+                          layer={360}
+                        />
+                      )}
                     </>
                   );
                 })()}

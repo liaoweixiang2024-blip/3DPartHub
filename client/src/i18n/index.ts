@@ -3,7 +3,7 @@ import type { Resource } from 'i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { initReactI18next } from 'react-i18next';
 import type { SystemSettings } from '../api/settings';
-import { initialResources, loadLocaleResource } from './resources';
+import { initialResources, loadAdminLocaleResource, loadLocaleResource } from './resources';
 
 export const SUPPORTED_LOCALES = ['zh-CN', 'zh-TW', 'en-US', 'ja-JP', 'ko-KR', 'de-DE'] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
@@ -134,6 +134,40 @@ async function ensureLocaleLoaded(locale: SupportedLocale): Promise<void> {
     }
   }
   loadedLocales.add(locale);
+}
+
+// ── 后台管理文案按需注入 ────────────────────────────────────────────────────
+// admin-only 命名空间不在主语言包里（前台首屏不下载），进入 /admin/* 时由
+// AdminTranslationsGate 调用本函数补载。非默认语言同时补载 zh-CN，保持
+// fallbackLng=zh-CN 的兜底链在 admin 键上同样成立。
+const loadedAdminLocales = new Set<SupportedLocale>();
+const adminLoadPromises = new Map<SupportedLocale, Promise<void>>();
+
+function ensureAdminLocale(locale: SupportedLocale): Promise<void> {
+  if (loadedAdminLocales.has(locale)) return Promise.resolve();
+  let promise = adminLoadPromises.get(locale);
+  if (!promise) {
+    promise = (async () => {
+      const extra = await loadAdminLocaleResource(locale);
+      if (extra) {
+        for (const [lng, namespaces] of Object.entries(extra)) {
+          for (const [ns, data] of Object.entries(namespaces)) {
+            i18n.addResourceBundle(lng, ns, data as object, true, true);
+          }
+        }
+      }
+      loadedAdminLocales.add(locale);
+      adminLoadPromises.delete(locale);
+    })();
+    adminLoadPromises.set(locale, promise);
+  }
+  return promise;
+}
+
+/** 确保当前语言（+zh-CN 兜底）的后台文案包已注入；幂等，可并发调用 */
+export async function ensureAdminTranslationsLoaded(locale: SupportedLocale): Promise<void> {
+  const targets = locale === DEFAULT_LOCALE ? [locale] : [locale, DEFAULT_LOCALE];
+  await Promise.all(targets.map(ensureAdminLocale));
 }
 
 export async function initI18n(settings?: Partial<SystemSettings> | null) {

@@ -82,3 +82,57 @@ export async function loadLocaleResource(locale: string): Promise<Resource | nul
 export function initialResources(): Resource {
   return { 'zh-CN': zhCN };
 }
+
+// ── 后台管理文案的按需加载 ──────────────────────────────────────────────────
+// 15 个 admin-only 命名空间（~2100 条，语言包增量的 3/4）拆在 *-admin.ts 里，
+// 仅进入 /admin/* 路由时注入（见 AdminTranslationsGate），前台访客首屏不下载。
+// 全部动态 import：任何静态引用都会把 admin 包拉回公共 chunk。
+
+/**
+ * 构建指定语言的后台文案包。与 loadLocaleResource 同构：返回值只包含
+ * 本次新加载的内容（调用方 addResourceBundle deep merge 进现有 translation）。
+ */
+export async function loadAdminLocaleResource(locale: string): Promise<Resource | null> {
+  if (locale === 'zh-CN') {
+    const { zhCNAdmin } = await import('./locales/zh-CN-admin');
+    return { 'zh-CN': { translation: zhCNAdmin } };
+  }
+
+  if (locale === 'zh-TW') {
+    const { zhCNAdmin } = await import('./locales/zh-CN-admin');
+    // 繁中后台文案走简繁自动转换（与主包同路径），无独立 admin 覆盖片段
+    return { 'zh-TW': { translation: convertTranslationText(zhCNAdmin) } };
+  }
+
+  if (locale === 'en-US') {
+    const { enUSAdmin } = await import('./locales/en-US-admin');
+    return { 'en-US': { translation: enUSAdmin } };
+  }
+
+  if (locale === 'ja-JP' || locale === 'ko-KR' || locale === 'de-DE') {
+    const [{ enUSAdmin }, adminFragment] = await Promise.all([
+      import('./locales/en-US-admin'),
+      importAdminOverride(locale),
+    ]);
+    return { [locale]: { translation: mergeTranslation(enUSAdmin, adminFragment) } };
+  }
+
+  return null;
+}
+
+async function importAdminOverride(locale: 'ja-JP' | 'ko-KR' | 'de-DE'): Promise<TranslationMap> {
+  switch (locale) {
+    case 'ja-JP': {
+      const m = await import('./locales/overrides/ja-JP-admin');
+      return m.jaJPAdminTranslation;
+    }
+    case 'ko-KR': {
+      const m = await import('./locales/overrides/ko-KR-admin');
+      return m.koKRAdminTranslation;
+    }
+    default: {
+      const m = await import('./locales/overrides/de-DE-admin');
+      return m.deDEAdminTranslation;
+    }
+  }
+}

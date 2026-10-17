@@ -96,13 +96,55 @@
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" opacity="0.3"></path>
       </svg>
     </div>
-    <h1>系统维护中</h1>
-    <p>我们正在进行系统升级，请稍后再访问。</p>
-    <p>通常只需要几分钟时间。</p>
+    <h1 data-mi18n="title">系统维护中</h1>
+    <p data-mi18n="line1">我们正在进行系统升级，请稍后再访问。</p>
+    <p data-mi18n="line2">通常只需要几分钟时间。</p>
     <div class="spinner"></div>
-    <div class="footer-text">页面将自动刷新，请勿关闭浏览器</div>
+    <div class="footer-text" data-mi18n="footer">页面将自动刷新，请勿关闭浏览器</div>
   </div>
   <script>
+    // 维护兜底页多语言：此页在主应用不可用时展示（不能依赖主站 i18n），
+    // 语言判定是主站 parseSupportedLocale 的复刻简化版——localStorage 的
+    // ui_locale 优先，其次浏览器语言，默认简中。六种支持语言全覆盖。
+    (function () {
+      var TEXT = {
+        'zh-CN': { title: '系统维护中', line1: '我们正在进行系统升级，请稍后再访问。', line2: '通常只需要几分钟时间。', footer: '页面将自动刷新，请勿关闭浏览器' },
+        'zh-TW': { title: '系統維護中', line1: '我們正在進行系統升級，請稍後再訪問。', line2: '通常只需要幾分鐘時間。', footer: '頁面將自動重新整理，請勿關閉瀏覽器' },
+        'en-US': { title: 'Under Maintenance', line1: 'We are upgrading the system. Please check back shortly.', line2: 'This usually takes just a few minutes.', footer: 'This page refreshes automatically — keep it open' },
+        'ja-JP': { title: 'システムメンテナンス中', line1: 'システムのアップグレードを行っています。しばらくしてから再度アクセスしてください。', line2: '通常は数分で完了します。', footer: 'このページは自動的に更新されます。ブラウザを閉じないでください' },
+        'ko-KR': { title: '시스템 점검 중', line1: '시스템 업그레이드를 진행 중입니다. 잠시 후 다시 접속해 주세요.', line2: '보통 몇 분 정도 걸립니다.', footer: '이 페이지는 자동으로 새로고침됩니다. 브라우저를 닫지 마세요' },
+        'de-DE': { title: 'Wartungsarbeiten', line1: 'Wir führen ein System-Upgrade durch. Bitte später zurückkommen.', line2: 'Das dauert in der Regel nur wenige Minuten.', footer: 'Diese Seite aktualisiert sich automatisch — bitte geöffnet lassen' },
+      };
+      function parseLocale(raw) {
+        var v = String(raw || '').trim().toLowerCase();
+        if (v === 'zh' || v === 'zh-cn' || v === 'zh-hans' || v === 'cn') return 'zh-CN';
+        if (v === 'zh-tw' || v === 'zh-hk' || v === 'zh-hant' || v === 'tw' || v === 'hk') return 'zh-TW';
+        if (v === 'en' || v === 'en-us' || v === 'en-gb') return 'en-US';
+        if (v === 'ja' || v === 'ja-jp' || v === 'jp') return 'ja-JP';
+        if (v === 'ko' || v === 'ko-kr' || v === 'kr') return 'ko-KR';
+        if (v === 'de' || v === 'de-de' || v === 'de-at' || v === 'de-ch') return 'de-DE';
+        return null;
+      }
+      var locale = null;
+      try { locale = parseLocale(localStorage.getItem('ui_locale')); } catch (e) {}
+      if (!locale && navigator.languages) {
+        for (var i = 0; i < navigator.languages.length; i++) {
+          locale = parseLocale(navigator.languages[i]);
+          if (locale) break;
+        }
+      }
+      if (!locale) locale = parseLocale(navigator.language);
+      if (!locale) locale = 'zh-CN';
+      var dict = TEXT[locale];
+      var nodes = document.querySelectorAll('[data-mi18n]');
+      for (var j = 0; j < nodes.length; j++) {
+        var key = nodes[j].getAttribute('data-mi18n');
+        if (dict[key]) nodes[j].textContent = dict[key];
+      }
+      document.title = dict.title;
+      document.documentElement.lang = locale;
+    })();
+
     // Apply branding from site config (may not be available during maintenance)
     fetch('/api/settings/public', { method: 'GET', cache: 'no-store' })
       .then(function(res) { return res.ok ? res.json() : null; })
