@@ -211,16 +211,50 @@ router.get(
         : [];
     const userMap = new Map(users.map((u) => [u.id, u.username]));
 
-    const items = logs.map((l) => ({
-      id: l.id,
-      userId: l.userId,
-      username: l.userId ? userMap.get(l.userId) || l.userId : null,
-      action: l.action,
-      resource: l.resource,
-      resourceId: l.resourceId,
-      details: l.details,
-      createdAt: l.createdAt,
-    }));
+    // 登录/注册请求发生时 req.user 尚未挂载，审计行 userId 为空、只有
+    // details.body.email——按 email 反查用户名，让历史登录日志也能显示具体用户
+    const emails = [
+      ...new Set(
+        logs
+          .filter((l) => !l.userId)
+          .map((l) => {
+            const email = (l.details as Record<string, unknown> | null)?.body;
+            if (email && typeof email === 'object') {
+              const value = (email as Record<string, unknown>).email;
+              if (typeof value === 'string' && value) return value.toLowerCase();
+            }
+            return null;
+          })
+          .filter(Boolean),
+      ),
+    ] as string[];
+    const emailUsers =
+      emails.length > 0
+        ? await prisma.user.findMany({
+            where: { email: { in: emails, mode: 'insensitive' } },
+            select: { email: true, username: true },
+          })
+        : [];
+    const emailMap = new Map(emailUsers.map((u) => [u.email.toLowerCase(), u.username]));
+
+    const items = logs.map((l) => {
+      let username = l.userId ? userMap.get(l.userId) || l.userId : null;
+      if (!username) {
+        const body = (l.details as Record<string, unknown> | null)?.body;
+        const email = body && typeof body === 'object' ? (body as Record<string, unknown>).email : null;
+        if (typeof email === 'string' && email) username = emailMap.get(email.toLowerCase()) || null;
+      }
+      return {
+        id: l.id,
+        userId: l.userId,
+        username,
+        action: l.action,
+        resource: l.resource,
+        resourceId: l.resourceId,
+        details: l.details,
+        createdAt: l.createdAt,
+      };
+    });
 
     res.json({ total, items, page, page_size: pageSize });
   }),

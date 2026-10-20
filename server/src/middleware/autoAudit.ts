@@ -16,7 +16,6 @@ const SKIP_PREFIXES = [
   '/api/settings/backup/restore-progress', // polling
   '/api/settings/backup/import-save-progress', // polling
   '/api/settings/backup/download/', // GET download uses a single-use token; token generation is audited.
-  '/api/downloads/model-token', // short-lived browser download token generation
   '/api/settings/update/progress', // polling
   '/api/notifications', // GET polling
   '/api/audit', // don't audit the audit log itself
@@ -118,6 +117,7 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
           params.userId ||
           params.slug ||
           (typeof body?.id === 'string' || typeof body?.id === 'number' ? String(body.id) : null) ||
+          (typeof body?.modelId === 'string' ? body.modelId : null) ||
           null;
 
         const details: Record<string, Prisma.InputJsonValue> = {
@@ -125,6 +125,13 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
           path,
           statusCode: _res.statusCode,
         };
+
+        // 客户端 IP（trust proxy 已配置，取 X-Forwarded-For 首跳）与 UA：
+        // 登录成功/失败的安全审计靠这两个字段定位来源
+        const clientIp = req.ip;
+        if (clientIp) details.ip = clientIp;
+        const userAgent = req.headers['user-agent'];
+        if (typeof userAgent === 'string' && userAgent) details.ua = userAgent.slice(0, 180);
 
         // Include relevant body fields (sanitized)
         if (body && typeof body === 'object') {
@@ -139,6 +146,7 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
             'username',
             'format',
             'title',
+            'modelId',
           ]) {
             const value = body[key];
             if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {

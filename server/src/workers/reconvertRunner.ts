@@ -51,7 +51,12 @@ async function run(payload: RunPayload) {
 
   send({ type: 'progress', progress: 90, message: '正在生成预览图...' });
   const thumbnail: ThumbnailResult = generateThumbnail(result.gltfPath, thumbDir, payload.modelId);
-  send({ type: 'done', result, thumbnail });
+  // 仅回传父进程落库所需字段（子进程不写 DB）；gltfUrl 自带新 cacheVersion
+  send({
+    type: 'done',
+    result: { gltfUrl: result.gltfUrl, gltfSize: result.gltfSize, previewMeta: result.previewMeta },
+    thumbnail,
+  });
 }
 
 process.on('message', (message: { type: string; payload?: RunPayload }) => {

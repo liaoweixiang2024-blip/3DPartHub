@@ -13,7 +13,7 @@ import { conversionChildHeapLimitMb, conversionQueue } from '../../lib/queue.js'
 import { persistFile } from '../../lib/storageProvider.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
-import { convertStepToGltf } from '../../services/converter.js';
+import { convertStepToGltf, type GltfAsset } from '../../services/converter.js';
 import { parseStepFileDate } from '../../services/modelFileDates.js';
 import {
   findOriginalModelPath,
@@ -59,7 +59,9 @@ const RECONVERT_JOB_TTL_MS = 10 * 60 * 1000;
 
 // fork 隔离子进程执行重转换：occt WASM / gmsh / 软件光栅化都在子进程跑，
 // API 进程事件循环不受影响（在 API 进程内跑会同步冻结全部 HTTP 请求）。
-type RunnerOutcome = { thumbnailUrl: string | null } | { error: string };
+type RunnerOutcome =
+  | { thumbnailUrl: string | null; result?: Pick<GltfAsset, 'gltfUrl' | 'gltfSize' | 'previewMeta'> }
+  | { error: string };
 
 function runReconvertInChild(job: ReconvertJob, inputPath: string, modelId: string, originalName: string) {
   const runnerPath = new URL('../../workers/reconvertRunner.js', import.meta.url);
@@ -90,11 +92,17 @@ function runReconvertInChild(job: ReconvertJob, inputPath: string, modelId: stri
     child.stderr?.on('data', (chunk) => logger.warn(`[reconvert:${job.id}] ${String(chunk).trimEnd()}`));
     child.on(
       'message',
-      (msg: { type: string; progress?: number; message?: string; thumbnail?: { thumbnailUrl: string } }) => {
+      (msg: {
+        type: string;
+        progress?: number;
+        message?: string;
+        thumbnail?: { thumbnailUrl: string };
+        result?: Pick<GltfAsset, 'gltfUrl' | 'gltfSize' | 'previewMeta'>;
+      }) => {
         if (msg.type === 'progress' && typeof msg.progress === 'number' && Number.isFinite(msg.progress)) {
           updateReconvertJob_progress(job, msg.progress, msg.message || '转换中...');
         } else if (msg.type === 'done') {
-          finish({ thumbnailUrl: msg.thumbnail?.thumbnailUrl ?? null });
+          finish({ thumbnailUrl: msg.thumbnail?.thumbnailUrl ?? null, result: msg.result });
         } else if (msg.type === 'error') {
           finish({ error: msg.message || '转换失败' });
         }
@@ -416,22 +424,17 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
             } else {
               thumbnailWarning = '模型已重新转换，预览图生成失败，已保留原预览图';
             }
-            // 重读转换产物元数据（子进程已写盘）
+            // 转换产物元数据用子进程 IPC 回传值（子进程只写盘不写 DB）。此前
+            // 「重读 DB」拿到的是转换前旧值：标准重转后 gltfUrl 的 ?v= 不换新，
+            // 浏览器按同 URL 吃缓存，预览一直显示上一版（如 gmsh 修复）的模型；
+            // gltfSize/previewMeta 也停留在旧引擎产物。
             let gltfSize = m.gltfSize;
             let gltfUrl = m.gltfUrl;
             let nextPreviewMeta = toPrismaJson(m.previewMeta);
-            try {
-              const fresh = await prisma.model.findUnique({
-                where: { id },
-                select: { gltfUrl: true, gltfSize: true, previewMeta: true },
-              });
-              if (fresh) {
-                gltfUrl = fresh.gltfUrl;
-                gltfSize = fresh.gltfSize;
-                nextPreviewMeta = toPrismaJson(fresh.previewMeta);
-              }
-            } catch {
-              /* 保留旧值 */
+            if (outcome.result) {
+              gltfUrl = outcome.result.gltfUrl;
+              gltfSize = outcome.result.gltfSize;
+              nextPreviewMeta = toPrismaJson(outcome.result.previewMeta);
             }
 
             // Append timestamp for cache busting

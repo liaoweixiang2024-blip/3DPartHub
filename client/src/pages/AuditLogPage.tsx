@@ -40,6 +40,8 @@ type AuditDetails = {
   body?: Record<string, unknown>;
   method?: string;
   path?: string;
+  ip?: string;
+  ua?: string;
   statusCode?: number;
   status?: string;
   riskLevel?: string;
@@ -174,6 +176,7 @@ const BODY_LABELS: Record<string, string> = {
   email: 'auditLog.body.email',
   username: 'auditLog.body.username',
   format: 'auditLog.body.format',
+  modelId: 'auditLog.body.modelId',
   content: 'auditLog.body.content',
   retentionDays: 'auditLog.body.retentionDays',
   cutoffAt: 'auditLog.body.cutoffAt',
@@ -222,6 +225,8 @@ function getLogDetails(log: AuditEntry, t: TFunction) {
   }
   if (log.details?.method) detailLines.push({ label: t('auditLog.detail.method'), value: log.details.method });
   if (log.details?.path) detailLines.push({ label: t('auditLog.detail.path'), value: log.details.path });
+  if (log.details?.ip) detailLines.push({ label: t('auditLog.detail.ip'), value: log.details.ip });
+  if (log.details?.ua) detailLines.push({ label: t('auditLog.detail.ua'), value: log.details.ua });
   if (log.details?.statusCode)
     detailLines.push({ label: t('auditLog.detail.statusCode'), value: String(log.details.statusCode) });
   if (log.details?.status) detailLines.push({ label: t('auditLog.detail.result'), value: log.details.status });
@@ -353,7 +358,14 @@ function LogRow({
   const resLabel = resourceLabel(log.resource, t);
   const detailLines = getLogDetails(log, t);
   const summary = getLogSummary(log, t);
-  const actor = log.username || (log.userId ? `${log.userId.slice(0, 8)}...` : t('auditLog.systemActor'));
+  // 登录/注册行 userId 为空（请求发生时未认证），用 details.body.email 兜底显示尝试者
+  const actor =
+    log.username ||
+    (log.userId
+      ? `${log.userId.slice(0, 8)}...`
+      : typeof log.details?.body?.email === 'string' && log.details.body.email
+        ? log.details.body.email
+        : t('auditLog.systemActor'));
 
   if (isDesktop) {
     return (
