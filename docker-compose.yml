@@ -114,6 +114,13 @@ services:
       ADMIN_PASS: '${ADMIN_PASS:?请在 .env 中设置 ADMIN_PASS}'
       # <<< 可选: 允许的来源域名 (多个用逗号分隔，留空则仅同源)
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      # <<< 可选但强烈建议: 站点对外地址 (如 https://3dparthub.example.com)。
+      # 设置后邮件/通知里的链接一律用它，不再从请求头 Host 推断（防 Host 头投毒把
+      # 密码重置等带 token 的链接改写到钓鱼域）。留空则回退 Host/X-Forwarded-Host 推断。
+      SITE_URL: ${SITE_URL:-}
+      # <<< 默认开启登录 Cookie 的 secure 标志（生产走 HTTPS 反代必须开；
+      # 仅内网纯 HTTP 部署时才在 .env 显式设 AUTH_COOKIE_SECURE=false）
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
       STORAGE_TYPE: ${STORAGE_TYPE:-local}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-}
       MINIO_PORT: ${MINIO_PORT:-9000}

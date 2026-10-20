@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { isSafeUrl } from '../lib/sanitizeHtml';
 import useSWR from 'swr';
 import {
   getInquiry,
@@ -281,7 +282,7 @@ function MessageBubble({ msg, isAdminView }: { msg: InquiryMessage; isAdminView:
           />
         ) : attachment ? (
           <a
-            href={attachment}
+            href={isSafeUrl(attachment) ? attachment : undefined}
             target="_blank"
             rel="noopener"
             onClick={(event) => {

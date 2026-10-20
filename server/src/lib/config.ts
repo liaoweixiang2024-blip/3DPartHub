@@ -140,6 +140,10 @@ export const config = {
   minioSecretKey: validateMinioCredentials('MINIO_SECRET_KEY', 'minioadmin'),
   minioBucket: optional('MINIO_BUCKET', 'models'),
   minioUseSSL: optional('MINIO_USE_SSL', 'false') === 'true',
+  // 站点对外地址（如 https://3dparthub.example.com）。设置后邮件/通知里的链接一律用它，
+  // 不再信任请求头的 Host / X-Forwarded-Host（应用端口若绕过反代直连可达，攻击者可
+  // 注入伪造 Host 把密码重置等带 token 的链接改写到钓鱼域）
+  siteUrl: optionalAllowEmpty('SITE_URL', '').replace(/\/+$/, ''),
 };
 
 checkRequiredEnvVars();

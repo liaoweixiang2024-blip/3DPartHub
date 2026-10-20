@@ -1,6 +1,7 @@
 import useSWR, { mutate } from 'swr';
 import { getPublicSettings, type SystemSettings } from '../api/settings';
 import { i18n, syncI18nSettings } from '../i18n';
+import { isSafeUrl } from './sanitizeHtml';
 import { applyServerThemeDefaults } from '../stores/useThemeStore';
 import { applyColorScheme } from './colorScheme';
 import { buildPoliceFilingUrl } from './filingNumber';
@@ -346,15 +347,19 @@ export function getFooterLinks(): FooterLink[] {
     const value = cache?.footer_links;
     const parsed = typeof value === 'string' ? (value.trim() ? JSON.parse(value) : []) : value;
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((item) => {
-        const row = item && typeof item === 'object' ? (item as Partial<FooterLink>) : {};
-        return {
-          label: typeof row.label === 'string' ? row.label.trim() : '',
-          url: typeof row.url === 'string' ? row.url.trim() : '',
-        };
-      })
-      .filter((link) => link.label && link.url);
+    return (
+      parsed
+        .map((item) => {
+          const row = item && typeof item === 'object' ? (item as Partial<FooterLink>) : {};
+          return {
+            label: typeof row.label === 'string' ? row.label.trim() : '',
+            url: typeof row.url === 'string' ? row.url.trim() : '',
+          };
+        })
+        // 后台可配的友情链接：统一在数据源过协议白名单（javascript:/data:text-html 等不外发），
+        // HomePage / HomeDesktop 模板 / HomeFooter 全部消费点一次覆盖
+        .filter((link) => link.label && link.url && isSafeUrl(link.url))
+    );
   } catch {
     return [];
   }

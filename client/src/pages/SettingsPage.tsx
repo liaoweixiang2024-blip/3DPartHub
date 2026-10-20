@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { i18n } from '../i18n';
+import { isSafeUrl } from '../lib/sanitizeHtml';
 import { useLocation } from 'react-router-dom';
 import { mutate as mutateSWR } from 'swr';
 import {
@@ -8426,7 +8427,7 @@ function Content() {
                                 {t('adminSettings.shellHint')}
                                 api
                               </p>
-                              {updateInfo.releaseUrl && (
+                              {updateInfo.releaseUrl && isSafeUrl(updateInfo.releaseUrl) && (
                                 <a
                                   href={updateInfo.releaseUrl}
                                   target="_blank"
@@ -8456,7 +8457,7 @@ function Content() {
                               <div className="max-h-48 overflow-y-auto text-xs text-on-surface-variant/80 space-y-0.5 whitespace-pre-line bg-surface-container/50 rounded p-3">
                                 {updateInfo.releaseNotes}
                               </div>
-                              {updateInfo.releaseUrl && (
+                              {updateInfo.releaseUrl && isSafeUrl(updateInfo.releaseUrl) && (
                                 <a
                                   href={updateInfo.releaseUrl}
                                   target="_blank"
@@ -8568,14 +8569,16 @@ function Content() {
                                         <div className="max-h-64 overflow-y-auto text-xs text-on-surface-variant/85 whitespace-pre-line leading-relaxed">
                                           {entry.notes}
                                         </div>
-                                        <a
-                                          href={entry.releaseUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-block mt-2 text-xs text-primary hover:underline"
-                                        >
-                                          {t('adminSettings.viewGithubRelease')}
-                                        </a>
+                                        {isSafeUrl(entry.releaseUrl) && (
+                                          <a
+                                            href={entry.releaseUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-block mt-2 text-xs text-primary hover:underline"
+                                          >
+                                            {t('adminSettings.viewGithubRelease')}
+                                          </a>
+                                        )}
                                       </div>
                                     )}
                                   </div>

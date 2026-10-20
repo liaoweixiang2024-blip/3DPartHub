@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -268,6 +269,25 @@ function safeExtractedArchivePath(rootDir: string, fileName: string): string | n
   const root = resolve(rootDir);
   const candidate = resolve(root, fileName);
   return candidate === root || candidate.startsWith(`${root}${sep}`) ? candidate : null;
+}
+
+/**
+ * 纵深防御（zip-slip 同款）：filenameTransform 已把 RAR 落盘名收敛为服务端生成的纯文件名，
+ * 这里解压后实测遍历整个临时目录，断言所有产物真实位于 rootDir 内——
+ * 不依赖 node-unrar-js 对条目名/目录条目的处理承诺。越界即抛错终止任务（finally 清理目录）。
+ */
+function assertExtractedWithinRoot(rootDir: string): void {
+  const root = resolve(rootDir);
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (full !== root && !full.startsWith(`${root}${sep}`)) {
+        throw new Error(`压缩包条目越界（疑似路径穿越），已终止: ${entry.name}`);
+      }
+      if (entry.isDirectory()) walk(full);
+    }
+  };
+  walk(root);
 }
 
 export function selectBatchModelEntries<
@@ -1077,6 +1097,7 @@ export async function processBatchArchiveUpload({
             extractNameByArchive.get(filename) || safeExtractedArchiveFileName(0, filename),
         });
         const extracted = extractExtractor.extract({ files: archiveNames });
+        assertExtractedWithinRoot(extractDir);
         for (const item of extracted.files) {
           const extractedName = extractNameByArchive.get(item.fileHeader.name);
           const extractedPath = extractedName ? safeExtractedArchivePath(extractDir, extractedName) : null;

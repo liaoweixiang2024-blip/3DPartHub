@@ -1,4 +1,5 @@
 import { i18n, normalizeLocale } from '../i18n';
+import { isSafeUrl } from './sanitizeHtml';
 
 function isIosLikeDevice() {
   const platform = navigator.platform || '';
@@ -474,6 +475,9 @@ export async function downloadBrowserPostFile(
 
 export function openBrowserDocument(href: string, options: BrowserDocumentOptions = {}) {
   if (!href) return;
+  // 统一协议白名单入口：管理员配置/用户提交的 URL（画册、附件、图纸链接）汇到这里，
+  // javascript:/data:text/html 等不得在弹窗或当前页导航执行（站内 /api 相对路径与 http(s) 不受影响）
+  if (!isSafeUrl(href)) return;
 
   const preparedWindow = options.preparedWindow ?? window.open('about:blank', '_blank');
   if (preparedWindow) {

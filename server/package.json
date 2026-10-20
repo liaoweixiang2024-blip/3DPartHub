@@ -1,6 +1,6 @@
 {
   "name": "3dparthub-server",
-  "version": "5.9.3",
+  "version": "5.9.4",
   "type": "module",
   "scripts": {
     "dev": "node --import tsx src/main.ts",
@@ -48,7 +48,7 @@
     "minio": "^8.0.7",
     "multer": "^2.4.0",
     "node-unrar-js": "^2.0.2",
-    "nodemailer": "^9.0.5",
+    "nodemailer": "^10.1.7",
     "occt-import-js": "^0.0.23",
     "pino": "^10.3.1",
     "prisma": "^5.22.0",

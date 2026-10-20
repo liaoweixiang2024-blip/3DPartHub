@@ -158,8 +158,11 @@ export function createPublicSharesRouter() {
       modelName: model.name || model.originalName,
       format: model.originalFormat || model.format,
       fileSize: model.originalSize,
-      description: model.description,
-      thumbnailUrl: withAssetVersion(model.thumbnailUrl, model.updatedAt),
+      // 密码保护的分享：未过密码验证前只暴露密码墙所需的最小字段（模型名/大小/开关/剩余次数）。
+      // description/缩略图/图纸清单与 gltfUrl 同口径收在 accessVerified 之后——
+      // 此前仅 gltfUrl 被门控，持有链接的未授权方可读到模型描述与图纸文件名清单
+      description: accessVerified ? model.description : undefined,
+      thumbnailUrl: accessVerified ? withAssetVersion(model.thumbnailUrl, model.updatedAt) : undefined,
       allowPreview: share.allowPreview,
       allowDownload: share.allowDownload,
       downloadLimit: share.downloadLimit,
@@ -171,8 +174,11 @@ export function createPublicSharesRouter() {
       gltfUrl: share.allowPreview && accessVerified ? withAssetVersion(model.gltfUrl, model.updatedAt) : undefined,
       // /static/drawings 属于 blockedStaticDirs，直接下发静态路径会 404；
       // 改为下发受分享令牌保护的接口路径，与下载接口同一套校验。
-      drawingUrl: share.allowDrawing && model.drawings[0] ? `/api/shares/${encodeURIComponent(token)}/drawing` : null,
-      drawings: share.allowDrawing ? model.drawings : [],
+      drawingUrl:
+        accessVerified && share.allowDrawing && model.drawings[0]
+          ? `/api/shares/${encodeURIComponent(token)}/drawing`
+          : null,
+      drawings: accessVerified && share.allowDrawing ? model.drawings : [],
     });
   });
 

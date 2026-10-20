@@ -1,4 +1,6 @@
 import nodemailer from 'nodemailer';
+// nodemailer v10 类型改为命名导出（默认导出不再挂 Transporter namespace）
+import type { Transporter } from 'nodemailer';
 import { config } from './config.js';
 import { parseEmailTemplates } from './emailTemplates.js';
 import { getAllSettings } from './settings.js';
@@ -89,7 +91,7 @@ async function getSmtpSettings(): Promise<SmtpSettings> {
   };
 }
 
-async function createTransporter(): Promise<nodemailer.Transporter> {
+async function createTransporter(): Promise<Transporter> {
   const smtp = await getSmtpSettings();
   if (!smtp.host || !smtp.user || !smtp.pass) {
     throw new Error('SMTP 未配置完整，请先填写服务器、用户名和密码/授权码');

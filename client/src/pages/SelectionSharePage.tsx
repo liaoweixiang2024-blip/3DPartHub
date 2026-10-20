@@ -2,6 +2,7 @@ import type { TFunction } from 'i18next';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { isSafeUrl } from '../lib/sanitizeHtml';
 import useSWR from 'swr';
 import {
   getSelectionShare,
@@ -244,7 +245,7 @@ function ShareResultCard({
       )}
 
       <div className="border-t border-outline-variant/10 px-4 py-2.5 flex items-center gap-2 flex-wrap">
-        {displayProduct.pdfUrl && (
+        {displayProduct.pdfUrl && isSafeUrl(displayProduct.pdfUrl) && (
           <a
             href={displayProduct.pdfUrl}
             target="_blank"

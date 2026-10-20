@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { isSafeUrl } from '../lib/sanitizeHtml';
 import useSWR from 'swr';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
@@ -151,7 +152,7 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
             />
           ) : msg.attachment ? (
             <a
-              href={attachmentSrc}
+              href={isSafeUrl(attachmentSrc) ? attachmentSrc : undefined}
               target="_blank"
               rel="noopener"
               onClick={(event) => {
