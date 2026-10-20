@@ -424,12 +424,12 @@ export const deDETranslation: TranslationMap = {
       'Standard-Engine: erzeugt Vorschau und Thumbnail aus der STEP-Quelldatei neu; schnell, mit mehrfarbiger Teiledarstellung. Einzelne komplexe Geometrien (bestimmte Bögen, schräge Zylinderflächen) können Flächen verlieren.',
     fixConvertDesc:
       'Backup-Engine gmsh: fängt Geometrien ab, bei denen die Standardkonvertierung Flächen verliert; unabhängig von dieser und separat neu lauffähig. Schwergewichtige Operation; große Modelle dauern etwa 1 Minute.',
-    gmshStep1Title: 'Schritt 1 · gmsh auf dem Server installieren (statischer Build)',
-    gmshStep2Title: 'Schritt 2 · Abhängigkeiten mounten und Container neu starten',
+    gmshStep1Title: 'Schritt 1 · Ein-Klick-Installationsskript herunterladen (als root auf dem Server)',
+    gmshStep2Title: 'Schritt 2 · Installation ausführen (auto: Abhängigkeiten / Mounts / Neustart / Prüfung)',
     copied: 'Kopiert',
     copy: 'Kopieren',
     gmshAfterNote:
-      'Öffnen Sie nach Abschluss diesen Dialog erneut; die Schaltfläche wird dann wieder aktiv. Hinweis: gmsh-Pakete aus Distributions-Repositorys (apt/yum) sind mit dem Container inkompatibel; verwenden Sie den obigen statischen Build.',
+      'Öffnen Sie nach Abschluss diesen Dialog erneut; die Schaltfläche wird dann wieder aktiv. Hinweis: gmsh-Pakete aus Distributions-Repositorys (apt/yum) sind mit dem Container inkompatibel; verwenden Sie das obige Ein-Klick-Skript (Ansatz Ende-zu-Ende verifiziert).',
     gotIt: 'Verstanden',
     jobSubmitted: 'Übermittelt...',
     jobConverting: 'Konvertierung läuft...',

@@ -115,6 +115,36 @@ git push
 git status  # 检查 prisma/migrations/ 下有没有未提交的文件
 ```
 
+## 服务器 gmsh 兜底引擎（STEP 预览修复）
+
+api 容器是 `node:24-alpine`（musl），跑不了 glibc 二进制——gmsh 官方 Linux 版全是 glibc 构建。
+**方案（已端到端实测：alpine 容器内 STEP 读入+网格化 OK，真实业务文件 5.3 万节点产物验证）**：
+- glibc loader 单独挂到容器 `/lib64/ld-linux-x86-64.so.2`（内核 PT_INTERP 正常启动；**显式 `ld.so 程序` 调用会段错误，不可用**）
+- wrapper 用 `LD_LIBRARY_PATH` 指向挂进来的 glibc 库目录；依赖库用 readelf 递归解析 NEEDED 闭包收集（手写清单必漏：实测漏过 libgomp/libxcb/libbz2）
+- server 端探测路径 `/usr/local/host-bin/gmsh`（server/src/services/gmshFallback.ts）
+
+**首次安装 / 重装 / 换服务器**：三行命令（从仓库下载脚本并执行，脚本本体在 `deploy/install-gmsh.sh`）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/deploy/install-gmsh.sh \
+  -o /opt/3dparthub/install-gmsh.sh && chmod +x /opt/3dparthub/install-gmsh.sh
+bash /opt/3dparthub/install-gmsh.sh
+```
+
+**日常用法**（脚本已在服务器上）：
+
+```bash
+bash /opt/3dparthub/install-gmsh.sh                   # 自检/修复（幂等，装过的跳过）
+GMSH_VER=4.14.1 bash /opt/3dparthub/install-gmsh.sh   # 升级版本
+```
+
+注意：
+- 脚本已入仓库 `deploy/install-gmsh.sh`（raw.githubusercontent 可直连下载）；管理后台「修复预览（gmsh）」弹窗的安装指引也是下载该脚本的三行命令。
+- 成功标志：第 4 步与第 6 步各输出一次版本号（如 `4.13.1`）；之后管理后台模型编辑弹窗「修复预览（gmsh）」按钮亮起可用。
+- 单文件 bind mount 绑定 inode——升级 gmsh 后必须重建容器（脚本第 6 步已含 force-recreate）。
+- 2026-10 已在本机 QEMU 模拟 alpine 容器（与 api 镜像同源）端到端验证：真实业务 STEP（R6-3_4，Circle/BSpline 几何）→ 53,617 节点 / 108,140 单元 msh2 产物。
+- 万一服务器上跑不通也不影响网站：gmsh 是兜底引擎，探测不到自动跳过、走主引擎（converter 照常工作），compose 改动有备份+校验双保险自动回滚。
+
 ## 项目结构
 
 - `server/` — Node.js + Express 后端（TypeScript）

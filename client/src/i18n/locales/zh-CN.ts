@@ -2395,12 +2395,12 @@ export const zhCN: { translation: TranslationMap } = {
         '默认引擎：从 STEP 源文件重新生成预览与缩略图，速度快、支持多零件分色。个别复杂几何（特定圆弧、斜柱面）可能丢面。',
       fixConvertDesc:
         '备用 gmsh 引擎：对标准转换丢面的几何有兜底效果，与标准转换互相独立、可分别重转。属重量操作，大模型耗时约 1 分钟。',
-      gmshStep1Title: '第 1 步 · 服务器安装 gmsh（静态版）',
-      gmshStep2Title: '第 2 步 · 挂载依赖并重启容器',
+      gmshStep1Title: '第 1 步 · 下载一键安装脚本（服务器 root 执行）',
+      gmshStep2Title: '第 2 步 · 执行安装（自动完成依赖打包/挂载/重启/验证）',
       copied: '已复制',
       copy: '复制',
       gmshAfterNote:
-        '完成后重新打开本弹窗，按钮会自动恢复可点击。注意：发行版的 apt/yum 版 gmsh 与容器不兼容，必须用上面的静态版。',
+        '完成后重新打开本弹窗，按钮会自动恢复可点击。注意：发行版的 apt/yum 版 gmsh 与容器不兼容，必须用上面的一键脚本（方案已实测验证）。',
       gotIt: '我知道了',
       jobSubmitted: '已提交...',
       jobConverting: '转换中...',

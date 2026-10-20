@@ -2413,12 +2413,12 @@ export const enUS: { translation: TranslationMap } = {
         'Default engine: regenerates the preview and thumbnail from the STEP source; fast, with multi-part coloring. Some complex geometry (certain arcs, angled cylinders) may lose faces.',
       fixConvertDesc:
         'Backup gmsh engine: recovers geometry that loses faces in standard conversion; independent of it and can be rerun separately. Heavy operation; large models take about 1 minute.',
-      gmshStep1Title: 'Step 1 · Install gmsh on the server (static build)',
-      gmshStep2Title: 'Step 2 · Mount dependencies and restart the container',
+      gmshStep1Title: 'Step 1 · Download the one-click install script (run as root on the server)',
+      gmshStep2Title: 'Step 2 · Run the install (auto: dependency packing / mounts / restart / verify)',
       copied: 'Copied',
       copy: 'Copy',
       gmshAfterNote:
-        'Reopen this dialog when done and the button will re-enable. Note: distro apt/yum gmsh builds are incompatible with the container; use the static build above.',
+        'Reopen this dialog when done and the button will re-enable. Note: distro apt/yum gmsh builds are incompatible with the container; use the one-click script above (approach verified end-to-end).',
       gotIt: 'Got it',
       jobSubmitted: 'Submitted...',
       jobConverting: 'Converting...',

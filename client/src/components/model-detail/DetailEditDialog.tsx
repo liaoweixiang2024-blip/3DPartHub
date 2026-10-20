@@ -122,37 +122,16 @@ export function DetailEditDialog({
     }
   };
 
-  // 实测验证的安装方案：发行版 gmsh（apt/yum）动态链接 glibc，Alpine 容器跑不了；
-  // 必须用 gmsh.info 官方 SDK 包 + 把依赖库一起挂载（2026-09 生产服务器验证通过）
-  const GMSH_INSTALL_CMD = `# 下载官方 SDK 版（容器内可运行）
-cd /tmp && curl -LO https://gmsh.info/bin/Linux/gmsh-4.13.1-Linux64-sdk.tgz
-tar xzf gmsh-4.13.1-Linux64-sdk.tgz
-install -m 755 gmsh-4.13.1-Linux64-sdk/bin/gmsh /usr/local/bin/gmsh.real
-mkdir -p /usr/local/lib/gmsh-sdk
-cp -a gmsh-4.13.1-Linux64-sdk/lib/. /usr/local/lib/gmsh-sdk/
-# 依赖库（Debian/Ubuntu）
-mkdir -p /usr/local/lib/gmsh-deps && cd /lib/x86_64-linux-gnu
-for lib in libGLU.so.1 libGL.so.1 libGLdispatch.so.0 libGLX.so.0 libOpenGL.so.0 \
-  libX11.so.6 libXau.so.6 libXdmcp.so.6 libXext.so.6 libXrender.so.1 libXcursor.so.1 \
-  libXfixes.so.3 libXft.so.2 libXinerama.so.1 libfontconfig.so.1 libfreetype.so.6 \
-  libexpat.so.1 libpng16.so.16 libbrotlidec.so.1 libbrotlicommon.so.1 libbsd.so.0 \
-  libmd.so.0 libstdc++.so.6 libgcc_s.so.1 libz.so.1 libdl.so.2 libpthread.so.0 librt.so.1; do
-  cp -L $lib /usr/local/lib/gmsh-deps/; done
-# wrapper 脚本
-printf '#!/bin/sh\nexport LD_LIBRARY_PATH="/usr/local/host-lib/gmsh-sdk:/usr/local/host-lib/gmsh-deps:/usr/local/host-lib:$LD_LIBRARY_PATH"\nexec /usr/local/host-bin/gmsh.real "$@"\n' > /usr/local/bin/gmsh
-chmod 755 /usr/local/bin/gmsh && /usr/local/bin/gmsh.real -version`;
-  const GMSH_MOUNT_STEP = `# /opt/3dparthub/docker-compose.yml → api 服务 volumes 下加：
-- /usr/local/bin/gmsh:/usr/local/host-bin/gmsh:ro
-- /usr/local/bin/gmsh.real:/usr/local/host-bin/gmsh.real:ro
-- /lib64/ld-linux-x86-64.so.2:/lib64/ld-linux-x86-64.so.2:ro
-- /lib/x86_64-linux-gnu/libc.so.6:/lib/x86_64-linux-gnu/libc.so.6:ro
-- /lib/x86_64-linux-gnu/libm.so.6:/lib/x86_64-linux-gnu/libm.so.6:ro
-- /lib/x86_64-linux-gnu/libgomp.so.1:/usr/local/host-lib/libgomp.so.1:ro
-- /usr/local/lib/gmsh-sdk:/usr/local/host-lib/gmsh-sdk:ro
-- /usr/local/lib/gmsh-deps:/usr/local/host-lib/gmsh-deps:ro
-# 然后重建容器并验证：
-cd /opt/3dparthub && docker-compose up -d --force-recreate api
-docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`;
+  // 实测验证的安装方案（2026-10 QEMU 模拟 alpine 容器端到端验证：STEP 读入+网格化 OK）：
+  // 发行版 gmsh（apt/yum）动态链接 glibc，Alpine 容器跑不了；一键脚本在仓库
+  // deploy/install-gmsh.sh——下载 SDK + readelf 依赖闭包 + loader 挂 /lib64 + compose 挂载 + 重建验证
+  const GMSH_INSTALL_CMD = `# 从仓库下载一键安装脚本（服务器 root 执行）
+curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/deploy/install-gmsh.sh \\
+  -o /opt/3dparthub/install-gmsh.sh && chmod +x /opt/3dparthub/install-gmsh.sh`;
+  const GMSH_MOUNT_STEP = `# 执行安装（依赖打包 → compose 挂载 → 重建容器 → 验证，全程自动）
+bash /opt/3dparthub/install-gmsh.sh
+# 完成标志：末尾两步各输出一次版本号（如 4.13.1）
+# 升级版本：GMSH_VER=4.14.1 bash /opt/3dparthub/install-gmsh.sh`;
 
   const handleSave = async () => {
     if (!name.trim()) {
