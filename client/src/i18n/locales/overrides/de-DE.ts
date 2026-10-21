@@ -1474,6 +1474,12 @@ export const deDEWorkflowTranslation: TranslationMap = {
   support: {
     attachment: 'Anhang',
     attachmentUpload: 'Anhang hochladen',
+    attachmentHint:
+      'Bilder, Dokumente, Archive & CAD-Dateien; je ≤{{max}}MB, max. {{count}}. Drag & Drop oder Screenshot einfügen.',
+    attachmentLimit: 'Maximal {{count}} Anhänge',
+    attachmentRejectedSize: '{{name}} überschreitet das Limit von {{max}}MB',
+    attachmentRejectedType: 'Nicht unterstütztes Format: {{name}}',
+    attachmentRemove: 'Entfernen',
     basePart: 'Basisteilenummer',
     basePartPlaceholder: 'z. B. 882-QX-V2 (optional)',
     compactDescription: 'Senden Sie eine Anfrage, unsere Ingenieure bearbeiten sie',

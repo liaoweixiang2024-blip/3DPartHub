@@ -4,6 +4,7 @@ import { Router, Response } from 'express';
 import { cacheGetOrSet, TTL } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
 import { getMaintenanceStatus } from '../../lib/maintenance.js';
+import { DEFAULT_UPLOAD_POLICY } from '../../lib/businessConfig.js';
 import {
   buildFooterCopyright,
   buildModelDetailCopyright,
@@ -22,6 +23,60 @@ function readTtlSeconds(value: unknown, fallback: number): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(86400, Math.max(0, parsed));
+}
+
+function policyNum(value: unknown, fallback: number): number {
+  const parsed = Math.floor(Number(value));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function policyExts(value: unknown, fallback: string[]): string[] {
+  if (typeof value !== 'string') return fallback;
+  const exts = Array.from(
+    new Set(
+      value
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean)
+        .map((item) => (item.startsWith('.') ? item : `.${item}`)),
+    ),
+  );
+  return exts.length ? exts : fallback;
+}
+
+/** 对外下发 upload_policy 时，用「服务端实际执行的个体设置键」覆盖 JSON 快照里的
+ *  同名字段（与 getBusinessConfig 的覆盖顺序一致）。否则 admin 改了平面键、而
+ *  upload_policy JSON 是老快照时，前端校验/提示与服务端强制执行永远对不上。 */
+function effectiveUploadPolicyJson(
+  raw: unknown,
+  flat: {
+    ticketMaxMb: unknown;
+    ticketTypes: unknown;
+    productWallImageMaxMb: unknown;
+    productWallMaxFiles: unknown;
+    productWallExtractMaxFiles: unknown;
+  },
+): string {
+  let base: Record<string, unknown> = {};
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) base = parsed;
+    } catch {
+      /* 非法 JSON 用空对象兜底 */
+    }
+  }
+  return JSON.stringify({
+    ...base,
+    productWallImageMaxSizeMb: policyNum(flat.productWallImageMaxMb, DEFAULT_UPLOAD_POLICY.productWallImageMaxSizeMb),
+    productWallUploadMaxFiles: policyNum(flat.productWallMaxFiles, DEFAULT_UPLOAD_POLICY.productWallUploadMaxFiles),
+    productWallArchiveExtractMaxFiles: policyNum(
+      flat.productWallExtractMaxFiles,
+      DEFAULT_UPLOAD_POLICY.productWallArchiveExtractMaxFiles,
+    ),
+    ticketAttachmentMaxSizeMb: policyNum(flat.ticketMaxMb, DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxSizeMb),
+    ticketAttachmentExts: policyExts(flat.ticketTypes, DEFAULT_UPLOAD_POLICY.ticketAttachmentExts),
+  });
 }
 
 function escapeHtmlText(value: unknown): string {
@@ -283,7 +338,13 @@ export function createSettingsPublicRouter() {
             nav_admin_items: all.nav_admin_items ?? '',
             nav_items: all.nav_items ?? '',
             nav_mobile_items: all.nav_mobile_items ?? '',
-            upload_policy: all.upload_policy ?? '',
+            upload_policy: effectiveUploadPolicyJson(all.upload_policy, {
+              ticketMaxMb: all.ticket_attachment_max_mb,
+              ticketTypes: all.ticket_attachment_types,
+              productWallImageMaxMb: all.product_wall_max_image_mb,
+              productWallMaxFiles: all.product_wall_max_batch_count,
+              productWallExtractMaxFiles: all.product_wall_max_zip_extract,
+            }),
             selection_thread_priority: all.selection_thread_priority ?? '',
             page_size_policy: all.page_size_policy ?? '',
             // Product wall limits
@@ -296,7 +357,7 @@ export function createSettingsPublicRouter() {
             ticket_attachment_max_mb: all.ticket_attachment_max_mb ?? 100,
             ticket_attachment_types:
               all.ticket_attachment_types ??
-              'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,binary',
+              'jpg,jpeg,png,gif,webp,svg,bmp,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,zip,rar,7z,step,stp,iges,igs,stl,binary',
             // API rate limiting
             api_rate_limit: all.api_rate_limit ?? 5000,
           };

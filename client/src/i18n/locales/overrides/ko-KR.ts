@@ -1442,6 +1442,12 @@ export const koKRWorkflowTranslation: TranslationMap = {
   support: {
     attachment: '첨부',
     attachmentUpload: '첨부 업로드',
+    attachmentHint:
+      '이미지·문서·압축·CAD 파일 지원, 개당 ≤{{max}}MB, 최대 {{count}}개. 드래그 앤 드롭 및 스크린샷 붙여넣기 가능',
+    attachmentLimit: '첨부는 최대 {{count}}개까지입니다',
+    attachmentRejectedSize: '{{name}}이(가) {{max}}MB 제한을 초과합니다',
+    attachmentRejectedType: '지원하지 않는 형식입니다: {{name}}',
+    attachmentRemove: '제거',
     basePart: '기준 부품 번호',
     basePartPlaceholder: '예: 882-QX-V2 (선택)',
     compactDescription: '요청을 제출하면 엔지니어가 처리합니다',

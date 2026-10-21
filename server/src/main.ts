@@ -95,9 +95,13 @@ app.use(
 );
 
 // Trust nginx proxy — needed for express-rate-limit with X-Forwarded-For.
-// 可用 TRUST_PROXY=0 关闭：若应用端口绕过 nginx 直连公网，固定信任 1 跳会让
-// 攻击者伪造 X-Forwarded-For 为每个请求换个 req.ip，绕过全部按 IP 的限流与锁定
-app.set('trust proxy', process.env.TRUST_PROXY === '0' ? false : 1);
+// TRUST_PROXY：信任的代理跳数（默认 1；生产链路 宝塔nginx → web容器nginx → api
+// 共 2 跳，compose 已默认给 2——只信 1 跳时 req.ip 停在宝塔 IP，审计日志记录的
+// 全是代理 IP）。设 0 关闭：若应用端口绕过 nginx 直连公网，固定信任会让攻击者
+// 伪造 X-Forwarded-For 为每个请求换个 req.ip，绕过全部按 IP 的限流与锁定
+const TRUST_PROXY_RAW = process.env.TRUST_PROXY ?? '';
+const trustProxyHops = /^\d+$/.test(TRUST_PROXY_RAW) ? Number(TRUST_PROXY_RAW) : 1;
+app.set('trust proxy', trustProxyHops === 0 ? false : trustProxyHops);
 
 // Response compression (filter out small responses already compressed by nginx)
 app.use(compression({ threshold: 512 }));

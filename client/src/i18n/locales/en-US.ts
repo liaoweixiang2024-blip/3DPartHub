@@ -1313,6 +1313,12 @@ export const enUS: { translation: TranslationMap } = {
     support: {
       attachment: 'Attachment',
       attachmentUpload: 'Upload attachment',
+      attachmentHint:
+        'Images, documents, archives & CAD files; each ≤{{max}}MB, up to {{count}}. Drag & drop or paste screenshots.',
+      attachmentLimit: 'Up to {{count}} attachments',
+      attachmentRejectedSize: '{{name}} exceeds the {{max}}MB limit',
+      attachmentRejectedType: 'Unsupported format: {{name}}',
+      attachmentRemove: 'Remove',
       basePart: 'Base part number',
       basePartPlaceholder: 'e.g. 882-QX-V2 (optional)',
       compactDescription: 'Submit a request and our engineers will handle it',

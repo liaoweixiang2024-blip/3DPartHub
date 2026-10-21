@@ -137,18 +137,33 @@ export interface UpdateHistoryEntry {
   notes: string;
 }
 
-// 版本历史缓存：列表全量拉取代价大（50 条 releases + 全部 notes），
+/** 全量 release 统计：total 为总数，major 按 X.Y 分大版本系列数，minor 为系列内补丁数 */
+export interface UpdateHistoryStats {
+  total: number;
+  major: number;
+  minor: number;
+}
+
+export interface UpdateHistoryResult {
+  entries: UpdateHistoryEntry[];
+  stats: UpdateHistoryStats | null;
+}
+
+// 版本历史缓存：列表全量拉取代价大（翻页拉全部 releases + notes），
 // 拉到后长期缓存；每次只用轻量的 /releases/latest 探测最新版本号，
 // 版本号变化（发了新版本）才重新全量拉取。探测本身再套一层短 TTL，
 // 避免频繁打开关于页时连 latest 都不打（GitHub API 有速率限制）。
-let historyCache: { at: number; entries: UpdateHistoryEntry[] } | null = null;
+let historyCache: { at: number; entries: UpdateHistoryEntry[]; stats: UpdateHistoryStats | null } | null = null;
 let latestProbeCache: { at: number; version: string } | null = null;
 const LATEST_PROBE_TTL_MS = 10 * 60 * 1000;
 // 历史缓存兜底时效：超过后即使版本号没变也重拉一次（发布说明可能被事后编辑）
 const HISTORY_TTL_MS = 60 * 60 * 1000;
-// 仓库 release 总数远超展示量（113+），时间线只展示最近 20 个，
-// 更早的由前端「更多历史版本」链接跳 GitHub Releases 页查看
+// 仓库 release 总数远超展示量（187+），时间线只展示最近 20 个，
+// 更早的由前端「更多历史版本」链接跳 GitHub Releases 页查看；
+// 「共 N 次更新 / 大版本 / 小版本」徽章统计全部 release：翻页拉全量
+// （每页 100，当前 2 页；随 historyCache 缓存 1 小时，代价可忽略）
 const HISTORY_MAX_ENTRIES = 20;
+const HISTORY_FETCH_MAX_PAGES = 10;
 
 function parseUpdateTitleFromBody(body: string | undefined): string | undefined {
   if (!body) return undefined;
@@ -169,33 +184,61 @@ async function probeLatestVersion(): Promise<string | null> {
   return release.tag_name;
 }
 
+function isFormalRelease(item: unknown): item is GithubRelease {
+  const release = item as GithubRelease;
+  return Boolean(release && release.tag_name && release.html_url && !release.draft && !release.prerelease);
+}
+
+/** 翻页拉全部正式 releases（每页 100，当前百余条 = 2 页；10 页上限兜底防异常仓库） */
+async function fetchAllFormalReleases(): Promise<GithubRelease[]> {
+  const all: GithubRelease[] = [];
+  for (let page = 1; page <= HISTORY_FETCH_MAX_PAGES; page++) {
+    const raw = await fetchJsonFromGithub(`/repos/liaoweixiang2024-blip/3DPartHub/releases?per_page=100&page=${page}`);
+    if (!Array.isArray(raw) || raw.length === 0) break;
+    all.push(...raw.filter(isFormalRelease));
+    if (raw.length < 100) break;
+  }
+  return all;
+}
+
+function computeReleaseStats(releases: GithubRelease[]): UpdateHistoryStats {
+  // 大版本系列按 X.Y 分组（与发版规则一致：v主.次.补丁，次位即大版本线）
+  const lines = new Set(
+    releases.map((release) => {
+      const match = /^v?(\d+\.\d+)/.exec(String(release.tag_name).trim());
+      return match ? match[1] : String(release.tag_name);
+    }),
+  );
+  const total = releases.length;
+  const major = lines.size;
+  return { total, major, minor: total - major };
+}
+
 /**
  * 版本更新历史（关于页时间线数据源）：最近 N 个 GitHub Releases，
  * 按发布时间倒序。拉取失败（离线/限流）返回空数组，前端显示占位。
  */
-export async function getUpdateHistory(): Promise<UpdateHistoryEntry[]> {
+export async function getUpdateHistory(): Promise<UpdateHistoryResult> {
   // 已有缓存：探测到新版本发布，或缓存超过 HISTORY_TTL_MS（发布说明事后
   // 编辑过版本号不变，靠 TTL 兜底刷新）时才全量重拉
   if (historyCache) {
     const expired = Date.now() - historyCache.at >= HISTORY_TTL_MS;
     const latest = await probeLatestVersion();
     const cachedTop = historyCache.entries[0]?.version;
-    if (!expired && (!latest || latest === cachedTop)) return historyCache.entries;
+    if (!expired && (!latest || latest === cachedTop)) {
+      return { entries: historyCache.entries, stats: historyCache.stats };
+    }
     // latest 与缓存顶版本不一致（或缓存过期）→ 落到下方全量拉取
   }
 
-  // 只需展示 HISTORY_MAX_ENTRIES 条，按需拉取（filter 会滤掉 draft/prerelease，
-  // 多拉一页余量保证滤后仍够数）
-  const raw = await fetchJsonFromGithub(
-    `/repos/liaoweixiang2024-blip/3DPartHub/releases?per_page=${HISTORY_MAX_ENTRIES + 10}`,
-  );
-  if (!Array.isArray(raw)) return historyCache?.entries ?? [];
+  // 翻页拉全部正式 release：列表取前 HISTORY_MAX_ENTRIES 条展示，
+  // 总数/大版本/小版本三个统计从全量计算（随缓存复用，每小时至多拉一次）
+  const all = await fetchAllFormalReleases();
+  if (all.length === 0) {
+    return { entries: historyCache?.entries ?? [], stats: historyCache?.stats ?? null };
+  }
 
-  const entries: UpdateHistoryEntry[] = raw
-    .filter((item): item is GithubRelease => {
-      const release = item as GithubRelease;
-      return Boolean(release && release.tag_name && release.html_url && !release.draft && !release.prerelease);
-    })
+  const entries: UpdateHistoryEntry[] = all
     .map((release) => ({
       version: release.tag_name,
       title: parseUpdateTitleFromBody(release.body) || release.name || undefined,
@@ -205,6 +248,7 @@ export async function getUpdateHistory(): Promise<UpdateHistoryEntry[]> {
     }))
     .slice(0, HISTORY_MAX_ENTRIES);
 
-  historyCache = { at: Date.now(), entries };
-  return entries;
+  const stats = computeReleaseStats(all);
+  historyCache = { at: Date.now(), entries, stats };
+  return { entries, stats };
 }

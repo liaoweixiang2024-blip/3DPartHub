@@ -77,7 +77,7 @@ const PRODUCT_WALL_PREVIEW_JPEG_QUALITY = 0.76;
 const PRODUCT_WALL_PREVIEW_BACKFILL_LIMIT = 80;
 const PRODUCT_WALL_PREVIEW_BACKFILL_BATCH_SIZE = 12;
 const PRODUCT_WALL_PREVIEW_BACKFILL_DELAY_MS = 300;
-const PRODUCT_WALL_PREVIEW_MIN_SOURCE_BYTES = 768 * 1024;
+export const PRODUCT_WALL_PREVIEW_MIN_SOURCE_BYTES = 768 * 1024;
 const DEFAULT_PRODUCT_WALL_CATEGORIES: ProductWallKind[] = ['公司产品', '使用案例', '客户案例', '海报'];
 const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
@@ -369,7 +369,7 @@ function productWallRelativePathFromUrl(url?: string | null) {
   }
 }
 
-function productWallLocalPathFromUrl(url?: string | null) {
+export function productWallLocalPathFromUrl(url?: string | null) {
   const relativePath = productWallRelativePathFromUrl(url);
   if (!relativePath) return null;
   const filePath = resolve(PRODUCT_WALL_DIR, relativePath);
@@ -423,7 +423,7 @@ export async function sweepExpiredProductWallTrash(): Promise<void> {
   }
 }
 
-function productWallPreviewUrlFromImageUrl(url?: string | null) {
+export function productWallPreviewUrlFromImageUrl(url?: string | null) {
   const relativePath = productWallRelativePathFromUrl(url);
   if (!relativePath || relativePath.startsWith('previews/')) return null;
   const leaf = basename(relativePath).replace(/\.[^.]+$/, '') || randomUUID();
@@ -446,7 +446,11 @@ const previewBackfillQueue = new Map<string, ProductWallImageRow>();
 let previewBackfillScheduled = false;
 
 function shouldBackfillProductWallPreview(row: ProductWallImageRow) {
-  return row.imageUrl.startsWith('/static/product-wall/') && !row.previewImageUrl;
+  if (!row.imageUrl.startsWith('/static/product-wall/')) return false;
+  // preview 为空，或被历史粘性标记钉成原图本身——都进队重验
+  // （生产镜像不含 scripts/ 无法跑修复脚本，靠读时回填自动修复；
+  // 小图在 ensure 里按大小过滤直接跳过，不会反复重写）
+  return !row.previewImageUrl || row.previewImageUrl === row.imageUrl;
 }
 
 async function markProductWallPreviewAsOriginal(row: ProductWallImageRow): Promise<ProductWallImageRow> {
@@ -472,12 +476,22 @@ async function ensureProductWallPreview(row: ProductWallImageRow): Promise<Produ
   } catch {
     return row;
   }
-  if (sourceSize < PRODUCT_WALL_PREVIEW_MIN_SOURCE_BYTES) return markProductWallPreviewAsOriginal(row);
+  if (sourceSize < PRODUCT_WALL_PREVIEW_MIN_SOURCE_BYTES) {
+    // 小图用原图是正常语义：已是该值就不重写（避免入队行的每次读取都白写 DB）
+    if (row.previewImageUrl === row.imageUrl) return row;
+    return markProductWallPreviewAsOriginal(row);
+  }
 
   previewBackfillInFlight.add(row.id);
   try {
     const previewUrl = await generatePreviewImage(sourcePath, row.imageUrl);
-    if (!previewUrl || previewUrl === row.imageUrl) {
+    if (!previewUrl) {
+      // 走到这里说明源文件已过大小过滤（≥768KB），null 只能是生成异常：
+      // 保留 NULL 让下次读取重试，不做「永久用原图」的粘性标记——
+      // 历史上一批行就是被这个标记钉死在 2-4MB 原图上，图片管理页滚动卡顿的根源
+      return row;
+    }
+    if (previewUrl === row.imageUrl) {
       return markProductWallPreviewAsOriginal(row);
     }
     try {
@@ -611,7 +625,7 @@ function imageRatioFromPath(path: string) {
 
 // ── Preview generation ──────────────────────────────────────
 
-async function generatePreviewImage(
+export async function generatePreviewImage(
   sourcePath: string,
   sourceImageUrl?: string,
   maxWidth = PRODUCT_WALL_PREVIEW_MAX_WIDTH,

@@ -574,13 +574,6 @@ a,
   }
 }
 
-/* 选型导航页：手机端副标题放开单行截断（允许换行至 2 行），桌面保持全局单行规范 */
-.category-nav-page .app-page-description {
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  white-space: normal;
-}
-
 /* 选型导航页 PC 一屏化：卡位插画高度随视口高度伸缩（min / 理想 / max），
    大屏（2K/4K）放开上限长得更大、矮窗口自动压缩到不出纵向滚动条；管线按 DOM 实测绘制会自动跟随。
    仅作用于桌面拓扑画布（.category-nav-desktop），手机端保持 h-24 / h-28 固定高 */
@@ -590,15 +583,6 @@ a,
 
 .category-nav-desktop .slot-visual-lg {
   height: clamp(72px, 13vh, 152px);
-}
-
-/* 页头也收一档：矮窗口时 hero 更紧凑，给拓扑画布多留空间 */
-.category-nav-page .app-page-hero {
-  padding-block: 0.375rem;
-}
-
-.category-nav-page .app-page-hero-inner {
-  min-height: 44px;
 }
 
 /* 选型导航页移动端去外层容器壳：内容面板不装卡，标题卡（hero，与其他页面一致的

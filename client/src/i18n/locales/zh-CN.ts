@@ -1303,6 +1303,11 @@ export const zhCN: { translation: TranslationMap } = {
     support: {
       attachment: '附件',
       attachmentUpload: '点击上传附件',
+      attachmentHint: '支持图片/文档/压缩包/CAD 文件，单个 ≤{{max}}MB，最多 {{count}} 个；可拖拽或直接粘贴截图',
+      attachmentLimit: '最多附上 {{count}} 个文件',
+      attachmentRejectedSize: '{{name}} 超过 {{max}}MB 上限',
+      attachmentRejectedType: '不支持的格式：{{name}}',
+      attachmentRemove: '移除',
       basePart: '基础零件编号',
       basePartPlaceholder: '例如 882-QX-V2（可选）',
       compactDescription: '提交需求，工程师团队为您处理',

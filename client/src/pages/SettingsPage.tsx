@@ -66,6 +66,7 @@ import {
   readCachedUpdateHistory,
   writeCachedUpdateHistory,
   type UpdateHistoryEntry,
+  type UpdateHistoryStats,
 } from '../api/settings';
 import {
   ProductWallUploadRolesEditor,
@@ -5410,7 +5411,10 @@ function Content() {
   } | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   // 版本更新时间线（关于系统页）——初始值取本地缓存，进页秒开不闪加载态
-  const [updateHistory, setUpdateHistory] = useState<UpdateHistoryEntry[]>(() => readCachedUpdateHistory());
+  const [updateHistory, setUpdateHistory] = useState<UpdateHistoryEntry[]>(() => readCachedUpdateHistory().entries);
+  const [updateHistoryStats, setUpdateHistoryStats] = useState<UpdateHistoryStats | null>(
+    () => readCachedUpdateHistory().stats,
+  );
   const [updateHistoryLoading, setUpdateHistoryLoading] = useState(false);
   const [updateHistoryLoaded, setUpdateHistoryLoaded] = useState(false);
   const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
@@ -6089,10 +6093,11 @@ function Content() {
     if (updateHistoryLoading) return;
     setUpdateHistoryLoading(true);
     try {
-      const entries = await getUpdateHistory();
+      const { entries, stats } = await getUpdateHistory();
       setUpdateHistory(entries);
+      setUpdateHistoryStats(stats);
       setUpdateHistoryLoaded(true);
-      writeCachedUpdateHistory(entries);
+      writeCachedUpdateHistory(entries, stats);
     } catch {
       // 拉取失败保留空列表，UI 显示重试入口
     } finally {
@@ -8369,7 +8374,11 @@ function Content() {
                             disabled={checkingUpdate || adminBusy}
                             className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
                           >
-                            <Icon name="search" size={14} className={checkingUpdate ? 'animate-spin' : ''} />
+                            <Icon
+                              name={checkingUpdate ? 'loader' : 'search'}
+                              size={14}
+                              className={checkingUpdate ? 'animate-spin' : ''}
+                            />
                             {checkingUpdate ? t('adminSettings.checking') : t('adminSettings.checkUpdates')}
                           </button>
                         </div>
@@ -8476,7 +8485,27 @@ function Content() {
                       <div className="px-6 py-4">
                         <div className="flex items-center justify-between gap-4 mb-4">
                           <div>
-                            <p className="text-sm font-medium text-on-surface">{t('adminSettings.versionHistory')}</p>
+                            <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-on-surface">
+                              {t('adminSettings.versionHistory')}
+                              {/* 三个统计均覆盖全部 GitHub release（服务端翻页拉全量计算，
+                                  非仅展示的 20 条）；旧缓存缺 major/minor 时只显示总数 */}
+                              <span className="rounded-sm bg-primary-container/15 px-1.5 py-0.5 text-[10px] font-medium text-primary-container">
+                                {t('adminSettings.versionStatsTotal', {
+                                  count: updateHistoryStats?.total ?? updateHistory.length,
+                                })}
+                              </span>
+                              {typeof updateHistoryStats?.major === 'number' &&
+                                typeof updateHistoryStats?.minor === 'number' && (
+                                  <>
+                                    <span className="rounded-sm bg-surface-container-high px-1.5 py-0.5 text-[10px] font-medium text-on-surface-variant">
+                                      {t('adminSettings.versionStatsMajor', { count: updateHistoryStats.major })}
+                                    </span>
+                                    <span className="rounded-sm bg-surface-container-high px-1.5 py-0.5 text-[10px] font-medium text-on-surface-variant">
+                                      {t('adminSettings.versionStatsMinor', { count: updateHistoryStats.minor })}
+                                    </span>
+                                  </>
+                                )}
+                            </p>
                             <p className="text-xs text-on-surface-variant mt-0.5">
                               {t('adminSettings.versionHistoryDesc')}
                             </p>

@@ -1,6 +1,6 @@
 {
   "name": "3dparthub-server",
-  "version": "5.9.6",
+  "version": "5.9.7",
   "type": "module",
   "scripts": {
     "dev": "node --import tsx src/main.ts",
@@ -28,7 +28,8 @@
     "seed:batch": "tsx prisma/seeds/run-batch.ts",
     "seed:all": "tsx prisma/seeds/import-selection-products.ts",
     "seed:range": "tsx prisma/seeds/run-batch.ts",
-    "convert:offline": "tsx scripts/convert-offline.ts"
+    "convert:offline": "tsx scripts/convert-offline.ts",
+    "product-wall:repair-previews": "tsx scripts/repair-product-wall-previews.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

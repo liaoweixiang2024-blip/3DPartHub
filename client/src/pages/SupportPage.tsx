@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import type { TFunction } from 'i18next';
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 import client from '../api/client';
@@ -43,6 +43,110 @@ function useContextState(): { basePart: string; ctx: SupportContext | null } {
 }
 
 const DEFAULT_TICKET_CLASSIFICATION_KEYS = new Set(['dimension', 'material', 'novel', 'topology']);
+
+/** 创建工单可随表单携带的附件数（与服务端 TICKET_CREATE_ATTACHMENT_LIMIT 一致） */
+const TICKET_CREATE_ATTACHMENT_LIMIT = 5;
+
+type TicketAttachmentPolicy = { ticketAttachmentExts: string[]; ticketAttachmentMaxSizeMb: number };
+type ToastFn = (message: string, type?: 'success' | 'error' | 'info', durationMs?: number) => void;
+
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${bytes}B`;
+}
+
+/** 创建表单的附件选择状态：点击 / 拖拽 / 粘贴共用一个入口，客户端先按
+ *  后台 uploadPolicy（扩展名白名单 + 单文件大小）预检，服务端 multer 兜底。 */
+function useTicketCreateAttachments(policy: TicketAttachmentPolicy, toast: ToastFn, t: TFunction) {
+  const [files, setFiles] = useState<File[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+
+  const addFiles = useCallback(
+    (incoming: FileList | File[] | null | undefined) => {
+      if (!incoming) return;
+      const list = Array.from(incoming);
+      if (list.length === 0) return;
+      const allowed = policy.ticketAttachmentExts;
+      const maxBytes = policy.ticketAttachmentMaxSizeMb * 1024 * 1024;
+      const accepted: File[] = [];
+      for (const file of list) {
+        const dot = file.name.lastIndexOf('.');
+        const ext = dot >= 0 ? file.name.slice(dot).toLowerCase() : '';
+        if (!ext || !allowed.includes(ext)) {
+          toast(t('support.attachmentRejectedType', { name: file.name }), 'error');
+          continue;
+        }
+        if (file.size > maxBytes) {
+          toast(
+            t('support.attachmentRejectedSize', { name: file.name, max: policy.ticketAttachmentMaxSizeMb }),
+            'error',
+          );
+          continue;
+        }
+        accepted.push(file);
+      }
+      if (accepted.length === 0) return;
+      // 合并逻辑在 updater 外做（updater 必须是纯函数，StrictMode 双调用会把
+      // 超限 toast 弹两次）；依赖 files 每次变化重建回调，组件无 memo 子组件消费无碍
+      const merged = [...files];
+      for (const file of accepted) {
+        if (merged.length >= TICKET_CREATE_ATTACHMENT_LIMIT) {
+          toast(t('support.attachmentLimit', { count: TICKET_CREATE_ATTACHMENT_LIMIT }), 'error');
+          break;
+        }
+        if (merged.some((existing) => existing.name === file.name && existing.size === file.size)) continue;
+        merged.push(file);
+      }
+      setFiles(merged);
+    },
+    [files, policy, t, toast],
+  );
+
+  const removeFile = useCallback((index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const clearFiles = useCallback(() => setFiles([]), []);
+
+  return { files, addFiles, removeFile, clearFiles, dragActive, setDragActive };
+}
+
+/** 粘贴事件只拦截文件（截图），纯文本粘贴不受影响 */
+function handleAttachmentPaste(event: React.ClipboardEvent<HTMLElement>, addFiles: (files: FileList | null) => void) {
+  if (event.clipboardData?.files?.length) {
+    event.preventDefault();
+    addFiles(event.clipboardData.files);
+  }
+}
+
+function AttachmentChips({ files, onRemove, t }: { files: File[]; onRemove: (index: number) => void; t: TFunction }) {
+  if (files.length === 0) return null;
+  return (
+    <ul className="mt-2 flex flex-wrap gap-1.5">
+      {files.map((file, index) => (
+        <li
+          key={`${file.name}-${file.size}-${index}`}
+          className="flex max-w-full items-center gap-1.5 rounded-sm border border-outline-variant/20 bg-surface-container-lowest px-2 py-1"
+        >
+          <Icon name="description" size={12} className="shrink-0 text-on-surface-variant" />
+          <span className="max-w-[160px] truncate text-[11px] text-on-surface" title={file.name}>
+            {file.name}
+          </span>
+          <span className="shrink-0 text-[10px] text-on-surface-variant">{formatFileSize(file.size)}</span>
+          <button
+            type="button"
+            onClick={() => onRemove(index)}
+            className="shrink-0 rounded-full p-0.5 text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+            aria-label={t('support.attachmentRemove')}
+          >
+            <Icon name="close" size={12} />
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function getTicketClassificationCopy(
   value: string,
@@ -151,6 +255,12 @@ function DesktopContent() {
   const { toast } = useToast();
   const { settings } = usePublicSettings();
   const business = getBusinessConfig(settings);
+  const { files, addFiles, removeFile, clearFiles, dragActive, setDragActive } = useTicketCreateAttachments(
+    business.uploadPolicy,
+    toast,
+    t,
+  );
+  const acceptExts = business.uploadPolicy.ticketAttachmentExts.join(',');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -167,16 +277,28 @@ function DesktopContent() {
     }
     setSubmitting(true);
     const suffix = ctx ? buildContextSuffix(ctx, t) : '';
+    const payload = {
+      basePart: formData.basePart || undefined,
+      sourceUrl: isSafeSourceUrl(ctx?.sourceUrl) ? ctx.sourceUrl : undefined,
+      classification: formData.classification,
+      description: formData.description + (suffix ? `\n\n${suffix}` : ''),
+    };
     try {
-      await client.post('/tasks', {
-        basePart: formData.basePart || undefined,
-        sourceUrl: isSafeSourceUrl(ctx?.sourceUrl) ? ctx.sourceUrl : undefined,
-        classification: formData.classification,
-        description: formData.description + (suffix ? `\n\n${suffix}` : ''),
-      });
+      if (files.length > 0) {
+        const form = new FormData();
+        if (payload.basePart) form.append('basePart', payload.basePart);
+        if (payload.sourceUrl) form.append('sourceUrl', payload.sourceUrl);
+        form.append('classification', payload.classification);
+        form.append('description', payload.description);
+        for (const file of files) form.append('files', file, file.name);
+        await client.post('/tasks', form);
+      } else {
+        await client.post('/tasks', payload);
+      }
       setSubmitted(true);
       toast(t('support.toastSubmitSuccess'), 'success');
       setFormData({ basePart: '', classification: '', description: '' });
+      clearFiles();
       setTimeout(() => setSubmitted(false), 5000);
     } catch (err) {
       notifyGlobalError(err, t('support.toastSubmitFailed'));
@@ -243,7 +365,10 @@ function DesktopContent() {
           >
             {/* Form */}
             <div className="lg:col-span-2">
-              <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 p-8">
+              <div
+                className="bg-surface-container-low rounded-lg border border-outline-variant/10 p-8"
+                onPaste={(e) => handleAttachmentPaste(e, addFiles)}
+              >
                 <h3 className="font-headline text-lg font-bold text-on-surface mb-6 flex items-center gap-2">
                   <Icon name="assignment_add" size={20} className="text-primary-container" />
                   {t('supportSteps.assignment_add.title')}
@@ -314,21 +439,49 @@ function DesktopContent() {
                       <label className="block text-xs uppercase tracking-wider text-on-surface-variant mb-2">
                         {t('support.attachment')}
                       </label>
-                      <input
-                        name="file"
-                        ref={fileInputRef}
-                        type="file"
-                        className="hidden"
-                        accept=".step,.iges,.stl,.pdf"
-                        multiple
-                      />
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full bg-surface-container-lowest text-on-surface-variant rounded-sm px-4 py-3 border border-dashed border-outline-variant/30 hover:border-outline-variant/60 transition-colors text-sm text-left flex items-center gap-2"
+                      <div
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setDragActive(true);
+                        }}
+                        onDragLeave={() => setDragActive(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDragActive(false);
+                          addFiles(e.dataTransfer.files);
+                        }}
                       >
-                        <Icon name="upload_file" size={16} />
-                        {t('support.attachmentUpload')}
-                      </button>
+                        <input
+                          name="file"
+                          ref={fileInputRef}
+                          type="file"
+                          className="hidden"
+                          accept={acceptExts}
+                          multiple
+                          onChange={(e) => {
+                            addFiles(e.target.files);
+                            e.target.value = '';
+                          }}
+                        />
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className={`w-full rounded-sm border px-4 py-3 transition-colors text-sm text-left flex items-center gap-2 ${
+                            dragActive
+                              ? 'border-primary bg-primary-container/10 text-on-surface'
+                              : 'border-dashed border-outline-variant/30 bg-surface-container-lowest text-on-surface-variant hover:border-outline-variant/60'
+                          }`}
+                        >
+                          <Icon name="upload_file" size={16} />
+                          {t('support.attachmentUpload')}
+                        </button>
+                        <p className="mt-1.5 text-[11px] leading-relaxed text-on-surface-variant">
+                          {t('support.attachmentHint', {
+                            max: business.uploadPolicy.ticketAttachmentMaxSizeMb,
+                            count: TICKET_CREATE_ATTACHMENT_LIMIT,
+                          })}
+                        </p>
+                        <AttachmentChips files={files} onRemove={removeFile} t={t} />
+                      </div>
                     </div>
                   </div>
 
@@ -443,6 +596,12 @@ function MobileContent() {
   const { toast } = useToast();
   const { settings } = usePublicSettings();
   const business = getBusinessConfig(settings);
+  const { files, addFiles, removeFile, clearFiles, dragActive, setDragActive } = useTicketCreateAttachments(
+    business.uploadPolicy,
+    toast,
+    t,
+  );
+  const acceptExts = business.uploadPolicy.ticketAttachmentExts.join(',');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -459,16 +618,28 @@ function MobileContent() {
     }
     setSubmitting(true);
     const suffix = ctx ? buildContextSuffix(ctx, t) : '';
+    const payload = {
+      basePart: formData.basePart || undefined,
+      sourceUrl: isSafeSourceUrl(ctx?.sourceUrl) ? ctx.sourceUrl : undefined,
+      classification: formData.classification,
+      description: formData.description + (suffix ? `\n\n${suffix}` : ''),
+    };
     try {
-      await client.post('/tasks', {
-        basePart: formData.basePart || undefined,
-        sourceUrl: isSafeSourceUrl(ctx?.sourceUrl) ? ctx.sourceUrl : undefined,
-        classification: formData.classification,
-        description: formData.description + (suffix ? `\n\n${suffix}` : ''),
-      });
+      if (files.length > 0) {
+        const form = new FormData();
+        if (payload.basePart) form.append('basePart', payload.basePart);
+        if (payload.sourceUrl) form.append('sourceUrl', payload.sourceUrl);
+        form.append('classification', payload.classification);
+        form.append('description', payload.description);
+        for (const file of files) form.append('files', file, file.name);
+        await client.post('/tasks', form);
+      } else {
+        await client.post('/tasks', payload);
+      }
       setSubmitted(true);
       toast(t('support.toastSubmitSuccess'), 'success');
       setFormData({ basePart: '', classification: '', description: '' });
+      clearFiles();
       setTimeout(() => setSubmitted(false), 5000);
     } catch (err) {
       notifyGlobalError(err, t('support.toastSubmitFailed'));
@@ -540,7 +711,10 @@ function MobileContent() {
             })}
           </div>
 
-          <div className="bg-surface-container-high rounded-lg p-4 space-y-3">
+          <div
+            className="bg-surface-container-high rounded-lg p-4 space-y-3"
+            onPaste={(e) => handleAttachmentPaste(e, addFiles)}
+          >
             <input
               name="basePart"
               value={formData.basePart}
@@ -556,21 +730,49 @@ function MobileContent() {
               className="w-full bg-surface-container-lowest rounded-sm px-3 py-2.5 text-sm text-on-surface border border-outline-variant/20 outline-none focus:border-primary resize-none"
               placeholder={t('support.descriptionPlaceholderMobile')}
             />
-            <input
-              name="file"
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              accept=".step,.iges,.stl,.pdf"
-              multiple
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-outline-variant/30 rounded-sm text-xs text-on-surface-variant hover:border-outline-variant/60"
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragActive(true);
+              }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragActive(false);
+                addFiles(e.dataTransfer.files);
+              }}
             >
-              <Icon name="upload_file" size={14} />
-              {t('support.attachmentUpload')}
-            </button>
+              <input
+                name="file"
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept={acceptExts}
+                multiple
+                onChange={(e) => {
+                  addFiles(e.target.files);
+                  e.target.value = '';
+                }}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className={`w-full flex items-center justify-center gap-2 py-2.5 border border-dashed rounded-sm text-xs transition-colors ${
+                  dragActive
+                    ? 'border-primary bg-primary-container/10 text-on-surface'
+                    : 'border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60'
+                }`}
+              >
+                <Icon name="upload_file" size={14} />
+                {t('support.attachmentUpload')}
+              </button>
+              <p className="mt-1.5 text-center text-[10px] leading-relaxed text-on-surface-variant">
+                {t('support.attachmentHint', {
+                  max: business.uploadPolicy.ticketAttachmentMaxSizeMb,
+                  count: TICKET_CREATE_ATTACHMENT_LIMIT,
+                })}
+              </p>
+              <AttachmentChips files={files} onRemove={removeFile} t={t} />
+            </div>
             <button
               onClick={handleSubmit}
               disabled={submitting || !formData.classification || !formData.description.trim()}

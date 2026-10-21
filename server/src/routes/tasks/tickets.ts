@@ -91,6 +91,40 @@ function param(req: { params: Record<string, string | string[]> }, key: string):
   return Array.isArray(v) ? v[0] : v;
 }
 
+/** 创建工单时随表单携带的附件（multipart files[]）。非 multipart 请求（既有 JSON
+ *  调用方）直接放行；白名单/大小与消息附件同一套 uploadPolicy。 */
+const TICKET_CREATE_ATTACHMENT_LIMIT = 5;
+
+async function ticketCreateAttachmentsUpload(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { uploadPolicy } = await getBusinessConfig();
+    const maxMb = ticketAttachmentMaxSizeMb(uploadPolicy);
+    const allowedExts = ticketAttachmentExts(uploadPolicy);
+    createTicketAttachmentUpload(ticketAttachmentMaxBytes(uploadPolicy), allowedExts).array(
+      'files',
+      TICKET_CREATE_ATTACHMENT_LIMIT,
+    )(req, res, (err) => {
+      if (!err) {
+        next();
+        return;
+      }
+      // multer 2.x 报错时自会回收已落盘文件（abortWithError → removeUploadedFiles）
+      const code = (err as { code?: string }).code;
+      if (code === 'LIMIT_FILE_SIZE') {
+        res.status(413).json({ detail: `附件不能超过 ${maxMb}MB` });
+        return;
+      }
+      if (code === 'LIMIT_UNEXPECTED_FILE' || code === 'LIMIT_FILE_COUNT') {
+        res.status(400).json({ detail: `附件最多 ${TICKET_CREATE_ATTACHMENT_LIMIT} 个` });
+        return;
+      }
+      res.status(400).json({ detail: err instanceof Error ? err.message : '附件校验失败' });
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 function ticketAttachmentFileName(attachment: string | null | undefined): string | null {
   if (!attachment) return null;
   const fileName = basename(attachment.split(/[?#]/)[0]);
@@ -158,91 +192,125 @@ export function createSupportTicketRouter() {
   const router = Router();
 
   // Create support ticket
-  router.post('/api/tasks', authMiddleware, demandSubmissionLimiter, async (req: AuthRequest, res: Response) => {
-    const { basePart, classification, description } = req.body;
-    const cleanDescription = cleanUserText(description);
-    const cleanBasePart = cleanUserText(basePart, 120);
-    const cleanSourceUrl = cleanTicketSourceUrl(req.body.sourceUrl);
+  router.post(
+    '/api/tasks',
+    authMiddleware,
+    demandSubmissionLimiter,
+    ticketCreateAttachmentsUpload,
+    async (req: AuthRequest, res: Response) => {
+      const { basePart, classification, description } = req.body;
+      const cleanDescription = cleanUserText(description);
+      const cleanBasePart = cleanUserText(basePart, 120);
+      const cleanSourceUrl = cleanTicketSourceUrl(req.body.sourceUrl);
+      // multipart 附件已落盘：校验失败的早退路径必须清掉，否则留孤儿文件
+      const uploadedFiles = (req.files as Express.Multer.File[] | undefined) ?? [];
+      const discardUploads = () => {
+        for (const file of uploadedFiles) rmSync(file.path, { force: true });
+      };
 
-    if (!cleanDescription) {
-      res.status(400).json({ detail: '问题描述不能为空' });
-      return;
-    }
-    const qualityReason = lowQualitySubmissionReason(cleanDescription, '问题描述');
-    if (qualityReason) {
-      res.status(400).json({ detail: qualityReason });
-      return;
-    }
-
-    try {
-      const { ticketClassifications } = await getBusinessConfig();
-      const enabledClassifications = ticketClassifications
-        .filter((item) => item.enabled !== false)
-        .map((item) => item.value);
-      const normalizedClassification = enabledClassifications.includes(classification)
-        ? classification
-        : enabledClassifications[0] || 'dimension';
-      const duplicate = await prisma.supportTicket.findFirst({
-        where: {
-          userId: req.user!.userId,
-          basePart: cleanBasePart || null,
-          classification: normalizedClassification,
-          description: cleanDescription,
-          createdAt: { gte: duplicateSince(DEMAND_DUPLICATE_WINDOW_MS) },
-        },
-        select: { id: true },
-      });
-      if (duplicate) {
-        res.status(409).json({ detail: '类似需求已提交，请在原工单中补充说明' });
+      if (!cleanDescription) {
+        discardUploads();
+        res.status(400).json({ detail: '问题描述不能为空' });
         return;
       }
-      const ticket = await prisma.supportTicket.create({
-        data: {
-          userId: req.user!.userId,
-          basePart: cleanBasePart || null,
-          sourceUrl: cleanSourceUrl,
-          classification: normalizedClassification,
-          description: cleanDescription,
-        },
-        include: { user: { select: { username: true, email: true } } },
-      });
-      const ticketTitle = labelFor(ticketClassifications, ticket.classification);
-      await createNotification({
-        userId: ticket.userId,
-        title: '工单已创建',
-        message: `您的工单「${ticketTitle}」已进入处理队列`,
-        type: 'ticket',
-        audience: 'user',
-        relatedId: ticket.id,
-        siteUrl: requestSiteUrl(req),
-        emailTemplateKey: 'ticket_created',
-        emailVars: { username: ticket.user.username, ticketTitle },
-      }).catch(() => {});
-      try {
-        const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
-        await Promise.all(
-          admins.map((admin) =>
-            createNotification({
-              userId: admin.id,
-              title: '新工单',
-              message: `${ticket.user.username} 提交了新的工单「${ticketTitle}」`,
-              type: 'ticket',
-              audience: 'admin',
-              relatedId: ticket.id,
-              siteUrl: requestSiteUrl(req),
-              emailTemplateKey: 'ticket_admin_new',
-              emailVars: { username: ticket.user.username, ticketTitle },
-            }).catch(() => {}),
-          ),
-        );
-      } catch {
-        /* best-effort admin notification */
+      const qualityReason = lowQualitySubmissionReason(cleanDescription, '问题描述');
+      if (qualityReason) {
+        discardUploads();
+        res.status(400).json({ detail: qualityReason });
+        return;
       }
-      res.json({ id: ticket.id, status: ticket.status });
-    } catch {
-      res.status(500).json({ detail: '创建工单失败' });
-    }
-  });
+
+      try {
+        const { ticketClassifications } = await getBusinessConfig();
+        const enabledClassifications = ticketClassifications
+          .filter((item) => item.enabled !== false)
+          .map((item) => item.value);
+        const normalizedClassification = enabledClassifications.includes(classification)
+          ? classification
+          : enabledClassifications[0] || 'dimension';
+        const duplicate = await prisma.supportTicket.findFirst({
+          where: {
+            userId: req.user!.userId,
+            basePart: cleanBasePart || null,
+            classification: normalizedClassification,
+            description: cleanDescription,
+            createdAt: { gte: duplicateSince(DEMAND_DUPLICATE_WINDOW_MS) },
+          },
+          select: { id: true },
+        });
+        if (duplicate) {
+          discardUploads();
+          res.status(409).json({ detail: '类似需求已提交，请在原工单中补充说明' });
+          return;
+        }
+        const ticket = await prisma.supportTicket.create({
+          data: {
+            userId: req.user!.userId,
+            basePart: cleanBasePart || null,
+            sourceUrl: cleanSourceUrl,
+            classification: normalizedClassification,
+            description: cleanDescription,
+          },
+          include: { user: { select: { username: true, email: true } } },
+        });
+        const ticketTitle = labelFor(ticketClassifications, ticket.classification);
+        await createNotification({
+          userId: ticket.userId,
+          title: '工单已创建',
+          message: `您的工单「${ticketTitle}」已进入处理队列`,
+          type: 'ticket',
+          audience: 'user',
+          relatedId: ticket.id,
+          siteUrl: requestSiteUrl(req),
+          emailTemplateKey: 'ticket_created',
+          emailVars: { username: ticket.user.username, ticketTitle },
+        }).catch(() => {});
+        try {
+          const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+          await Promise.all(
+            admins.map((admin) =>
+              createNotification({
+                userId: admin.id,
+                title: '新工单',
+                message: `${ticket.user.username} 提交了新的工单「${ticketTitle}」`,
+                type: 'ticket',
+                audience: 'admin',
+                relatedId: ticket.id,
+                siteUrl: requestSiteUrl(req),
+                emailTemplateKey: 'ticket_admin_new',
+                emailVars: { username: ticket.user.username, ticketTitle },
+              }).catch(() => {}),
+            ),
+          );
+        } catch {
+          /* best-effort admin notification */
+        }
+        // 表单附件落为工单消息（content 为空、只挂附件）：不触发通知与状态流转，
+        // 与创建后的手动回复（每条都会通知全部管理员）区分开
+        let attachedCount = 0;
+        for (const file of uploadedFiles) {
+          try {
+            await prisma.ticketMessage.create({
+              data: {
+                ticketId: ticket.id,
+                userId: req.user!.userId,
+                content: '',
+                attachment: `/api/tickets/${ticket.id}/attachments/${file.filename}`,
+                isAdmin: false,
+              },
+            });
+            attachedCount += 1;
+          } catch {
+            rmSync(file.path, { force: true }); // best-effort：单附件失败不阻塞工单创建
+          }
+        }
+        res.json({ id: ticket.id, status: ticket.status, attachments: attachedCount });
+      } catch {
+        discardUploads();
+        res.status(500).json({ detail: '创建工单失败' });
+      }
+    },
+  );
 
   // User: list own support tickets
   router.get('/api/my-tickets', authMiddleware, async (req: AuthRequest, res: Response) => {

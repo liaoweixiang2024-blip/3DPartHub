@@ -449,7 +449,8 @@ export default function CategoryNavPage() {
   /* mobilePadded 不用（那是全站公共包装层的 px-4 py-4 + pb-safe-nav(5rem+safe) 默认间距），
      本页移动端自己接管：顶部/两侧维持原 16px 间距（标题卡不贴死顶栏），底部只让位
      菜单栏实际高度（3.5rem + 安全区，无额外余量——滚到底分区卡紧贴菜单栏）。
-     桌面端 max-md: 前缀全部不生效 */
+     桌面端 max-md: 前缀全部不生效；classic 主题缺的页面内边距在 global.css
+     （[data-interface-theme='classic'] .category-nav-page 桌面媒体查询）补齐 */
   return (
     <PublicPageShell className="bg-surface-dim">
       <AdminManagementPage

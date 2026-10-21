@@ -1530,10 +1530,17 @@ export interface UpdateHistoryEntry {
   notes: string;
 }
 
-export async function getUpdateHistory(): Promise<UpdateHistoryEntry[]> {
+/** 全部正式 release 的统计（服务端翻页拉全量后计算，非仅展示的 20 条） */
+export interface UpdateHistoryStats {
+  total: number;
+  major: number;
+  minor: number;
+}
+
+export async function getUpdateHistory(): Promise<{ entries: UpdateHistoryEntry[]; stats: UpdateHistoryStats | null }> {
   const res = await client.get('/settings/update/history', { timeout: 30000 });
-  const data = unwrapResponse<{ entries: UpdateHistoryEntry[] }>(res);
-  return data?.entries ?? [];
+  const data = unwrapResponse<{ entries: UpdateHistoryEntry[]; stats: UpdateHistoryStats | null }>(res);
+  return { entries: data?.entries ?? [], stats: data?.stats ?? null };
 }
 
 // 版本历史本地缓存（localStorage）：进「关于系统」页先秒开缓存内容，
@@ -1541,20 +1548,23 @@ export async function getUpdateHistory(): Promise<UpdateHistoryEntry[]> {
 // 拿到的结果本身变化极少，本地再缓存一层避免每次进页都发请求。
 const UPDATE_HISTORY_STORAGE_KEY = 'update_history_cache';
 
-export function readCachedUpdateHistory(): UpdateHistoryEntry[] {
+export function readCachedUpdateHistory(): { entries: UpdateHistoryEntry[]; stats: UpdateHistoryStats | null } {
   try {
     const raw = localStorage.getItem(UPDATE_HISTORY_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as { entries?: UpdateHistoryEntry[] };
-    return Array.isArray(parsed.entries) ? parsed.entries : [];
+    if (!raw) return { entries: [], stats: null };
+    const parsed = JSON.parse(raw) as { entries?: UpdateHistoryEntry[]; stats?: UpdateHistoryStats | null };
+    return {
+      entries: Array.isArray(parsed.entries) ? parsed.entries : [],
+      stats: parsed.stats && typeof parsed.stats.total === 'number' ? parsed.stats : null,
+    };
   } catch {
-    return [];
+    return { entries: [], stats: null };
   }
 }
 
-export function writeCachedUpdateHistory(entries: UpdateHistoryEntry[]): void {
+export function writeCachedUpdateHistory(entries: UpdateHistoryEntry[], stats: UpdateHistoryStats | null): void {
   try {
-    localStorage.setItem(UPDATE_HISTORY_STORAGE_KEY, JSON.stringify({ entries, ts: Date.now() }));
+    localStorage.setItem(UPDATE_HISTORY_STORAGE_KEY, JSON.stringify({ entries, stats, ts: Date.now() }));
   } catch {
     // 存储满/隐私模式写入失败可忽略
   }

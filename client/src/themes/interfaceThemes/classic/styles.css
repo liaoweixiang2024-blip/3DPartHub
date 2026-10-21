@@ -1,3 +1,14 @@
 .home-page-desktop[data-home-theme='classic'] .home-model-empty-state-classic {
   min-height: 0;
 }
+
+/* 选型导航页（/category-nav）桌面内边距：classic 的 publicLayout 不提供页面内边距
+   （收藏/下载/分享等管理结构页在 AdminLayout 里由 AdminPageShell 兜底 p-6，LegalPage
+   也自带 p-6），本页走 PublicPageShell 无人兜底——不补则标题卡贴死顶栏与屏幕左右边缘，
+   与其他页面不统一。workbench 主题由包装层 .workbench-page-content 提供内边距，
+   不需要也不命中本规则（不会叠加双层 padding） */
+@media (min-width: 768px) {
+  [data-interface-theme='classic'] .category-nav-page {
+    padding: 1.5rem;
+  }
+}

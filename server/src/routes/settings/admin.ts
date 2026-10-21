@@ -75,10 +75,10 @@ export function createSettingsAdminRouter() {
   router.get('/api/settings/update/history', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
     try {
-      const entries = await getUpdateHistory();
-      res.json({ entries });
+      const { entries, stats } = await getUpdateHistory();
+      res.json({ entries, stats });
     } catch {
-      res.json({ entries: [] });
+      res.json({ entries: [], stats: null });
     }
   });
 

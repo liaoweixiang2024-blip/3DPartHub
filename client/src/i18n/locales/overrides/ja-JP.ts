@@ -1703,6 +1703,12 @@ export const jaJPWorkflowTranslation: TranslationMap = {
   support: {
     attachment: '添付',
     attachmentUpload: '添付をアップロード',
+    attachmentHint:
+      '画像・ドキュメント・圧縮ファイル・CAD に対応（各 ≤{{max}}MB、最大 {{count}} 点）。ドラッグ＆ドロップやスクリーンショットの貼り付けも可能',
+    attachmentLimit: '添付は最大 {{count}} 点です',
+    attachmentRejectedSize: '{{name}} は {{max}}MB の上限を超えています',
+    attachmentRejectedType: '対応していない形式です：{{name}}',
+    attachmentRemove: '削除',
     basePart: '対象部品番号',
     basePartPlaceholder: '例: 882-QX-V2（任意）',
     compactDescription: '依頼を送信するとエンジニアが対応します',

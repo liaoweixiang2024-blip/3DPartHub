@@ -634,7 +634,8 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'ticket_attachment_max_mb', defaultValue: 100 },
   {
     key: 'ticket_attachment_types',
-    defaultValue: 'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,binary',
+    defaultValue:
+      'jpg,jpeg,png,gif,webp,svg,bmp,pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,zip,rar,7z,step,stp,iges,igs,stl,binary',
   },
 
   // API rate limiting
