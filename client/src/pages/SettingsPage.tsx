@@ -200,6 +200,11 @@ const DEFAULT_SETTINGS: SystemSettings = {
   smtp_pass: '',
   smtp_from: '',
   smtp_secure: true,
+  notify_email_ticket: false,
+  notify_email_inquiry: false,
+  notify_email_favorite: false,
+  notify_email_model_conversion: false,
+  notify_email_download: false,
   email_templates: '',
   interface_theme: DEFAULT_INTERFACE_THEME,
   mobile_interface_theme: DEFAULT_MOBILE_THEME,
@@ -395,6 +400,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   resource_download_acceleration_enabled: false,
   download_token_ttl_minutes: 5,
   ticket_attachment_max_mb: 100,
+  ticket_attachment_max_count: 5,
   ticket_attachment_types:
     'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,binary',
   api_rate_limit: 5000,
@@ -1251,6 +1257,14 @@ const GROUPS: SettingGroup[] = [
         max: 200,
       },
       {
+        key: 'ticket_attachment_max_count',
+        label: 'adminSettings.ticketAttachmentMaxCount',
+        desc: 'adminSettings.ticketAttachmentMaxCountDesc',
+        type: 'number',
+        min: 1,
+        max: 20,
+      },
+      {
         key: 'ticket_attachment_types',
         label: 'adminSettings.ticketAttachmentTypes',
         desc: 'adminSettings.attachmentTypesDesc',
@@ -1624,6 +1638,38 @@ const GROUPS: SettingGroup[] = [
         type: 'text',
       },
       { key: 'smtp_secure', label: 'SSL/TLS', desc: 'adminSettings.useSecureConnection', type: 'switch' },
+      { _section: 'adminSettings.sectionEmailSwitches' },
+      {
+        key: 'notify_email_ticket',
+        label: 'adminSettings.notifyEmailTicketSwitch',
+        desc: 'adminSettings.notifyEmailSwitchDesc',
+        type: 'switch',
+      },
+      {
+        key: 'notify_email_inquiry',
+        label: 'adminSettings.notifyEmailInquirySwitch',
+        desc: 'adminSettings.notifyEmailSwitchDesc',
+        type: 'switch',
+      },
+      {
+        key: 'notify_email_favorite',
+        label: 'adminSettings.notifyEmailFavoriteSwitch',
+        desc: 'adminSettings.notifyEmailSwitchDesc',
+        type: 'switch',
+      },
+      {
+        key: 'notify_email_model_conversion',
+        label: 'adminSettings.notifyEmailConversionSwitch',
+        desc: 'adminSettings.notifyEmailSwitchDesc',
+        type: 'switch',
+      },
+      {
+        key: 'notify_email_download',
+        label: 'adminSettings.notifyEmailDownloadSwitch',
+        desc: 'adminSettings.notifyEmailSwitchDesc',
+        type: 'switch',
+      },
+      { _section: 'adminSettings.sectionEmailTemplatesTitle' },
       { key: 'smtp_test', label: 'adminSettings.testSend', desc: 'adminSettings.smtpTestDesc', type: 'email-test' },
       {
         key: 'email_templates',
@@ -2425,9 +2471,9 @@ const commonEmailTokens = [
 
 const DEFAULT_EMAIL_TEMPLATES: Record<string, EmailTemplateConfig> = {
   register_verify: {
-    label: 'adminSettings.featureRegisterEmailCode',
+    label: 'adminSettings.emailTplNames.registerVerify',
     description: 'adminSettings.registerEmailCodeDesc',
-    subject: 'adminSettings.notifyRegisterCode',
+    subject: '{{siteTitle}} 注册验证码',
     html: `${emailShellStart}
   <h2 style="margin:0 0 18px;color:#111827;">注册验证码</h2>
   <p style="margin:0 0 12px;font-size:15px;">您的注册验证码为：</p>
@@ -2436,10 +2482,35 @@ const DEFAULT_EMAIL_TEMPLATES: Record<string, EmailTemplateConfig> = {
 ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'code', 'expireMinutes'],
   },
+  change_email: {
+    label: 'adminSettings.emailTplNames.changeEmail',
+    description: 'adminSettings.emailChangeCodeDesc',
+    subject: '{{siteTitle}} 换绑邮箱验证码',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 18px;color:#111827;">换绑邮箱验证码</h2>
+  <p style="margin:0 0 12px;font-size:15px;">您正在更换账号绑定邮箱，验证码为：</p>
+  <div style="margin:18px 0;padding:18px;border-radius:10px;background:#fff7ed;text-align:center;font-size:32px;font-weight:700;letter-spacing:8px;color:#f97316;">{{code}}</div>
+  <p style="margin:0;color:#6b7280;font-size:13px;">验证码 {{expireMinutes}} 分钟内有效，请勿泄露给他人。若非本人操作，请立即检查账号安全。</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'code', 'expireMinutes'],
+  },
+  password_reset: {
+    label: 'adminSettings.emailTplNames.passwordReset',
+    description: 'adminSettings.passwordResetDesc',
+    subject: '{{siteTitle}} 密码重置',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 18px;color:#111827;">重置您的密码</h2>
+  <p style="margin:0 0 12px;font-size:15px;">我们收到了您重置密码的请求。点击下方按钮设置新密码：</p>
+  <p style="margin:14px 0 6px;color:#6b7280;font-size:13px;">若按钮无法点击，请复制以下链接到浏览器打开：</p>
+  <p style="margin:0 0 12px;font-size:13px;word-break:break-all;color:#f97316;">{{actionUrl}}</p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">链接 {{expireMinutes}} 分钟内有效，且仅可使用一次。若非本人操作，请忽略此邮件，您的密码不会更改。</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'actionUrl', 'expireMinutes'],
+  },
   smtp_test: {
-    label: 'adminSettings.emailTestPanel',
+    label: 'adminSettings.emailTplNames.smtpTest',
     description: 'adminSettings.testEmailPurpose',
-    subject: 'adminSettings.notifyTestEmail',
+    subject: '{{siteTitle}} 邮件测试',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;color:#f97316;">邮件服务测试成功</h2>
   <p style="margin:0 0 10px;">这是一封来自 {{siteTitle}} 的测试邮件。</p>
@@ -2448,9 +2519,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'testTime'],
   },
   inquiry_submitted: {
-    label: 'adminSettings.notifyPrefInquiryCreated',
+    label: 'adminSettings.emailTplNames.inquirySubmitted',
     description: 'adminSettings.inquiryConfirmEmailDesc',
-    subject: 'adminSettings.notifyInquiryReceived',
+    subject: '{{siteTitle}} 已收到您的询价 {{inquiryNo}}',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">询价已提交</h2>
   <p style="margin:0 0 10px;">您好 {{username}}，我们已收到您的询价。</p>
@@ -2460,9 +2531,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'username', 'inquiryNo'],
   },
   inquiry_status_changed: {
-    label: 'adminSettings.notifyPrefInquiryStatus',
+    label: 'adminSettings.emailTplNames.inquiryStatusChanged',
     description: 'adminSettings.notifyInquiryStatusDesc',
-    subject: 'adminSettings.notifyInquiryStatusUpdated',
+    subject: '{{siteTitle}} 询价 {{inquiryNo}} 状态已更新',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">询价状态已更新</h2>
   <p style="margin:0 0 10px;">询价编号：<strong>{{inquiryNo}}</strong></p>
@@ -2472,9 +2543,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'inquiryNo', 'statusLabel'],
   },
   ticket_created: {
-    label: 'adminSettings.notifyPrefTicketCreated',
+    label: 'adminSettings.emailTplNames.ticketCreated',
     description: 'adminSettings.ticketConfirmEmailDesc',
-    subject: 'adminSettings.notifyTicketReceived',
+    subject: '{{siteTitle}} 已收到您的工单',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">工单已创建</h2>
   <p style="margin:0 0 10px;">您好 {{username}}，您的工单已进入处理队列。</p>
@@ -2484,9 +2555,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'username', 'ticketTitle'],
   },
   ticket_replied: {
-    label: 'adminSettings.notifyPrefTicketReply',
+    label: 'adminSettings.emailTplNames.ticketReplied',
     description: 'adminSettings.notifyUserAdminTicketReplyDesc',
-    subject: 'adminSettings.notifyTicketNewReply',
+    subject: '{{siteTitle}} 您的工单有新回复',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">工单有新回复</h2>
   <p style="margin:0 0 10px;">工单标题：<strong>{{ticketTitle}}</strong></p>
@@ -2496,9 +2567,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'ticketTitle', 'replyPreview'],
   },
   ticket_status_changed: {
-    label: 'adminSettings.notifyPrefTicketStatus',
+    label: 'adminSettings.emailTplNames.ticketStatusChanged',
     description: 'adminSettings.notifyTicketStatusDesc',
-    subject: 'adminSettings.notifyTicketStatusUpdated',
+    subject: '{{siteTitle}} 工单状态已更新',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">工单状态已更新</h2>
   <p style="margin:0 0 10px;">工单标题：<strong>{{ticketTitle}}</strong></p>
@@ -2508,9 +2579,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'ticketTitle', 'statusLabel'],
   },
   ticket_admin_new: {
-    label: 'adminSettings.notifyNewTicket',
+    label: 'adminSettings.emailTplNames.ticketAdminNew',
     description: 'adminSettings.notifyAdminTicketCreatedDesc',
-    subject: 'adminSettings.notifyNewTicketPending',
+    subject: '{{siteTitle}} 有新的工单需要处理',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">有新的工单需要处理</h2>
   <p style="margin:0 0 10px;">提交用户：<strong>{{username}}</strong></p>
@@ -2520,9 +2591,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'username', 'ticketTitle'],
   },
   ticket_admin_replied: {
-    label: 'adminSettings.notifyUserTicketReply',
+    label: 'adminSettings.emailTplNames.ticketAdminReplied',
     description: 'adminSettings.notifyAdminUserTicketReplyDesc',
-    subject: 'adminSettings.notifyTicketNewUserReply',
+    subject: '{{siteTitle}} 工单有新的用户回复',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">工单有新的用户回复</h2>
   <p style="margin:0 0 10px;">提交用户：<strong>{{username}}</strong></p>
@@ -2532,9 +2603,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'username', 'ticketTitle', 'replyPreview'],
   },
   inquiry_replied: {
-    label: 'adminSettings.notifyPrefInquiryReply',
+    label: 'adminSettings.emailTplNames.inquiryReplied',
     description: 'adminSettings.notifyUserAdminInquiryReplyDesc',
-    subject: 'adminSettings.notifyInquiryNewReply',
+    subject: '{{siteTitle}} 询价 {{inquiryNo}} 有新回复',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">询价有新回复</h2>
   <p style="margin:0 0 10px;">询价编号：<strong>{{inquiryNo}}</strong></p>
@@ -2544,9 +2615,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'inquiryNo', 'replyPreview'],
   },
   inquiry_admin_new: {
-    label: 'adminSettings.notifyNewInquiry',
+    label: 'adminSettings.emailTplNames.inquiryAdminNew',
     description: 'adminSettings.notifyAdminInquiryCreatedDesc',
-    subject: 'adminSettings.notifyNewInquiry',
+    subject: '{{siteTitle}} 有新的询价单 {{inquiryNo}}',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">有新的询价单</h2>
   <p style="margin:0 0 10px;">提交用户：<strong>{{username}}</strong></p>
@@ -2556,9 +2627,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'username', 'inquiryNo', 'itemCount'],
   },
   inquiry_admin_replied: {
-    label: 'adminSettings.notifyUserInquiryReply',
+    label: 'adminSettings.emailTplNames.inquiryAdminReplied',
     description: 'adminSettings.notifyAdminUserInquiryReplyDesc',
-    subject: 'adminSettings.notifyInquiryNewUserReply',
+    subject: '{{siteTitle}} 询价 {{inquiryNo}} 有新的用户回复',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">询价有新的用户回复</h2>
   <p style="margin:0 0 10px;">提交用户：<strong>{{username}}</strong></p>
@@ -2568,9 +2639,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'username', 'inquiryNo', 'replyPreview'],
   },
   inquiry_assigned: {
-    label: 'adminSettings.notifyPrefInquiryTransfer',
+    label: 'adminSettings.emailTplNames.inquiryAssigned',
     description: 'adminSettings.notifyInquiryTransferDesc',
-    subject: 'adminSettings.notifyInquiryTransferred',
+    subject: '{{siteTitle}} 询价 {{inquiryNo}} 已转交处理',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">询价已转交处理</h2>
   <p style="margin:0 0 10px;">询价编号：<strong>{{inquiryNo}}</strong></p>
@@ -2580,9 +2651,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'inquiryNo', 'assigneeName'],
   },
   favorite_notice: {
-    label: 'adminSettings.notifyModelFavorites',
+    label: 'adminSettings.emailTplNames.favoriteNotice',
     description: 'adminSettings.notifyOnFavoriteDesc',
-    subject: 'adminSettings.notifyModelFavorited',
+    subject: '{{siteTitle}} 您的模型被收藏',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">您的模型被收藏</h2>
   <p style="margin:0 0 10px;">模型名称：<strong>{{modelName}}</strong></p>
@@ -2591,9 +2662,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'modelName'],
   },
   model_conversion_completed: {
-    label: 'adminSettings.convertCompleted',
+    label: 'adminSettings.emailTplNames.conversionCompleted',
     description: 'adminSettings.notifyOnConvertDoneDesc',
-    subject: 'adminSettings.notifyConvertDone',
+    subject: '{{siteTitle}} 模型转换完成',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">模型转换完成</h2>
   <p style="margin:0 0 10px;">模型文件：<strong>{{modelName}}</strong></p>
@@ -2602,9 +2673,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'modelName'],
   },
   model_conversion_failed: {
-    label: 'adminSettings.convertFailed',
+    label: 'adminSettings.emailTplNames.conversionFailed',
     description: 'adminSettings.notifyOnConvertFailDesc',
-    subject: 'adminSettings.notifyConvertFailed',
+    subject: '{{siteTitle}} 模型转换失败',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;color:#dc2626;">模型转换失败</h2>
   <p style="margin:0 0 10px;">模型文件：<strong>{{modelName}}</strong></p>
@@ -2613,9 +2684,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'modelName', 'errorMessage'],
   },
   backup_policy_alert: {
-    label: 'adminSettings.backupCheckNotify',
+    label: 'adminSettings.emailTplNames.backupPolicyAlert',
     description: 'adminSettings.backupCheckNotifyDesc',
-    subject: 'adminSettings.notifyBackupCheckAttention',
+    subject: '{{siteTitle}} 备份体检需要关注',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;color:#f97316;">备份体检需要关注</h2>
   <p style="margin:0 0 10px;">风险等级：<strong>{{riskLevel}}</strong></p>
@@ -2624,9 +2695,9 @@ ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'riskLevel', 'summary'],
   },
   download_notice: {
-    label: 'adminSettings.notifyModelDownloads',
+    label: 'adminSettings.emailTplNames.downloadNotice',
     description: 'adminSettings.notifyOnDownloadDesc',
-    subject: 'adminSettings.notifyModelDownloaded',
+    subject: '{{siteTitle}} 您的模型被下载',
     html: `${emailShellStart}
   <h2 style="margin:0 0 14px;">您的模型被下载</h2>
   <p style="margin:0 0 10px;">模型名称：<strong>{{modelName}}</strong></p>
@@ -2879,11 +2950,25 @@ function normalizePageSizePolicyForSave(value: unknown) {
   return normalized;
 }
 
-function normalizeUploadPolicyForSave(value: unknown) {
+/** upload_policy JSON 里实际保存的字段：工单附件（大小/类型/数量）与图片墙三项以
+ *  「个体设置键」为权威来源（服务端 getBusinessConfig 与公开设置下发都会用个体键覆盖
+ *  同名 JSON 字段）。留在 JSON 里只会变成误导管理员的死快照（曾出现编辑器显示 5MB、
+ *  实际执行 100MB），保存时剥离。 */
+type JsonStoredUploadPolicy = Omit<
+  UploadPolicy,
+  | 'productWallImageMaxSizeMb'
+  | 'productWallUploadMaxFiles'
+  | 'productWallArchiveExtractMaxFiles'
+  | 'ticketAttachmentMaxSizeMb'
+  | 'ticketAttachmentExts'
+  | 'ticketAttachmentMaxCount'
+>;
+
+function normalizeUploadPolicyForSave(value: unknown): JsonStoredUploadPolicy {
   const policy = { ...DEFAULT_UPLOAD_POLICY, ...parseSetting<Partial<UploadPolicy>>(value, {}) };
   const supportedFormats = new Set(DEFAULT_UPLOAD_POLICY.modelFormats);
-  return {
-    ...policy,
+  // 显式白名单构造（不 spread policy）：被个体设置覆盖的键在类型层就进不来
+  const normalized: JsonStoredUploadPolicy = {
     modelFormats: Array.from(
       new Set(
         parseCsv(policy.modelFormats)
@@ -2919,28 +3004,27 @@ function normalizeUploadPolicyForSave(value: unknown) {
       1,
       1000,
     ),
-    productWallImageMaxSizeMb: clampNumber(
-      policy.productWallImageMaxSizeMb,
-      DEFAULT_UPLOAD_POLICY.productWallImageMaxSizeMb,
+    modelDrawingMaxSizeMb: clampNumber(
+      policy.modelDrawingMaxSizeMb,
+      DEFAULT_UPLOAD_POLICY.modelDrawingMaxSizeMb,
       1,
-      50,
+      102400,
     ),
-    productWallUploadMaxFiles: clampNumber(
-      policy.productWallUploadMaxFiles,
-      DEFAULT_UPLOAD_POLICY.productWallUploadMaxFiles,
+    batchArchiveMaxSizeMb: clampNumber(
+      policy.batchArchiveMaxSizeMb,
+      DEFAULT_UPLOAD_POLICY.batchArchiveMaxSizeMb,
       1,
-      50,
+      102400,
     ),
-    ticketAttachmentMaxSizeMb: clampNumber(
-      policy.ticketAttachmentMaxSizeMb,
-      DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxSizeMb,
+    selectionTransferMaxSizeMb: clampNumber(
+      policy.selectionTransferMaxSizeMb,
+      DEFAULT_UPLOAD_POLICY.selectionTransferMaxSizeMb,
       1,
-      100,
+      2048,
     ),
-    ticketAttachmentExts: parseCsv(policy.ticketAttachmentExts).map((item) =>
-      item.startsWith('.') ? item : `.${item}`,
-    ),
+    optionImageMimePattern: policy.optionImageMimePattern || DEFAULT_UPLOAD_POLICY.optionImageMimePattern,
   };
+  return normalized;
 }
 
 function parseEditableLegalSections(value: unknown, fallback: LegalSection[]) {
@@ -3101,6 +3185,12 @@ function normalizeSettingsForSave(settings: SystemSettings): SystemSettings {
       2,
     ),
     upload_policy: JSON.stringify(normalizeUploadPolicyForSave(settings.upload_policy), null, 2),
+    ticket_attachment_max_count: clampNumber(
+      settings.ticket_attachment_max_count,
+      DEFAULT_SETTINGS.ticket_attachment_max_count,
+      1,
+      20,
+    ),
     page_size_policy: JSON.stringify(normalizePageSizePolicyForSave(settings.page_size_policy), null, 2),
     cache_driver: cacheDriver,
     redis_url: normalizeStringSetting(settings.redis_url, DEFAULT_SETTINGS.redis_url),
@@ -3763,9 +3853,6 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">
           {t('adminSettings.badgeSelectionImport')}
         </span>
-        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">
-          {t('adminSettings.badgeTicketAttachment')}
-        </span>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <label className="space-y-1">
@@ -3786,6 +3873,28 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
             min={1}
             value={policy.modelMaxSizeMb}
             onChange={(e) => update({ modelMaxSizeMb: toNumber(e.target.value, policy.modelMaxSizeMb) })}
+            className={numberInputClass}
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelModelDrawingMaxMb')}</span>
+          <input
+            name="model-drawing-max-size-mb"
+            type="number"
+            min={1}
+            value={policy.modelDrawingMaxSizeMb}
+            onChange={(e) => update({ modelDrawingMaxSizeMb: toNumber(e.target.value, policy.modelDrawingMaxSizeMb) })}
+            className={numberInputClass}
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelBatchArchiveMaxMb')}</span>
+          <input
+            name="batch-archive-max-size-mb"
+            type="number"
+            min={1}
+            value={policy.batchArchiveMaxSizeMb}
+            onChange={(e) => update({ batchArchiveMaxSizeMb: toNumber(e.target.value, policy.batchArchiveMaxSizeMb) })}
             className={numberInputClass}
           />
         </label>
@@ -3883,28 +3992,16 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
           />
         </label>
         <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelTicketAttachmentMaxMbField')}</span>
+          <span className="text-xs text-on-surface-variant">{t('adminSettings.labelTransferPackageMaxMb')}</span>
           <input
-            name="ticket-attachment-max-size-mb"
+            name="selection-transfer-max-size-mb"
             type="number"
             min={1}
-            value={policy.ticketAttachmentMaxSizeMb}
+            value={policy.selectionTransferMaxSizeMb}
             onChange={(e) =>
-              update({ ticketAttachmentMaxSizeMb: toNumber(e.target.value, policy.ticketAttachmentMaxSizeMb) })
+              update({ selectionTransferMaxSizeMb: toNumber(e.target.value, policy.selectionTransferMaxSizeMb) })
             }
             className={numberInputClass}
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-xs text-on-surface-variant">
-            {t('adminSettings.labelTicketAttachmentFormatsField')}
-          </span>
-          <input
-            name="join"
-            value={policy.ticketAttachmentExts.join(', ')}
-            onChange={(e) => update({ ticketAttachmentExts: parseCsv(e.target.value) })}
-            placeholder=".jpg, .png, .webp"
-            className={inputClass}
           />
         </label>
       </div>
@@ -5069,6 +5166,10 @@ function getEmailTemplates(settings: SystemSettings) {
         {
           ...fallback,
           ...item,
+          // label/description 是注册表元数据（i18n key）：历史快照曾把旧中文文案整包存进
+          // JSON，允许覆盖会导致改名/跟随界面语言永远被旧快照压住——始终以注册表为准
+          label: fallback.label,
+          description: fallback.description,
           html: withEmailActionLinks(legacyHtml ? fallback.html : item.html || fallback.html),
           tokens: Array.from(new Set([...(fallback.tokens || []), ...((item.tokens as string[] | undefined) || [])])),
         },
@@ -5076,6 +5177,56 @@ function getEmailTemplates(settings: SystemSettings) {
     }),
   ) as Record<string, EmailTemplateConfig>;
 }
+
+/** 邮件模板下拉分组：重要事务（验证码类，始终发送）置顶；通知类按收件人分两组，
+ *  默认仅站内（对应 notify_email_* 开关默认关）。覆盖注册表全部 key。 */
+const EMAIL_TEMPLATE_GROUPS: { titleKey: string; keys: string[] }[] = [
+  {
+    titleKey: 'adminSettings.emailTplGroupAccountV2',
+    keys: ['register_verify', 'change_email', 'password_reset'],
+  },
+  {
+    titleKey: 'adminSettings.emailTplGroupSystemV2',
+    keys: ['smtp_test'],
+  },
+  {
+    titleKey: 'adminSettings.emailTplGroupNotifyUser',
+    keys: [
+      'inquiry_submitted',
+      'inquiry_status_changed',
+      'inquiry_replied',
+      'inquiry_assigned',
+      'ticket_created',
+      'ticket_replied',
+      'ticket_status_changed',
+      'favorite_notice',
+      'download_notice',
+      'model_conversion_completed',
+      'model_conversion_failed',
+    ],
+  },
+  {
+    titleKey: 'adminSettings.emailTplGroupNotifyAdmin',
+    keys: [
+      'inquiry_admin_new',
+      'inquiry_admin_replied',
+      'ticket_admin_new',
+      'ticket_admin_replied',
+      'backup_policy_alert',
+    ],
+  },
+];
+
+/** 收件人是管理员的模板：sendBusinessNotification 对 admin 角色/受众硬编码不发邮件
+ *  （管理员走站内通知中心，避免运营邮件轰炸）——这些模板只渲染站内通知标题，
+ *  主题/正文编辑仅对站内预览与未来放开生效，列表需标注避免误解为「会发邮件」。 */
+const IN_APP_ONLY_TEMPLATE_KEYS = new Set([
+  'ticket_admin_new',
+  'ticket_admin_replied',
+  'inquiry_admin_new',
+  'inquiry_admin_replied',
+  'backup_policy_alert',
+]);
 
 function EmailTemplatesEditor({
   settings,
@@ -5093,7 +5244,8 @@ function EmailTemplatesEditor({
   const keys = Object.keys(templates);
   const resolvedActiveKey = templates[activeKey] ? activeKey : keys[0] || 'smtp_test';
   const active = templates[resolvedActiveKey] || templates[keys[0]];
-  const previewSubject = active ? renderEmailSample(t(active.subject, { defaultValue: active.subject }), settings) : '';
+  // subject 现为文案直存（不再是 i18n key），直用即可——t() 会产生无意义的 missing-key 查询噪音
+  const previewSubject = active ? renderEmailSample(active.subject, settings) : '';
   const previewHtml = active ? renderEmailSample(active.html, settings) : '';
   const update = (next: Record<string, EmailTemplateConfig>) => setJsonSetting(updateSetting, 'email_templates', next);
   const patch = (key: string, changes: Partial<EmailTemplateConfig>) =>
@@ -5105,46 +5257,62 @@ function EmailTemplatesEditor({
     if (!DEFAULT_EMAIL_TEMPLATES[resolvedActiveKey]) return;
     patch(resolvedActiveKey, DEFAULT_EMAIL_TEMPLATES[resolvedActiveKey]);
   };
+  // label/description 是 i18n key（注册表保证），渲染必须过 t()——否则显示原始 key
+  const tplName = (key: string) => t(templates[key].label, { defaultValue: templates[key].label || key });
+  const tplDesc = (key: string) => t(templates[key].description, { defaultValue: templates[key].description || '' });
+  // 下拉选项：按收件人分组（heading 项为组分隔标题，不可选）
+  const templateOptions = EMAIL_TEMPLATE_GROUPS.flatMap((group) => {
+    const groupKeys = group.keys.filter((key) => templates[key]);
+    if (!groupKeys.length) return [];
+    return [
+      { value: `__heading__${group.titleKey}`, label: t(group.titleKey), heading: true as const },
+      ...groupKeys.map((key) => ({
+        value: key,
+        label: (
+          <span className="flex items-center gap-1.5">
+            <span className="truncate">{tplName(key)}</span>
+            {IN_APP_ONLY_TEMPLATE_KEYS.has(key) ? (
+              <span className="shrink-0 rounded bg-surface-container-highest px-1 text-[9px] text-on-surface-variant">
+                {t('adminSettings.emailTplInAppOnly')}
+              </span>
+            ) : null}
+          </span>
+        ),
+      })),
+    ];
+  });
 
   return (
     <div className="w-full max-w-6xl rounded-lg border border-outline-variant/10 bg-surface-container-high/20 overflow-hidden">
-      <div className="grid grid-cols-1 xl:grid-cols-[260px_1fr] min-h-[620px]">
-        <div className="border-b xl:border-b-0 xl:border-r border-outline-variant/10 bg-surface-container-high/35">
-          <div className="p-2 space-y-1">
-            {keys.map((key) => {
-              const item = templates[key];
-              const activeItem = key === resolvedActiveKey;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => onActiveKeyChange(key)}
-                  className={`w-full text-left rounded-md px-3 py-2.5 transition-colors ${activeItem ? 'bg-primary-container/15 text-on-surface' : 'hover:bg-surface-container-highest/50 text-on-surface-variant'}`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold truncate">{item.label || key}</span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-container-lowest/80 text-on-surface-variant shrink-0">
-                      {(item.tokens || []).length}
-                    </span>
-                  </div>
-                  <p className="text-[11px] mt-1 truncate opacity-75">{item.description}</p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
+      <div className="min-w-0">
         {active && (
           <div className="min-w-0">
             <div className="p-4 border-b border-outline-variant/10 flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h4 className="text-sm font-semibold text-on-surface">{active.label}</h4>
+                  <SelectMenu
+                    variant="field"
+                    className="min-w-56 max-w-md"
+                    ariaLabel={t('adminSettings.emailTplSelectLabel')}
+                    options={templateOptions}
+                    value={resolvedActiveKey}
+                    onChange={onActiveKeyChange}
+                  />
                   <code className="text-[10px] text-on-surface-variant bg-surface-container-lowest border border-outline-variant/10 rounded px-2 py-1">
                     {resolvedActiveKey}
                   </code>
+                  {IN_APP_ONLY_TEMPLATE_KEYS.has(resolvedActiveKey) ? (
+                    <span className="shrink-0 rounded-full bg-surface-container-highest px-2 py-0.5 text-[10px] text-on-surface-variant">
+                      {t('adminSettings.emailTplInAppOnlyBadge')}
+                    </span>
+                  ) : null}
                 </div>
-                <p className="text-xs text-on-surface-variant mt-1">{active.description}</p>
+                <p className="text-xs text-on-surface-variant mt-1.5">
+                  {tplDesc(resolvedActiveKey)}
+                  {IN_APP_ONLY_TEMPLATE_KEYS.has(resolvedActiveKey) ? (
+                    <span className="text-on-surface-variant/70">{t('adminSettings.emailTplInAppOnlyHint')}</span>
+                  ) : null}
+                </p>
               </div>
               <button
                 type="button"

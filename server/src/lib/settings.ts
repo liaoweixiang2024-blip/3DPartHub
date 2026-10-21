@@ -428,6 +428,13 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'smtp_pass', defaultValue: '' },
   { key: 'smtp_from', defaultValue: '' },
   { key: 'smtp_secure', defaultValue: true },
+  // 通知邮件全局开关（默认关闭：邮件只用于验证码等必要事务；需要时在后台开启）。
+  // 收件人个人偏好（站内/邮件）仍在此基础上二次生效
+  { key: 'notify_email_ticket', defaultValue: false },
+  { key: 'notify_email_inquiry', defaultValue: false },
+  { key: 'notify_email_favorite', defaultValue: false },
+  { key: 'notify_email_model_conversion', defaultValue: false },
+  { key: 'notify_email_download', defaultValue: false },
   { key: 'email_templates', defaultValue: JSON.stringify(DEFAULT_EMAIL_TEMPLATES, null, 2) },
   { key: 'contact_email', defaultValue: '' },
   { key: 'contact_phone', defaultValue: '' },
@@ -632,6 +639,7 @@ const SETTINGS_SCHEMA: SettingDef[] = [
 
   // Ticket attachment limits
   { key: 'ticket_attachment_max_mb', defaultValue: 100 },
+  { key: 'ticket_attachment_max_count', defaultValue: 5 },
   {
     key: 'ticket_attachment_types',
     defaultValue:
@@ -864,6 +872,7 @@ const NUMERIC_KEYS = new Set([
   'resource_cache_max_age_days',
   'download_token_ttl_minutes',
   'ticket_attachment_max_mb',
+  'ticket_attachment_max_count',
   'api_rate_limit',
   'backup_retention_count',
   'audit_log_retention_days',
@@ -891,6 +900,11 @@ const BOOLEAN_KEYS = new Set([
   'maintenance_enabled',
   'maintenance_auto_enabled',
   'smtp_secure',
+  'notify_email_ticket',
+  'notify_email_inquiry',
+  'notify_email_favorite',
+  'notify_email_model_conversion',
+  'notify_email_download',
   'auto_theme_enabled',
   'user_interface_theme_enabled',
   'ui_follow_browser_locale',
@@ -1103,6 +1117,17 @@ export function validateSettingValue(key: string, value: unknown): unknown {
     return normalizeTrimmedStringSetting(value, String(DEFAULTS[key] ?? ''));
   }
   if (NUMERIC_KEYS.has(key)) {
+    // 上传限制个体键在写入侧就夹取到与读取侧（normalizeUploadPolicy）相同的范围，
+    // 避免直存 API 造出「公开下发值与实际执行值」不一致的快照
+    const uploadLimitRanges: Record<string, [number, number]> = {
+      ticket_attachment_max_mb: [1, 100],
+      ticket_attachment_max_count: [1, 20],
+      product_wall_max_image_mb: [1, 50],
+      product_wall_max_batch_count: [1, 50],
+      product_wall_max_zip_extract: [1, 500],
+    };
+    const range = uploadLimitRanges[key];
+    if (range) return clampNumericSetting(key, value, range[0], range[1]);
     const n = Number(value);
     if (!Number.isFinite(n)) return DEFAULTS[key];
     return n;

@@ -63,6 +63,12 @@ export interface SystemSettings {
   smtp_pass: string;
   smtp_from: string;
   smtp_secure: boolean;
+  // 通知邮件全局开关（关闭后全站停发该类邮件；验证码类不受影响）
+  notify_email_ticket: boolean;
+  notify_email_inquiry: boolean;
+  notify_email_favorite: boolean;
+  notify_email_model_conversion: boolean;
+  notify_email_download: boolean;
   email_templates: string;
   interface_theme: string;
   mobile_interface_theme: string;
@@ -248,6 +254,7 @@ export interface SystemSettings {
   download_token_ttl_minutes: number;
   // Ticket attachment limits
   ticket_attachment_max_mb: number;
+  ticket_attachment_max_count: number;
   ticket_attachment_types: string;
   // API rate limiting
   api_rate_limit: number;

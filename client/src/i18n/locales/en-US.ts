@@ -1101,6 +1101,10 @@ export const enUS: { translation: TranslationMap } = {
       notifications: {
         email: 'Email',
         inApp: 'In-app',
+        hintAdmin:
+          'Admin notifications appear only in the in-app notification center, never by email; "Backup" is admin-only (backup health alerts)',
+        hintUser:
+          '"In-app" controls notification-center alerts; "Email" controls whether an email is also sent (if a type never arrives, the site may have it disabled)',
         preferences: 'Notification Preferences',
         refreshing: 'Refreshing notification settings',
         saved: 'Notification settings saved',

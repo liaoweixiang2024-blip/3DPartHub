@@ -52,6 +52,7 @@ function effectiveUploadPolicyJson(
   flat: {
     ticketMaxMb: unknown;
     ticketTypes: unknown;
+    ticketMaxCount: unknown;
     productWallImageMaxMb: unknown;
     productWallMaxFiles: unknown;
     productWallExtractMaxFiles: unknown;
@@ -76,6 +77,7 @@ function effectiveUploadPolicyJson(
     ),
     ticketAttachmentMaxSizeMb: policyNum(flat.ticketMaxMb, DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxSizeMb),
     ticketAttachmentExts: policyExts(flat.ticketTypes, DEFAULT_UPLOAD_POLICY.ticketAttachmentExts),
+    ticketAttachmentMaxCount: policyNum(flat.ticketMaxCount, DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxCount),
   });
 }
 
@@ -341,6 +343,7 @@ export function createSettingsPublicRouter() {
             upload_policy: effectiveUploadPolicyJson(all.upload_policy, {
               ticketMaxMb: all.ticket_attachment_max_mb,
               ticketTypes: all.ticket_attachment_types,
+              ticketMaxCount: all.ticket_attachment_max_count,
               productWallImageMaxMb: all.product_wall_max_image_mb,
               productWallMaxFiles: all.product_wall_max_batch_count,
               productWallExtractMaxFiles: all.product_wall_max_zip_extract,

@@ -108,6 +108,7 @@ export const DEFAULT_UPLOAD_POLICY_FOR_SETTINGS: UploadPolicy = {
   productWallUploadMaxFiles: 20,
   productWallArchiveExtractMaxFiles: 100,
   ticketAttachmentMaxSizeMb: 5,
+  ticketAttachmentMaxCount: 5,
   ticketAttachmentExts: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
 };
 

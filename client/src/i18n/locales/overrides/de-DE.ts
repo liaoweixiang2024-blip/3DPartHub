@@ -1716,6 +1716,10 @@ export const deDEMajorFormsTranslation: TranslationMap = {
     notifications: {
       email: 'E-Mail',
       inApp: 'In-App',
+      hintAdmin:
+        'Admin-Benachrichtigungen erscheinen nur im In-App-Zentrum, nie per E-Mail; „Backup" ist admin-exklusiv (Backup-Warnungen)',
+      hintUser:
+        '„In-App" steuert Benachrichtigungen im Zentrum; „E-Mail" ob zusätzlich eine Mail gesendet wird (kommt eine Art nie an, ist sie evtl. deaktiviert)',
       preferences: 'Benachrichtigungseinstellungen',
       refreshing: 'Benachrichtigungseinstellungen werden aktualisiert',
       saved: 'Benachrichtigungseinstellungen gespeichert',

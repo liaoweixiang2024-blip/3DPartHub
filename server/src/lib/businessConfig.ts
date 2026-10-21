@@ -51,6 +51,7 @@ export type UploadPolicy = {
   productWallArchiveExtractMaxFiles: number;
   ticketAttachmentMaxSizeMb: number;
   ticketAttachmentExts: string[];
+  ticketAttachmentMaxCount: number;
 };
 
 export const DEFAULT_INQUIRY_STATUSES: StatusConfig[] = [
@@ -170,6 +171,7 @@ export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
   productWallUploadMaxFiles: 20,
   productWallArchiveExtractMaxFiles: 100,
   ticketAttachmentMaxSizeMb: 5,
+  ticketAttachmentMaxCount: 5,
   ticketAttachmentExts: [
     '.jpg',
     '.jpeg',
@@ -281,6 +283,12 @@ export function normalizeUploadPolicy(policy: UploadPolicy): UploadPolicy {
       DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxSizeMb,
       1,
       100,
+    ),
+    ticketAttachmentMaxCount: clamp(
+      policy.ticketAttachmentMaxCount,
+      DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxCount,
+      1,
+      20,
     ),
     ticketAttachmentExts: Array.from(
       new Set(
@@ -433,6 +441,10 @@ export async function getBusinessConfig() {
       ticketAttachmentMaxSizeMb: numPolicyField(
         all.ticket_attachment_max_mb,
         DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxSizeMb,
+      ),
+      ticketAttachmentMaxCount: numPolicyField(
+        all.ticket_attachment_max_count,
+        DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxCount,
       ),
       ticketAttachmentExts: parseExtsField(all.ticket_attachment_types, DEFAULT_UPLOAD_POLICY.ticketAttachmentExts),
     }),

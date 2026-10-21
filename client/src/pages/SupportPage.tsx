@@ -44,10 +44,14 @@ function useContextState(): { basePart: string; ctx: SupportContext | null } {
 
 const DEFAULT_TICKET_CLASSIFICATION_KEYS = new Set(['dimension', 'material', 'novel', 'topology']);
 
-/** 创建工单可随表单携带的附件数（与服务端 TICKET_CREATE_ATTACHMENT_LIMIT 一致） */
+/** 创建工单可随表单携带的附件数上限来自后台「工单附件数量上限」设置（默认 5，与服务端一致） */
 const TICKET_CREATE_ATTACHMENT_LIMIT = 5;
 
-type TicketAttachmentPolicy = { ticketAttachmentExts: string[]; ticketAttachmentMaxSizeMb: number };
+type TicketAttachmentPolicy = {
+  ticketAttachmentExts: string[];
+  ticketAttachmentMaxSizeMb: number;
+  ticketAttachmentMaxCount?: number;
+};
 type ToastFn = (message: string, type?: 'success' | 'error' | 'info', durationMs?: number) => void;
 
 function formatFileSize(bytes: number): string {
@@ -61,6 +65,7 @@ function formatFileSize(bytes: number): string {
 function useTicketCreateAttachments(policy: TicketAttachmentPolicy, toast: ToastFn, t: TFunction) {
   const [files, setFiles] = useState<File[]>([]);
   const [dragActive, setDragActive] = useState(false);
+  const maxCount = Math.max(1, policy.ticketAttachmentMaxCount || TICKET_CREATE_ATTACHMENT_LIMIT);
 
   const addFiles = useCallback(
     (incoming: FileList | File[] | null | undefined) => {
@@ -91,8 +96,8 @@ function useTicketCreateAttachments(policy: TicketAttachmentPolicy, toast: Toast
       // 超限 toast 弹两次）；依赖 files 每次变化重建回调，组件无 memo 子组件消费无碍
       const merged = [...files];
       for (const file of accepted) {
-        if (merged.length >= TICKET_CREATE_ATTACHMENT_LIMIT) {
-          toast(t('support.attachmentLimit', { count: TICKET_CREATE_ATTACHMENT_LIMIT }), 'error');
+        if (merged.length >= maxCount) {
+          toast(t('support.attachmentLimit', { count: maxCount }), 'error');
           break;
         }
         if (merged.some((existing) => existing.name === file.name && existing.size === file.size)) continue;
@@ -100,7 +105,9 @@ function useTicketCreateAttachments(policy: TicketAttachmentPolicy, toast: Toast
       }
       setFiles(merged);
     },
-    [files, policy, t, toast],
+    // policy 整体入 deps：回调体内还引用其扩展名白名单/单文件大小，
+    // 只依赖派生值 maxCount 会在「count 不变、白名单/大小变了」时用旧值预检
+    [files, maxCount, policy, t, toast],
   );
 
   const removeFile = useCallback((index: number) => {
@@ -261,6 +268,7 @@ function DesktopContent() {
     t,
   );
   const acceptExts = business.uploadPolicy.ticketAttachmentExts.join(',');
+  const attachmentMaxCount = business.uploadPolicy.ticketAttachmentMaxCount || TICKET_CREATE_ATTACHMENT_LIMIT;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -477,7 +485,7 @@ function DesktopContent() {
                         <p className="mt-1.5 text-[11px] leading-relaxed text-on-surface-variant">
                           {t('support.attachmentHint', {
                             max: business.uploadPolicy.ticketAttachmentMaxSizeMb,
-                            count: TICKET_CREATE_ATTACHMENT_LIMIT,
+                            count: attachmentMaxCount,
                           })}
                         </p>
                         <AttachmentChips files={files} onRemove={removeFile} t={t} />
@@ -602,6 +610,7 @@ function MobileContent() {
     t,
   );
   const acceptExts = business.uploadPolicy.ticketAttachmentExts.join(',');
+  const attachmentMaxCount = business.uploadPolicy.ticketAttachmentMaxCount || TICKET_CREATE_ATTACHMENT_LIMIT;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -768,7 +777,7 @@ function MobileContent() {
               <p className="mt-1.5 text-center text-[10px] leading-relaxed text-on-surface-variant">
                 {t('support.attachmentHint', {
                   max: business.uploadPolicy.ticketAttachmentMaxSizeMb,
-                  count: TICKET_CREATE_ATTACHMENT_LIMIT,
+                  count: attachmentMaxCount,
                 })}
               </p>
               <AttachmentChips files={files} onRemove={removeFile} t={t} />

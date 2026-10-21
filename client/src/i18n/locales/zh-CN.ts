@@ -1093,6 +1093,9 @@ export const zhCN: { translation: TranslationMap } = {
       notifications: {
         email: '邮件',
         inApp: '站内',
+        hintAdmin: '管理员通知仅在站内通知中心显示，不发送邮件；「备份通知」是管理员专属（备份体检风险提醒）',
+        hintUser:
+          '「站内」控制通知中心提醒；「邮件」控制是否同时发邮件到邮箱（若长期未收到某类邮件，可能是站点未开启该类邮件）',
         preferences: '通知偏好',
         refreshing: '通知设置刷新中',
         saved: '通知设置已保存',

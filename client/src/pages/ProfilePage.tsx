@@ -86,7 +86,14 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
   const { t } = useTranslation();
   const { toast } = useToast();
   const user = useAuthStore((s) => s.user);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const showEmailPrefs = user?.role !== 'ADMIN';
+  // 备份体检通知只有管理员会收到（收件人是管理员），普通用户显示该项是永远收不到消息的死开关。
+  // auth 未水合时按完整列表渲染（管理员首帧不闪变「备份项」），水合后按角色定稿
+  const isAdmin = user?.role === 'ADMIN';
+  const visibleItems = hasHydrated
+    ? NOTIFICATION_ITEMS.filter((item) => item !== 'backup' || isAdmin)
+    : NOTIFICATION_ITEMS;
   const [prefs, setPrefs] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -142,7 +149,12 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
         </button>
         {expanded && (
           <div className="mt-3 space-y-3">
-            {NOTIFICATION_ITEMS.map((item) => (
+            {hasHydrated && (
+              <p className="text-[11px] leading-snug text-on-surface-variant/60">
+                {t(isAdmin ? 'profile.notifications.hintAdmin' : 'profile.notifications.hintUser')}
+              </p>
+            )}
+            {visibleItems.map((item) => (
               <div key={item} className="flex items-center justify-between gap-3 rounded-md py-1">
                 <div className="min-w-0">
                   <span className="text-sm text-on-surface">{t(`profile.notifications.items.${item}.label`)}</span>
@@ -199,7 +211,12 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
       </button>
       {expanded && (
         <div className="mt-5 space-y-4">
-          {NOTIFICATION_ITEMS.map((item) => (
+          {hasHydrated && (
+            <p className="text-xs leading-relaxed text-on-surface-variant/70">
+              {t(isAdmin ? 'profile.notifications.hintAdmin' : 'profile.notifications.hintUser')}
+            </p>
+          )}
+          {visibleItems.map((item) => (
             <div key={item} className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <span className="text-sm text-on-surface">{t(`profile.notifications.items.${item}.label`)}</span>

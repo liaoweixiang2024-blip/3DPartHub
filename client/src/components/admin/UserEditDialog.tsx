@@ -45,6 +45,9 @@ interface LoginItem {
   createdAt: string;
 }
 
+/** 操作/登录区块折叠态显示条数（数据侧仍取 30/5，展开后限高滚动） */
+const COLLAPSED_ROWS = 5;
+
 const ROLE_OPTIONS = [
   { value: 'ADMIN', labelKey: 'userAdmin.roleLabel.ADMIN' },
   { value: 'EDITOR', labelKey: 'userAdmin.roleLabel.EDITOR' },
@@ -134,6 +137,18 @@ export default function UserEditDialog({
     const res = await client.get(url);
     return unwrapResponse<{ items: AuditItem[]; logins: LoginItem[] }>(res);
   });
+
+  // 操作/登录区块默认各显示 COLLAPSED_ROWS 条，超出折叠（数据侧仍取 30/5），展开后限高滚动防撑爆弹窗
+  const [opsExpanded, setOpsExpanded] = useState(false);
+  const [loginsExpanded, setLoginsExpanded] = useState(false);
+  useEffect(() => {
+    setOpsExpanded(false);
+    setLoginsExpanded(false);
+  }, [user.id]);
+  const ops = audit?.items ?? [];
+  const logins = audit?.logins ?? [];
+  const visibleOps = opsExpanded ? ops : ops.slice(0, COLLAPSED_ROWS);
+  const visibleLogins = loginsExpanded ? logins : logins.slice(0, COLLAPSED_ROWS);
 
   // 切换用户时重置表单
   useEffect(() => {
@@ -427,27 +442,40 @@ export default function UserEditDialog({
               {t('userAdmin.edit.recentOps')}
             </div>
             <div className="space-y-1 rounded-md bg-surface-container-low px-2.5 py-2 text-xs">
-              {audit?.items?.length ? (
-                audit.items.map((a) => {
-                  const { label, role, self } = opLabelOf(a);
-                  return (
-                    <div key={a.id} className="flex items-center justify-between gap-2 text-on-surface-variant">
-                      <span className="truncate">
-                        {label}
-                        {role ? <span className="text-on-surface-variant/60">（{role}）</span> : null}
-                        {self ? (
-                          <span className="text-on-surface-variant/60"> · {t('userAdmin.edit.opSelf')}</span>
-                        ) : a.operatorName ? (
-                          <span className="text-on-surface-variant/60">
-                            {' '}
-                            · {t('userAdmin.edit.opBy', { name: a.operatorName })}
+              {ops.length ? (
+                <>
+                  <div className={`space-y-1 ${opsExpanded ? 'max-h-56 overflow-y-auto custom-scrollbar' : ''}`}>
+                    {visibleOps.map((a) => {
+                      const { label, role, self } = opLabelOf(a);
+                      return (
+                        <div key={a.id} className="flex items-center justify-between gap-2 text-on-surface-variant">
+                          <span className="truncate">
+                            {label}
+                            {role ? <span className="text-on-surface-variant/60">（{role}）</span> : null}
+                            {self ? (
+                              <span className="text-on-surface-variant/60"> · {t('userAdmin.edit.opSelf')}</span>
+                            ) : a.operatorName ? (
+                              <span className="text-on-surface-variant/60">
+                                {' '}
+                                · {t('userAdmin.edit.opBy', { name: a.operatorName })}
+                              </span>
+                            ) : null}
                           </span>
-                        ) : null}
-                      </span>
-                      <span className="shrink-0 text-on-surface-variant/60">{formatDate(a.createdAt)}</span>
-                    </div>
-                  );
-                })
+                          <span className="shrink-0 text-on-surface-variant/60">{formatDate(a.createdAt)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {ops.length > COLLAPSED_ROWS ? (
+                    <button
+                      type="button"
+                      onClick={() => setOpsExpanded((v) => !v)}
+                      className="w-full pt-0.5 text-left text-[11px] font-medium text-primary hover:underline"
+                    >
+                      {opsExpanded ? t('userAdmin.edit.showLess') : t('userAdmin.edit.showAll', { count: ops.length })}
+                    </button>
+                  ) : null}
+                </>
               ) : (
                 <p className="text-on-surface-variant/60">{t('userAdmin.edit.noRecords')}</p>
               )}
@@ -460,21 +488,36 @@ export default function UserEditDialog({
               {t('userAdmin.edit.recentLogins')}
             </div>
             <div className="space-y-1 rounded-md bg-surface-container-low px-2.5 py-2 text-xs">
-              {audit?.logins?.length ? (
-                audit.logins.map((l) => {
-                  const d = (l.details ?? {}) as { ip?: unknown; statusCode?: unknown };
-                  const ok = d.statusCode === 200;
-                  const ip = typeof d.ip === 'string' ? d.ip : '';
-                  return (
-                    <div key={l.id} className="flex items-center justify-between gap-2">
-                      <span className={`truncate ${ok ? 'text-on-surface-variant' : 'text-error'}`}>
-                        {ok ? t('userAdmin.edit.loginOk') : t('userAdmin.edit.loginFailed')}
-                        {ip ? <span className="text-on-surface-variant/60"> · IP {ip}</span> : null}
-                      </span>
-                      <span className="shrink-0 text-on-surface-variant/60">{formatDate(l.createdAt)}</span>
-                    </div>
-                  );
-                })
+              {logins.length ? (
+                <>
+                  <div className={`space-y-1 ${loginsExpanded ? 'max-h-56 overflow-y-auto custom-scrollbar' : ''}`}>
+                    {visibleLogins.map((l) => {
+                      const d = (l.details ?? {}) as { ip?: unknown; statusCode?: unknown };
+                      const ok = d.statusCode === 200;
+                      const ip = typeof d.ip === 'string' ? d.ip : '';
+                      return (
+                        <div key={l.id} className="flex items-center justify-between gap-2">
+                          <span className={`truncate ${ok ? 'text-on-surface-variant' : 'text-error'}`}>
+                            {ok ? t('userAdmin.edit.loginOk') : t('userAdmin.edit.loginFailed')}
+                            {ip ? <span className="text-on-surface-variant/60"> · IP {ip}</span> : null}
+                          </span>
+                          <span className="shrink-0 text-on-surface-variant/60">{formatDate(l.createdAt)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {logins.length > COLLAPSED_ROWS ? (
+                    <button
+                      type="button"
+                      onClick={() => setLoginsExpanded((v) => !v)}
+                      className="w-full pt-0.5 text-left text-[11px] font-medium text-primary hover:underline"
+                    >
+                      {loginsExpanded
+                        ? t('userAdmin.edit.showLess')
+                        : t('userAdmin.edit.showAll', { count: logins.length })}
+                    </button>
+                  ) : null}
+                </>
               ) : (
                 <p className="text-on-surface-variant/60">{t('userAdmin.edit.noRecords')}</p>
               )}

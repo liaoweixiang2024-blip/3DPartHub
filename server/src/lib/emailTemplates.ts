@@ -331,6 +331,10 @@ export function parseEmailTemplates(value: unknown): EmailTemplateMap {
     merged[key] = {
       ...fallback,
       ...item,
+      // label/description 是注册表元数据：历史快照曾把旧文案整包存进 JSON，允许覆盖
+      // 会让注册表改名永远被旧快照压住——始终以注册表为准（与 client 侧一致）
+      label: fallback.label,
+      description: fallback.description,
       html: withActionLinks(legacyHtml ? fallback.html : (item.html ?? fallback.html)),
       tokens: Array.from(new Set([...fallback.tokens, ...itemTokens])),
     };

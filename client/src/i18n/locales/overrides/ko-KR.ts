@@ -1680,6 +1680,10 @@ export const koKRMajorFormsTranslation: TranslationMap = {
     notifications: {
       email: '이메일',
       inApp: '앱 내',
+      hintAdmin:
+        '관리자 알림은 사내 알림 센터에만 표시되며 메일은 발송되지 않습니다. 「백업 알림」은 관리자 전용입니다',
+      hintUser:
+        '「사내」는 알림 센터 표시, 「메일」은 메일 발송 여부입니다 (오래 안 오면 사이트에서 비활성화되었을 수 있음)',
       preferences: '알림 환경설정',
       refreshing: '알림 설정 새로고침 중',
       saved: '알림 설정 저장됨',

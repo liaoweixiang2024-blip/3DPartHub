@@ -12,6 +12,11 @@ export function clampUploadMb(value: unknown, fallback: number, min = 1, max = M
   return Math.min(max, Math.max(min, Math.floor(n)));
 }
 
+/** 个数语义的夹取（附件数/文件数等）——与 clampUploadMb 同逻辑但命名如实，避免「用 MB 函数夹个数」的误导 */
+export function clampPolicyCount(value: unknown, fallback: number, min = 1, max = 500): number {
+  return clampUploadMb(value, fallback, min, max);
+}
+
 export function uploadMbToBytes(valueMb: number): number {
   return clampUploadMb(valueMb, 1) * 1024 * 1024;
 }
@@ -53,6 +58,11 @@ export function ticketAttachmentMaxBytes(uploadPolicy: UploadPolicy): number {
   return uploadMbToBytes(ticketAttachmentMaxSizeMb(uploadPolicy));
 }
 
+/** 创建工单/询价时单次可携带的附件个数上限（个体设置 ticket_attachment_max_count，默认 5）。 */
+export function ticketAttachmentMaxCount(uploadPolicy: UploadPolicy): number {
+  return clampPolicyCount(uploadPolicy.ticketAttachmentMaxCount, DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxCount, 1, 20);
+}
+
 export function ticketAttachmentExts(uploadPolicy: UploadPolicy): string[] {
   const exts = uploadPolicy.ticketAttachmentExts?.length
     ? uploadPolicy.ticketAttachmentExts
@@ -76,11 +86,16 @@ export function productImageMaxBytes(uploadPolicy: UploadPolicy): number {
 }
 
 export function productImageUploadMaxFiles(uploadPolicy: UploadPolicy): number {
-  return clampUploadMb(uploadPolicy.productWallUploadMaxFiles, DEFAULT_UPLOAD_POLICY.productWallUploadMaxFiles, 1, 50);
+  return clampPolicyCount(
+    uploadPolicy.productWallUploadMaxFiles,
+    DEFAULT_UPLOAD_POLICY.productWallUploadMaxFiles,
+    1,
+    50,
+  );
 }
 
 export function productArchiveExtractMaxFiles(uploadPolicy: UploadPolicy): number {
-  return clampUploadMb(
+  return clampPolicyCount(
     uploadPolicy.productWallArchiveExtractMaxFiles,
     DEFAULT_UPLOAD_POLICY.productWallArchiveExtractMaxFiles,
     1,

@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { sendTemplateEmail, type TemplateVars } from './email.js';
 import { logger } from './logger.js';
 import { prisma } from './prisma.js';
+import { getAllSettings } from './settings.js';
 
 const DEFAULT_IN_APP_NOTIFICATION_PREFS: Record<string, boolean> = {
   ticket: true,
@@ -151,6 +152,19 @@ export async function userWantsEmailNotification(userId: string, type: string): 
   }
 }
 
+/** 管理后台「通知邮件开关」：全站一键停发某类邮件（验证码类不经此层，不受影响）。
+ *  preferenceType → notify_email_<type>；SETTINGS_SCHEMA 默认 false（通知类邮件默认关），
+ *  仅在读设置异常时才回退视为开启。 */
+async function globalEmailEnabled(preferenceType: string): Promise<boolean> {
+  try {
+    const all = await getAllSettings();
+    const flag = all[`notify_email_${preferenceType}`];
+    return flag !== false;
+  } catch {
+    return true;
+  }
+}
+
 function sendEmailInBackground(params: {
   userId: string;
   toEmail: string;
@@ -183,10 +197,14 @@ export async function sendBusinessNotification(params: BusinessNotificationParam
     const shouldCreateInApp = wantsInAppNotification(prefs, preferenceType);
     // Admins work from the in-app notification center; avoid noisy operational email floods.
     const allowEmailForRecipient = user.role !== 'ADMIN' && params.audience !== 'admin';
+    // 两层开关：管理后台全局开关（notify_email_<type>）→ 收件人个人邮件偏好
     const shouldSendEmail = Boolean(
-      allowEmailForRecipient && params.emailTemplateKey && user.email && wantsEmailNotification(prefs, preferenceType),
+      allowEmailForRecipient &&
+      params.emailTemplateKey &&
+      user.email &&
+      (await globalEmailEnabled(preferenceType)) &&
+      wantsEmailNotification(prefs, preferenceType),
     );
-
     const notification = shouldCreateInApp
       ? await prisma.notification.create({
           data: {

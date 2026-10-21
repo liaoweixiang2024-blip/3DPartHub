@@ -9,6 +9,8 @@ export interface SelectMenuOption {
   label: ReactNode;
   /** 触发器与选项行左侧的小图标（Material 名） */
   icon?: string;
+  /** 分组标题项：不可选中，仅作弹层内的组分隔标题（value 需组内唯一，如 `heading:组名`） */
+  heading?: boolean;
 }
 
 interface SelectMenuProps {
@@ -147,6 +149,17 @@ export default function SelectMenu({
             >
               {options.map((option) => {
                 const active = option.value === value;
+                if (option.heading) {
+                  return (
+                    <li
+                      key={option.value}
+                      role="presentation"
+                      className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-on-surface-variant/60 first:pt-1"
+                    >
+                      {option.label}
+                    </li>
+                  );
+                }
                 return (
                   <li key={option.value || 'empty'} role="option" aria-selected={active}>
                     <button

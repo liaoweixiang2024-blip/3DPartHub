@@ -19,7 +19,12 @@ import {
   duplicateSince,
   lowQualitySubmissionReason,
 } from '../../lib/submissionGuards.js';
-import { ticketAttachmentExts, ticketAttachmentMaxBytes, ticketAttachmentMaxSizeMb } from '../../lib/uploadLimits.js';
+import {
+  ticketAttachmentExts,
+  ticketAttachmentMaxBytes,
+  ticketAttachmentMaxCount,
+  ticketAttachmentMaxSizeMb,
+} from '../../lib/uploadLimits.js';
 import { authMiddleware, getVerifiedRequestUser, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import {
@@ -92,34 +97,34 @@ function param(req: { params: Record<string, string | string[]> }, key: string):
 }
 
 /** 创建工单时随表单携带的附件（multipart files[]）。非 multipart 请求（既有 JSON
- *  调用方）直接放行；白名单/大小与消息附件同一套 uploadPolicy。 */
-const TICKET_CREATE_ATTACHMENT_LIMIT = 5;
-
+ *  调用方）直接放行；白名单/大小/数量与消息附件同一套 uploadPolicy。 */
 async function ticketCreateAttachmentsUpload(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const { uploadPolicy } = await getBusinessConfig();
     const maxMb = ticketAttachmentMaxSizeMb(uploadPolicy);
     const allowedExts = ticketAttachmentExts(uploadPolicy);
-    createTicketAttachmentUpload(ticketAttachmentMaxBytes(uploadPolicy), allowedExts).array(
-      'files',
-      TICKET_CREATE_ATTACHMENT_LIMIT,
-    )(req, res, (err) => {
-      if (!err) {
-        next();
-        return;
-      }
-      // multer 2.x 报错时自会回收已落盘文件（abortWithError → removeUploadedFiles）
-      const code = (err as { code?: string }).code;
-      if (code === 'LIMIT_FILE_SIZE') {
-        res.status(413).json({ detail: `附件不能超过 ${maxMb}MB` });
-        return;
-      }
-      if (code === 'LIMIT_UNEXPECTED_FILE' || code === 'LIMIT_FILE_COUNT') {
-        res.status(400).json({ detail: `附件最多 ${TICKET_CREATE_ATTACHMENT_LIMIT} 个` });
-        return;
-      }
-      res.status(400).json({ detail: err instanceof Error ? err.message : '附件校验失败' });
-    });
+    const maxCount = ticketAttachmentMaxCount(uploadPolicy);
+    createTicketAttachmentUpload(ticketAttachmentMaxBytes(uploadPolicy), allowedExts).array('files', maxCount)(
+      req,
+      res,
+      (err) => {
+        if (!err) {
+          next();
+          return;
+        }
+        // multer 2.x 报错时自会回收已落盘文件（abortWithError → removeUploadedFiles）
+        const code = (err as { code?: string }).code;
+        if (code === 'LIMIT_FILE_SIZE') {
+          res.status(413).json({ detail: `附件不能超过 ${maxMb}MB` });
+          return;
+        }
+        if (code === 'LIMIT_UNEXPECTED_FILE' || code === 'LIMIT_FILE_COUNT') {
+          res.status(400).json({ detail: `附件最多 ${maxCount} 个` });
+          return;
+        }
+        res.status(400).json({ detail: err instanceof Error ? err.message : '附件校验失败' });
+      },
+    );
   } catch (err) {
     next(err);
   }

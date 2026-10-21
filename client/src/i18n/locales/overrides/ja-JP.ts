@@ -1941,6 +1941,10 @@ export const jaJPMajorFormsTranslation: TranslationMap = {
     notifications: {
       email: 'メール',
       inApp: 'アプリ内',
+      hintAdmin:
+        '管理者宛の通知はサイト内の通知センターのみに表示され、メールは送信されません。「バックアップ通知」は管理者専用です',
+      hintUser:
+        '「站内」は通知センターの表示、「メール」はメール送信の可否です（届かない場合はサイト側で無効の可能性があります）',
       preferences: '通知設定',
       refreshing: '通知設定を更新中',
       saved: '通知設定を保存しました',

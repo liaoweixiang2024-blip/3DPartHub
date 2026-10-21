@@ -51,6 +51,7 @@ export interface UploadPolicy {
   productWallArchiveExtractMaxFiles: number;
   ticketAttachmentMaxSizeMb: number;
   ticketAttachmentExts: string[];
+  ticketAttachmentMaxCount: number;
 }
 
 export const DEFAULT_INQUIRY_STATUSES: StatusConfig[] = [
@@ -174,6 +175,7 @@ export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
   productWallUploadMaxFiles: 20,
   productWallArchiveExtractMaxFiles: 100,
   ticketAttachmentMaxSizeMb: 5,
+  ticketAttachmentMaxCount: 5,
   ticketAttachmentExts: [
     '.jpg',
     '.jpeg',
@@ -285,6 +287,12 @@ export function normalizeUploadPolicy(policy: UploadPolicy): UploadPolicy {
       DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxSizeMb,
       1,
       100,
+    ),
+    ticketAttachmentMaxCount: clamp(
+      policy.ticketAttachmentMaxCount,
+      DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxCount,
+      1,
+      20,
     ),
     ticketAttachmentExts: Array.from(
       new Set(
