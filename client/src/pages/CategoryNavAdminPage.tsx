@@ -6,6 +6,7 @@ import { getSettings, updateSettings, uploadImage } from '../api/settings';
 import { AdminContentPanel, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
+import SelectMenu from '../components/shared/SelectMenu';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
@@ -583,24 +584,22 @@ export default function CategoryNavAdminPage() {
                                             <Icon name="image" size={15} className="text-on-surface-variant/40" />
                                           )}
                                         </button>
-                                        <select
-                                          name="category-id"
+                                        <SelectMenu
+                                          variant="chip"
+                                          className="min-w-[140px] max-w-56 flex-1"
+                                          ariaLabel={t('categoryNav.admin.customOption')}
                                           value={it.categoryId ?? ''}
-                                          onChange={(e) =>
+                                          onChange={(value) =>
                                             patchItem(node.id, j, {
-                                              categoryId: e.target.value || null,
-                                              customName: e.target.value ? undefined : it.customName,
+                                              categoryId: value || null,
+                                              customName: value ? undefined : it.customName,
                                             })
                                           }
-                                          className="min-w-[140px] max-w-56 flex-1 rounded-md border border-outline-variant/20 bg-surface-container px-2 py-1 text-xs text-on-surface"
-                                        >
-                                          <option value="">{t('categoryNav.admin.customOption')}</option>
-                                          {options.map((opt) => (
-                                            <option key={opt.id} value={opt.id}>
-                                              {opt.label}
-                                            </option>
-                                          ))}
-                                        </select>
+                                          options={[
+                                            { value: '', label: t('categoryNav.admin.customOption') },
+                                            ...options.map((opt) => ({ value: opt.id, label: opt.label })),
+                                          ]}
+                                        />
                                         <input
                                           name="custom-name"
                                           value={it.customName ?? ''}

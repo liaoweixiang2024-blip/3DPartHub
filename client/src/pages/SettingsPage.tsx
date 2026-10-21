@@ -79,6 +79,7 @@ import { AdminPageShell } from '../components/shared/AdminPageShell';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import { AppSwitch } from '../components/shared/FormControls';
 import Icon from '../components/shared/Icon';
+import SelectMenu from '../components/shared/SelectMenu';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SafeImage from '../components/shared/SafeImage';
@@ -3676,24 +3677,16 @@ function NavItemsEditor({
             </label>
             <label className="space-y-0.5 xl:hidden">
               <span className="text-[10px] text-on-surface-variant">{t('adminSettings.fieldPagePath')}</span>
-              <select
-                name="path"
+              <SelectMenu
+                variant="field"
+                ariaLabel={t('adminSettings.fieldPagePath')}
                 value={item.path}
-                onChange={(e) => patch(index, { path: e.target.value })}
-                className={`${inputClass} truncate`}
-              >
-                {!isPreset && (
-                  <option value={item.path}>
-                    {item.path}
-                    {t('adminSettings.customSuffix')}
-                  </option>
-                )}
-                {presets.map((p) => (
-                  <option key={p.path} value={p.path}>
-                    {t(p.label, { defaultValue: p.label })}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => patch(index, { path: value })}
+                options={[
+                  ...(!isPreset ? [{ value: item.path, label: `${item.path}${t('adminSettings.customSuffix')}` }] : []),
+                  ...presets.map((p) => ({ value: p.path, label: t(p.label, { defaultValue: p.label }) })),
+                ]}
+              />
             </label>
             {/* Desktop inline */}
             <input
@@ -3707,24 +3700,17 @@ function NavItemsEditor({
               <IconPicker value={item.icon} onChange={(v) => patch(index, { icon: v })} />
             </div>
             <div className="hidden xl:flex items-center gap-2">
-              <select
-                name="path"
+              <SelectMenu
+                variant="field"
+                className="flex-1"
+                ariaLabel={t('adminSettings.fieldPagePath')}
                 value={item.path}
-                onChange={(e) => patch(index, { path: e.target.value })}
-                className={`${inputClass} truncate flex-1`}
-              >
-                {!isPreset && (
-                  <option value={item.path}>
-                    {item.path}
-                    {t('adminSettings.customSuffix')}
-                  </option>
-                )}
-                {presets.map((p) => (
-                  <option key={p.path} value={p.path}>
-                    {t(p.label, { defaultValue: p.label })}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => patch(index, { path: value })}
+                options={[
+                  ...(!isPreset ? [{ value: item.path, label: `${item.path}${t('adminSettings.customSuffix')}` }] : []),
+                  ...presets.map((p) => ({ value: p.path, label: t(p.label, { defaultValue: p.label }) })),
+                ]}
+              />
               <span
                 title={adminOnly ? t('adminSettings.visibleAdminOnly') : t('adminSettings.visibleAllUsers')}
                 className={`inline-flex items-center gap-0.5 text-[10px] font-medium whitespace-nowrap ${adminOnly ? 'text-amber-600' : 'text-green-600'}`}
@@ -6748,18 +6734,17 @@ function Content() {
                                         {t('adminSettings.choosePresetDesc')}
                                       </p>
                                     </div>
-                                    <select
-                                      name="mat-preset-edit"
+                                    <SelectMenu
+                                      variant="field"
+                                      className="lg:max-w-sm"
+                                      ariaLabel={t('adminSettings.materialPreset')}
                                       value={matPresetEdit}
-                                      onChange={(e) => setMatPresetEdit(e.target.value as MaterialPresetKey)}
-                                      className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
-                                    >
-                                      {MAT_PRESET_OPTIONS.map((opt) => (
-                                        <option key={opt.value} value={opt.value}>
-                                          {t(opt.label, { defaultValue: opt.label })}
-                                        </option>
-                                      ))}
-                                    </select>
+                                      onChange={(value) => setMatPresetEdit(value as MaterialPresetKey)}
+                                      options={MAT_PRESET_OPTIONS.map((opt) => ({
+                                        value: opt.value,
+                                        label: t(opt.label, { defaultValue: opt.label }),
+                                      }))}
+                                    />
                                   </div>
                                   {MAT_PRESET_FIELDS[matPresetEdit].map((field) => {
                                     const val = settings[field.key];
@@ -7131,18 +7116,17 @@ function Content() {
                                                   />
                                                 </div>
                                               ) : item.type === 'select' ? (
-                                                <select
-                                                  name="settings"
-                                                  value={settings[item.key] as string}
-                                                  onChange={(e) => updateSetting(item.key, e.target.value)}
-                                                  className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
-                                                >
-                                                  {item.options?.map((opt) => (
-                                                    <option key={opt.value} value={opt.value}>
-                                                      {t(opt.label, { defaultValue: opt.label })}
-                                                    </option>
-                                                  ))}
-                                                </select>
+                                                <SelectMenu
+                                                  variant="field"
+                                                  className="lg:max-w-sm"
+                                                  ariaLabel={t(item.label, { defaultValue: item.label })}
+                                                  value={(settings[item.key] as string) ?? ''}
+                                                  onChange={(value) => updateSetting(item.key, value)}
+                                                  options={(item.options ?? []).map((opt) => ({
+                                                    value: opt.value,
+                                                    label: t(opt.label, { defaultValue: opt.label }),
+                                                  }))}
+                                                />
                                               ) : item.type === 'color' ? (
                                                 <div className="flex items-center gap-2 w-full lg:max-w-sm lg:justify-self-start">
                                                   {settings[item.key] && (
@@ -7494,18 +7478,17 @@ function Content() {
                                             )}
                                           </div>
                                         ) : item.type === 'select' ? (
-                                          <select
-                                            name="settings"
-                                            value={settings[item.key] as string}
-                                            onChange={(e) => updateSetting(item.key, e.target.value)}
-                                            className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
-                                          >
-                                            {item.options?.map((opt) => (
-                                              <option key={opt.value} value={opt.value}>
-                                                {t(opt.label, { defaultValue: opt.label })}
-                                              </option>
-                                            ))}
-                                          </select>
+                                          <SelectMenu
+                                            variant="field"
+                                            className="lg:max-w-sm"
+                                            ariaLabel={t(item.label, { defaultValue: item.label })}
+                                            value={(settings[item.key] as string) ?? ''}
+                                            onChange={(value) => updateSetting(item.key, value)}
+                                            options={(item.options ?? []).map((opt) => ({
+                                              value: opt.value,
+                                              label: t(opt.label, { defaultValue: opt.label }),
+                                            }))}
+                                          />
                                         ) : item.type === 'color' ? (
                                           <div className="flex items-center gap-2 w-full lg:max-w-sm lg:justify-self-start">
                                             {settings[item.key] && (

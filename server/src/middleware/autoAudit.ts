@@ -31,11 +31,25 @@ const ACTION_MAP: Record<string, string> = {
   DELETE: 'delete',
 };
 
+// 用户自助操作路由（操作者即当事人）：绑定 resourceId 到用户 id，
+// 用户编辑弹窗「最近管理操作」因此能展示用户自己的改资料/改密/换绑邮箱。
+// 验证码发送（change-email/code）属高频噪声，不纳入
+const SELF_SERVICE_PATHS = new Set(['/api/auth/profile', '/api/auth/password', '/api/auth/change-email']);
+
 // Map URL patterns to resource names
 function extractResource(path: string): string {
   if (path.includes('/models')) return 'model';
   if (path.includes('/auth/login')) return 'auth';
   if (path.includes('/auth/register')) return 'auth';
+  if (path.includes('/auth/logout')) return 'auth';
+  // 用户自助操作归入 user 资源（历史行曾是 other，弹窗查询按路径兜底兼容）
+  if (SELF_SERVICE_PATHS.has(path.split('?')[0] as string)) return 'user';
+  // 选型（含后台 /api/admin/selections 与分享 /api/selection-shares）、图片墙、邀请码、
+  // 批量上传（产物是模型）：此前全落 other，日志页只见「其他/创建」无从分辨
+  if (path.includes('/selections') || path.includes('/selection-shares')) return 'selection';
+  if (path.includes('/product-wall')) return 'product_wall';
+  if (path.includes('/invites')) return 'invite';
+  if (path.includes('/batch/upload')) return 'model';
   if (path.includes('/users')) return 'user';
   if (path.includes('/categories')) return 'category';
   if (path.includes('/comments')) return 'comment';
@@ -55,8 +69,10 @@ function extractResource(path: string): string {
 function refineAction(method: string, path: string): string {
   if (path.includes('/upload') || path.includes('/reconvert')) return 'upload';
   if (path.includes('/login')) return 'login';
+  if (path.includes('/logout')) return 'logout';
   if (path.includes('/register')) return 'register';
   if (path.includes('/download')) return 'download';
+  if (path.includes('/selections/export')) return 'download';
   if (path.includes('/favorite') && method === 'POST') return 'favorite';
   if (path.includes('/favorite') && method === 'DELETE') return 'unfavorite';
   if (path.includes('/comment')) return 'comment';
@@ -106,7 +122,16 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
         const userId = authReq.user?.userId || null;
         const params = req.params || {};
         const body = req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>) : null;
+        const pathOnly = path.split('?')[0] as string;
+        // 路由显式指定（如管理员创建用户：autoAudit 推不出新用户 id，路由把
+        // 创建结果挂 res.locals.auditResourceId，finish 后这里读得到）
+        const explicitIdRaw = (_res as { locals?: Record<string, unknown> }).locals?.auditResourceId;
+        const explicitId = typeof explicitIdRaw === 'string' && explicitIdRaw ? explicitIdRaw : null;
+        // 用户自助操作：操作者即当事人，resourceId 绑到用户 id（resource 保持 auth，
+        // 不扰乱审计日志页的资源筛选；弹窗查询侧同时匹配两种 resource）
+        const selfId = SELF_SERVICE_PATHS.has(pathOnly) ? (authReq.user?.userId ?? null) : null;
         const resourceId =
+          explicitId ||
           params.id ||
           params.modelId ||
           params.catId ||
@@ -116,6 +141,7 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
           params.commentId ||
           params.userId ||
           params.slug ||
+          selfId ||
           (typeof body?.id === 'string' || typeof body?.id === 'number' ? String(body.id) : null) ||
           (typeof body?.modelId === 'string' ? body.modelId : null) ||
           null;
@@ -150,7 +176,9 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
           ]) {
             const value = body[key];
             if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-              safeFields[key] = value;
+              // 邮箱归一小写：登录行靠 details.body.email 关联到用户（用户编辑弹窗
+              // 「最近登录」按库内小写邮箱匹配），大小写不一致会漏
+              safeFields[key] = key === 'email' && typeof value === 'string' ? value.trim().toLowerCase() : value;
             }
           }
           if (Object.keys(safeFields).length > 0) {

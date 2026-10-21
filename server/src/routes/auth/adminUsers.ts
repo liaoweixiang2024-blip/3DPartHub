@@ -260,13 +260,56 @@ export function createAdminUsersRouter() {
         return;
       }
       try {
-        const logs = await prisma.auditLog.findMany({
-          where: { resource: 'user', resourceId: userId },
-          orderBy: { createdAt: 'desc' },
-          take: 30,
-          select: { id: true, action: true, details: true, createdAt: true, userId: true },
+        const target = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+        if (!target) {
+          res.status(404).json({ detail: '用户不存在' });
+          return;
+        }
+        const [logs, logins] = await Promise.all([
+          prisma.auditLog.findMany({
+            where: {
+              OR: [
+                // 管理员对该用户的操作（含创建：路由显式挂 auditResourceId）；
+                // 用户自助操作（改资料/改密/换绑邮箱）也归 user 资源并绑定 resourceId
+                { resource: 'user', resourceId: userId },
+                // 历史自助行（resource 曾归 other 且未绑 resourceId）：操作者=本人，按路径兜底
+                { userId, details: { path: ['path'], equals: '/api/auth/profile' } },
+                { userId, details: { path: ['path'], equals: '/api/auth/password' } },
+                { userId, details: { path: ['path'], equals: '/api/auth/change-email' } },
+              ],
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 30,
+            select: { id: true, action: true, details: true, createdAt: true, userId: true },
+          }),
+          // 登录尝试（含失败，statusCode 401）：登录发生时尚未认证，行上没有用户 id，
+          // 靠 details.body.email 关联（成功登录的邮箱与库内一致；登录路由大小写归一，
+          // 大小写不一致的失败尝试不在此列，走审计日志页看全量）。JSON 路径过滤无索引，
+          // 登录行数千级扫描毫秒级，弹窗按需查询可接受
+          prisma.auditLog.findMany({
+            where: {
+              resource: 'auth',
+              action: 'login',
+              details: { path: ['body', 'email'], equals: target.email },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 5,
+            select: { id: true, details: true, createdAt: true },
+          }),
+        ]);
+        // 操作人用户名（audit.userId 是执行管理员的 id）：弹窗「最近管理操作」显示谁操作的
+        const operatorIds = [...new Set(logs.map((log) => log.userId).filter((v): v is string => Boolean(v)))];
+        const operators = operatorIds.length
+          ? await prisma.user.findMany({ where: { id: { in: operatorIds } }, select: { id: true, username: true } })
+          : [];
+        const operatorNameById = new Map(operators.map((operator) => [operator.id, operator.username]));
+        res.json({
+          items: logs.map((log) => ({
+            ...log,
+            operatorName: log.userId ? (operatorNameById.get(log.userId) ?? null) : null,
+          })),
+          logins,
         });
-        res.json({ items: logs });
       } catch {
         res.status(500).json({ detail: '获取审计记录失败' });
       }
@@ -533,6 +576,9 @@ export function createAdminUsersRouter() {
         select: userListItemSelect,
       });
       await invalidateUserStatsCache();
+      // autoAudit 从路由参数推不出新建用户的 id（POST /api/admin/users 无 :id），
+      // 显式挂给审计中间件，让被创建用户的编辑弹窗能看到「创建用户」记录
+      res.locals.auditResourceId = created.id;
       res.status(201).json(created);
     } catch {
       res.status(500).json({ detail: '创建用户失败' });

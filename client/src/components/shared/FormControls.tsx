@@ -89,6 +89,8 @@ export const AppTextInput = forwardRef<HTMLInputElement, AppTextInputProps>(func
   );
 });
 
+/** 主题契约要求保留的共享输入原语（当前页面侧下拉已统一迁移 SelectMenu；
+    保留导出避免破坏 FormControls 原语清单契约） */
 interface AppSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   error?: boolean;
   fieldSize?: AppFieldSize;

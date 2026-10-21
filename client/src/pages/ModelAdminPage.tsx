@@ -24,6 +24,7 @@ import { AdminLoadingState, AdminManagementPage } from '../components/shared/Adm
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
+import SelectMenu from '../components/shared/SelectMenu';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import ResponsiveSectionTabs, { type ResponsiveSectionTab } from '../components/shared/ResponsiveSectionTabs';
@@ -3406,19 +3407,16 @@ function MobileContent() {
       >
         {activeTab === 'models' && (
           <div className="grid gap-2">
-            <select
-              name="category-filter"
+            <SelectMenu
+              variant="toolbar"
+              ariaLabel={t('modelAdminPage.allCategories')}
               value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="h-10 rounded-sm border border-outline-variant/30 bg-surface-container-high px-3 text-sm text-on-surface outline-none"
-            >
-              <option value={CATEGORY_FILTER_ALL}>{t('modelAdminPage.allCategories')}</option>
-              {categoryOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              onChange={setCategoryFilter}
+              options={[
+                { value: CATEGORY_FILTER_ALL, label: t('modelAdminPage.allCategories') },
+                ...categoryOptions.map((option) => ({ value: option.id, label: option.label })),
+              ]}
+            />
             <AdminSearchField
               inputProps={searchInputProps}
               value={searchInputValue}

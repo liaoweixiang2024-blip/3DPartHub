@@ -9,7 +9,8 @@ import {
   type InquirySalesAssignmentParams,
 } from '../../api/inquiries';
 import { AdminButton, AdminIconButton } from '../shared/AdminControls';
-import { APP_FIELD_LABEL_CLASS, AppSelect, AppTextArea, AppTextInput } from '../shared/FormControls';
+import { APP_FIELD_LABEL_CLASS, AppTextArea, AppTextInput } from '../shared/FormControls';
+import SelectMenu from '../shared/SelectMenu';
 import Icon from '../shared/Icon';
 import { useToast } from '../shared/Toast';
 
@@ -182,24 +183,28 @@ export default function InquirySalesAssignmentDialog({
             <div className="space-y-3">
               <label className="block">
                 <span className={APP_FIELD_LABEL_CLASS}>{t('inquiryAdminPage.labelAssignee')}</span>
-                <AppSelect
+                <SelectMenu
+                  variant="field"
                   value={assigneeId}
-                  onChange={(event) => setAssigneeId(event.target.value)}
+                  onChange={setAssigneeId}
                   disabled={isLoading}
-                >
-                  <option value="">
-                    {mode === 'manual'
-                      ? t('inquiryAdminPage.selectPlaceholderManual')
-                      : t('inquiryAdminPage.selectPlaceholderAuto')}
-                  </option>
-                  {candidates.map((candidate) => (
-                    <option key={candidate.id} value={candidate.id}>
-                      {candidate.username}
-                      {candidate.department ? ` / ${candidate.department}` : ''}
-                      {candidate.role ? ` / ${candidate.role}` : ''}
-                    </option>
-                  ))}
-                </AppSelect>
+                  ariaLabel={t('inquiryAdminPage.labelAssignee')}
+                  options={[
+                    {
+                      value: '',
+                      label:
+                        mode === 'manual'
+                          ? t('inquiryAdminPage.selectPlaceholderManual')
+                          : t('inquiryAdminPage.selectPlaceholderAuto'),
+                    },
+                    ...candidates.map((candidate) => ({
+                      value: candidate.id,
+                      label: `${candidate.username}${candidate.department ? ` / ${candidate.department}` : ''}${
+                        candidate.role ? ` / ${candidate.role}` : ''
+                      }`,
+                    })),
+                  ]}
+                />
               </label>
 
               <div className="grid gap-3 md:grid-cols-2">
@@ -216,17 +221,20 @@ export default function InquirySalesAssignmentDialog({
                 </label>
                 <label className="block">
                   <span className={APP_FIELD_LABEL_CLASS}>{t('inquiryAdminPage.labelChannel')}</span>
-                  <AppSelect
+                  <SelectMenu
+                    variant="field"
                     value={channel}
-                    onChange={(event) => {
-                      const next = event.target.value as 'online' | 'offline';
+                    ariaLabel={t('inquiryAdminPage.labelChannel')}
+                    onChange={(value) => {
+                      const next = value as 'online' | 'offline';
                       setChannel(next);
                       if (mode === 'channel') setHandoffNote(modeTemplate(t, mode, next, region));
                     }}
-                  >
-                    <option value="offline">{t('inquiryAdminPage.channelOffline')}</option>
-                    <option value="online">{t('inquiryAdminPage.channelOnline')}</option>
-                  </AppSelect>
+                    options={[
+                      { value: 'offline', label: t('inquiryAdminPage.channelOffline') },
+                      { value: 'online', label: t('inquiryAdminPage.channelOnline') },
+                    ]}
+                  />
                 </label>
               </div>
 

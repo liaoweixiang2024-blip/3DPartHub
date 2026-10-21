@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { AnnouncementBanner, SkeletonCard, SkeletonListCard } from '../../../../components/home/HomeDesktopShared';
 import Icon from '../../../../components/shared/Icon';
+import SelectMenu from '../../../../components/shared/SelectMenu';
 import InfiniteLoadTrigger from '../../../../components/shared/InfiniteLoadTrigger';
 import { PageTitle } from '../../../../components/shared/PagePrimitives';
 import Pagination from '../../../../components/shared/Pagination';
@@ -108,23 +109,16 @@ export default function ClassicHomeDesktop({
             </div>
           </div>
           <div className="home-toolbar-actions flex items-center gap-3">
-            <div className="relative">
-              <select
-                id="home-sort-select"
-                aria-label={t('home.sortLabel')}
-                value={sortBy}
-                onChange={(event) => onSortChange(event.target.value)}
-                className="bg-surface-container-lowest text-sm text-on-surface rounded-sm pl-3 pr-8 py-1 border border-outline-variant/30 outline-none appearance-none cursor-pointer"
-              >
-                <option value="created_at">{t('home.sortLatest')}</option>
-                <option value="name">{t('home.sortName')}</option>
-              </select>
-              <Icon
-                name="expand_more"
-                size={12}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none"
-              />
-            </div>
+            <SelectMenu
+              variant="chip"
+              ariaLabel={t('home.sortLabel')}
+              value={sortBy}
+              onChange={onSortChange}
+              options={[
+                { value: 'created_at', label: t('home.sortLatest') },
+                { value: 'name', label: t('home.sortName') },
+              ]}
+            />
             <div className="flex rounded-sm border border-outline-variant/30 overflow-hidden">
               <button
                 onClick={() => onViewModeChange('grid')}

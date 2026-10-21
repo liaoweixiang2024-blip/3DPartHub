@@ -15,6 +15,7 @@ import { AdminEmptyState, AdminManagementPage } from '../components/shared/Admin
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
+import SelectMenu from '../components/shared/SelectMenu';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -299,18 +300,12 @@ export default function NotificationsPage() {
           </button>
         ))}
       </div>
-      <select
-        name="type-filter"
+      <SelectMenu
+        variant="chip"
         value={typeFilter}
-        onChange={(e) => changeFilter({ type: e.target.value })}
-        className="rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-1.5 text-xs text-on-surface outline-none focus:border-primary"
-      >
-        {TYPE_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {t(opt.labelKey)}
-          </option>
-        ))}
-      </select>
+        onChange={(value) => changeFilter({ type: value })}
+        options={TYPE_OPTIONS.map((opt) => ({ value: opt.value, label: t(opt.labelKey) }))}
+      />
     </div>
   );
 

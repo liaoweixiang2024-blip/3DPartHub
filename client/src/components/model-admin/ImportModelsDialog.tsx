@@ -7,6 +7,7 @@ import { categoriesApi } from '../../api/categories';
 import { modelApi } from '../../api/models';
 import { dialogPanelMotion } from '../../lib/motion';
 import Icon from '../shared/Icon';
+import SelectMenu from '../shared/SelectMenu';
 import { useToast } from '../shared/Toast';
 import { formatSize } from './shared';
 
@@ -208,20 +209,18 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                 </p>
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-on-surface-variant">{t('modelAdminComp.unifyCategory')}</span>
-                  <select
-                    name="select"
-                    onChange={(e) => setAllCategories(e.target.value === '__none' ? null : e.target.value || null)}
+                  <SelectMenu
+                    variant="chip"
+                    className="max-w-[200px]"
+                    ariaLabel={t('modelAdminComp.unifyCategory')}
                     value=""
-                    className="max-w-[200px] rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-2 py-1 text-xs text-on-surface"
-                  >
-                    <option value="">{t('modelAdminComp.selectCategoryPlaceholder')}</option>
-                    <option value="__none">{t('modelAdminComp.noCategory')}</option>
-                    {flatCategories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => setAllCategories(value === '__none' ? null : value || null)}
+                    options={[
+                      { value: '', label: t('modelAdminComp.selectCategoryPlaceholder') },
+                      { value: '__none', label: t('modelAdminComp.noCategory') },
+                      ...flatCategories.map((c) => ({ value: c.id, label: c.label })),
+                    ]}
+                  />
                 </div>
               </div>
               <div className="mt-3 max-h-[46dvh] overflow-y-auto rounded-sm border border-outline-variant/10">
@@ -248,22 +247,18 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
                             {t('modelAdminComp.matched')}
                           </span>
                         )}
-                        <select
-                          name="value"
+                        <SelectMenu
+                          variant="chip"
+                          className="max-w-[220px]"
+                          ariaLabel={t('modelAdminComp.noCategory')}
                           value={value || ''}
-                          onChange={(e) =>
-                            setCategoryByIndex((prev) => new Map(prev).set(m.index, e.target.value || null))
-                          }
+                          onChange={(next) => setCategoryByIndex((prev) => new Map(prev).set(m.index, next || null))}
                           disabled={importing}
-                          className="max-w-[220px] rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface"
-                        >
-                          <option value="">{t('modelAdminComp.noCategory')}</option>
-                          {flatCategories.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.label}
-                            </option>
-                          ))}
-                        </select>
+                          options={[
+                            { value: '', label: t('modelAdminComp.noCategory') },
+                            ...flatCategories.map((c) => ({ value: c.id, label: c.label })),
+                          ]}
+                        />
                       </div>
                     </div>
                   );

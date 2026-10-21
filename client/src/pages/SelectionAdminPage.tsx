@@ -81,6 +81,7 @@ import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SafeImage from '../components/shared/SafeImage';
+import SelectMenu from '../components/shared/SelectMenu';
 import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -2599,14 +2600,14 @@ function Content() {
               </div>
               <div>
                 <label className="text-xs text-on-surface-variant mb-1 block">{t('selectionAdmin.labelGroup')}</label>
-                <select
-                  name="select"
+                <SelectMenu
+                  variant="field"
+                  ariaLabel={t('selectionAdmin.labelGroup')}
                   value={(() => {
                     const editCatObj = editCat ? categories.find((c) => c.id === editCat.id) : null;
                     return editCatObj?.groupId || '';
                   })()}
-                  onChange={async (e) => {
-                    const gid = e.target.value;
+                  onChange={async (gid) => {
                     if (!gid) {
                       if (editCat)
                         await updateCategory(editCat.id, {
@@ -2632,21 +2633,17 @@ function Content() {
                       mutateCats();
                     }
                   }}
-                  className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-                >
-                  <option value="">{t('selectionAdmin.noGroup')}</option>
-                  {(() => {
+                  options={(() => {
                     const groupMap = new Map<string, string>();
                     for (const c of categories) {
                       if (c.groupId && c.groupName && !groupMap.has(c.groupId)) groupMap.set(c.groupId, c.groupName);
                     }
-                    return Array.from(groupMap.entries()).map(([id, name]) => (
-                      <option key={id} value={id}>
-                        {name}
-                      </option>
-                    ));
+                    return [
+                      { value: '', label: t('selectionAdmin.noGroup') },
+                      ...Array.from(groupMap.entries()).map(([id, name]) => ({ value: id, label: name })),
+                    ];
                   })()}
-                </select>
+                />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>

@@ -7,6 +7,7 @@ import { getBusinessConfig } from '../../lib/businessConfig';
 import { bottomSheetMotion, dialogPanelMotion } from '../../lib/motion';
 import DialogOverlay from '../shared/DialogOverlay';
 import Icon from '../shared/Icon';
+import SelectMenu from '../shared/SelectMenu';
 import {
   errorMessage,
   formatFileSize,
@@ -330,19 +331,14 @@ export function ProductWallUploadModal({
       <span className="mb-1.5 block text-xs uppercase tracking-wider text-on-surface-variant">
         {t('productWall.uploadModal.kindLabel')}
       </span>
-      <select
-        name="resolved-kind"
+      <SelectMenu
+        variant="field"
+        ariaLabel={t('productWall.uploadModal.kindLabel')}
         value={resolvedKind}
-        onChange={(event) => setKind(event.target.value)}
+        onChange={setKind}
         disabled={uploading}
-        className="h-10 w-full rounded-md border border-outline-variant/24 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none transition-colors focus:border-primary-container"
-      >
-        {categories.map((name) => (
-          <option key={name} value={name}>
-            {name}
-          </option>
-        ))}
-      </select>
+        options={categories.map((name) => ({ value: name, label: name }))}
+      />
     </label>
   );
 

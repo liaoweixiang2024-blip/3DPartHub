@@ -1,7 +1,8 @@
 import { areaList } from '@vant/area-data';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AppSelect, AppTextInput, type AppFieldSize } from './FormControls';
+import SelectMenu from './SelectMenu';
+import { AppTextInput, type AppFieldSize } from './FormControls';
 
 interface RegionSelectProps {
   /** 省市区齐全时回调「省+市+区 [+ 详细地址]」拼接字符串；地区未选齐回调空串 */
@@ -101,60 +102,51 @@ export default function RegionSelect({
   return (
     <div className={className}>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <AppSelect
-          fieldSize={fieldSize}
+        <SelectMenu
+          variant="field"
           value={provinceCode}
           disabled={disabled}
-          onChange={(e) => {
-            const p = e.target.value;
+          ariaLabel={t('netMisc.regionProvince')}
+          onChange={(p) => {
             setProvinceCode(p);
             setCityCode('');
             setCountyCode('');
             emit(p, '', '', detail);
           }}
-        >
-          <option value="">{t('netMisc.regionProvince')}</option>
-          {provinces.map(([code, name]) => (
-            <option key={code} value={code}>
-              {name}
-            </option>
-          ))}
-        </AppSelect>
-        <AppSelect
-          fieldSize={fieldSize}
+          options={[
+            { value: '', label: t('netMisc.regionProvince') },
+            ...provinces.map(([code, name]) => ({ value: code, label: name })),
+          ]}
+        />
+        <SelectMenu
+          variant="field"
           value={cityCode}
           disabled={disabled || !provinceCode}
-          onChange={(e) => {
-            const c = e.target.value;
+          ariaLabel={t('netMisc.regionCity')}
+          onChange={(c) => {
             setCityCode(c);
             setCountyCode('');
             emit(provinceCode, c, '', detail);
           }}
-        >
-          <option value="">{t('netMisc.regionCity')}</option>
-          {cities.map(([code, name]) => (
-            <option key={code} value={code}>
-              {name}
-            </option>
-          ))}
-        </AppSelect>
-        <AppSelect
-          fieldSize={fieldSize}
+          options={[
+            { value: '', label: t('netMisc.regionCity') },
+            ...cities.map(([code, name]) => ({ value: code, label: name })),
+          ]}
+        />
+        <SelectMenu
+          variant="field"
           value={countyCode}
           disabled={disabled || !cityCode}
-          onChange={(e) => {
-            const ct = e.target.value;
+          ariaLabel={t('netMisc.regionCounty')}
+          onChange={(ct) => {
             setCountyCode(ct);
             emit(provinceCode, cityCode, ct, detail);
           }}
-        >
-          <option value="">{t('netMisc.regionDistrict')}</option>
-          {counties.map(([code, name]) => (
-            <option key={code} value={code}>
-              {name}
-            </option>
-          ))}
-        </AppSelect>
+          options={[
+            { value: '', label: t('netMisc.regionDistrict') },
+            ...counties.map(([code, name]) => ({ value: code, label: name })),
+          ]}
+        />
       </div>
       <AppTextInput
         type="text"

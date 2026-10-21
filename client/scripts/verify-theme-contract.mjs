@@ -96,6 +96,7 @@ const allowedThemeAppImports = new Set([
   '../../../../components/shared/PagePrimitives',
   '../../../../components/shared/Pagination',
   '../../../../components/shared/SearchField',
+  '../../../../components/shared/SelectMenu',
   '../../../../components/shared/Tooltip',
   '../../../../components/shared/VirtualProductGrid',
   '../../../../lib/businessConfig',

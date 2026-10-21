@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ColumnDef } from '../../api/selections';
 import Icon from '../shared/Icon';
+import SelectMenu from '../shared/SelectMenu';
 import { SELECTION_ICON_BUTTON_DELETE } from './constants';
 
 export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (cols: ColumnDef[]) => void }) {
@@ -257,19 +258,18 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                     <span className="mb-1 block text-[10px] font-medium text-on-surface-variant md:hidden">
                       {t('selectionAdmin.colType')}
                     </span>
-                    <select
-                      name="mode"
+                    <SelectMenu
+                      variant="field"
+                      ariaLabel={t('selectionAdmin.colType')}
                       value={mode}
-                      onChange={(e) =>
-                        updateColumnMode(i, e.target.value as 'select' | 'manual' | 'preset' | 'displayOnly')
-                      }
-                      className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-lowest px-2 text-sm text-on-surface outline-none transition-colors focus:border-primary-container focus:ring-2 focus:ring-primary-container/10"
-                    >
-                      <option value="select">{t('selectionAdmin.modeSelect')}</option>
-                      <option value="manual">{t('selectionAdmin.modeManual')}</option>
-                      <option value="preset">{t('selectionAdmin.modePreset')}</option>
-                      <option value="displayOnly">{t('selectionAdmin.modeDisplay')}</option>
-                    </select>
+                      onChange={(value) => updateColumnMode(i, value as 'select' | 'manual' | 'preset' | 'displayOnly')}
+                      options={[
+                        { value: 'select', label: t('selectionAdmin.modeSelect') },
+                        { value: 'manual', label: t('selectionAdmin.modeManual') },
+                        { value: 'preset', label: t('selectionAdmin.modePreset') },
+                        { value: 'displayOnly', label: t('selectionAdmin.modeDisplay') },
+                      ]}
+                    />
                   </label>
 
                   <div className="flex items-center gap-2">
@@ -346,28 +346,24 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                             <span className="mb-1 block text-[10px] text-on-surface-variant">
                               {t('selectionAdmin.dependsField')}
                             </span>
-                            <select
-                              name="depends-on"
+                            <SelectMenu
+                              variant="field"
+                              ariaLabel={t('selectionAdmin.dependsField')}
                               value={col.dependsOn?.field || ''}
-                              onChange={(e) => {
-                                const field = e.target.value;
+                              onChange={(field) => {
                                 if (!field) {
                                   updateCol(i, 'dependsOn', undefined);
                                 } else {
                                   updateCol(i, 'dependsOn', { field, minIndex: col.dependsOn?.minIndex ?? 1 });
                                 }
                               }}
-                              className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container"
-                            >
-                              <option value="">{t('selectionAdmin.noDepend')}</option>
-                              {columns.map((c, ci) =>
-                                ci !== i && c.key ? (
-                                  <option key={c.key} value={c.key}>
-                                    {c.label || c.key}
-                                  </option>
-                                ) : null,
-                              )}
-                            </select>
+                              options={[
+                                { value: '', label: t('selectionAdmin.noDepend') },
+                                ...columns
+                                  .filter((c, ci) => ci !== i && c.key)
+                                  .map((c) => ({ value: c.key as string, label: c.label || (c.key as string) })),
+                              ]}
+                            />
                           </label>
                           <label>
                             <span className="mb-1 block text-[10px] text-on-surface-variant">
@@ -395,18 +391,17 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                         <span className="mb-1 block text-[10px] text-on-surface-variant">
                           {t('selectionAdmin.valueType')}
                         </span>
-                        <select
-                          name="value-type"
+                        <SelectMenu
+                          variant="field"
+                          ariaLabel={t('selectionAdmin.valueType')}
                           disabled={mode !== 'manual'}
                           value={col.valueType === 'number' ? 'number' : 'text'}
-                          onChange={(e) =>
-                            updateCol(i, 'valueType', e.target.value === 'number' ? 'number' : undefined)
-                          }
-                          className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
-                        >
-                          <option value="text">{t('selectionAdmin.anyText')}</option>
-                          <option value="number">{t('selectionAdmin.numberOnly')}</option>
-                        </select>
+                          onChange={(value) => updateCol(i, 'valueType', value === 'number' ? 'number' : undefined)}
+                          options={[
+                            { value: 'text', label: t('selectionAdmin.anyText') },
+                            { value: 'number', label: t('selectionAdmin.numberOnly') },
+                          ]}
+                        />
                       </label>
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">
@@ -438,15 +433,16 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                         <span className="mb-1 block text-[10px] text-on-surface-variant">
                           {t('selectionAdmin.showInResults')}
                         </span>
-                        <select
-                          name="hide-in-results"
+                        <SelectMenu
+                          variant="field"
+                          ariaLabel={t('selectionAdmin.showInResults')}
                           value={col.hideInResults ? 'hide' : 'show'}
-                          onChange={(e) => updateCol(i, 'hideInResults', e.target.value === 'hide' ? true : undefined)}
-                          className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container"
-                        >
-                          <option value="show">{t('selectionAdmin.show')}</option>
-                          <option value="hide">{t('selectionAdmin.hideCount')}</option>
-                        </select>
+                          onChange={(value) => updateCol(i, 'hideInResults', value === 'hide' ? true : undefined)}
+                          options={[
+                            { value: 'show', label: t('selectionAdmin.show') },
+                            { value: 'hide', label: t('selectionAdmin.hideCount') },
+                          ]}
+                        />
                       </label>
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">
@@ -465,90 +461,91 @@ export function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onCh
                         <span className="mb-1 block text-[10px] text-on-surface-variant">
                           {t('selectionAdmin.sortType')}
                         </span>
-                        <select
-                          name="sort-type"
+                        <SelectMenu
+                          variant="field"
+                          ariaLabel={t('selectionAdmin.sortType')}
                           disabled={mode !== 'select'}
                           value={col.sortType || 'default'}
-                          onChange={(e) =>
-                            updateCol(
-                              i,
-                              'sortType',
-                              e.target.value === 'default' ? undefined : (e.target.value as ColumnDef['sortType']),
-                            )
+                          onChange={(value) =>
+                            updateCol(i, 'sortType', value === 'default' ? undefined : (value as ColumnDef['sortType']))
                           }
-                          className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
-                        >
-                          <option value="default">{t('selectionAdmin.sortByText')}</option>
-                          <option value="numeric">{t('selectionAdmin.sortByNumber')}</option>
-                          <option value="thread">{t('selectionAdmin.sortBySize')}</option>
-                        </select>
+                          options={[
+                            { value: 'default', label: t('selectionAdmin.sortByText') },
+                            { value: 'numeric', label: t('selectionAdmin.sortByNumber') },
+                            { value: 'thread', label: t('selectionAdmin.sortBySize') },
+                          ]}
+                        />
                       </label>
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">
                           {t('selectionAdmin.optionDisplay')}
                         </span>
-                        <select
-                          name="option-display"
+                        <SelectMenu
+                          variant="field"
+                          ariaLabel={t('selectionAdmin.optionDisplay')}
                           disabled={mode !== 'select'}
                           value={col.optionDisplay || 'auto'}
-                          onChange={(e) =>
+                          onChange={(value) =>
                             updateCol(
                               i,
                               'optionDisplay',
-                              e.target.value === 'auto' ? undefined : (e.target.value as ColumnDef['optionDisplay']),
+                              value === 'auto' ? undefined : (value as ColumnDef['optionDisplay']),
                             )
                           }
-                          className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
-                        >
-                          <option value="auto">{t('selectionAdmin.autoImage')}</option>
-                          <option value="text">{t('selectionAdmin.textButtons')}</option>
-                          <option value="image">{t('selectionAdmin.imageCards')}</option>
-                        </select>
+                          options={[
+                            { value: 'auto', label: t('selectionAdmin.autoImage') },
+                            { value: 'text', label: t('selectionAdmin.textButtons') },
+                            { value: 'image', label: t('selectionAdmin.imageCards') },
+                          ]}
+                        />
                       </label>
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">
                           {t('selectionAdmin.showCountLabel')}
                         </span>
-                        <select
-                          name="show-count"
+                        <SelectMenu
+                          variant="field"
+                          ariaLabel={t('selectionAdmin.showCountLabel')}
                           disabled={mode !== 'select'}
                           value={col.showCount === false ? 'hide' : 'show'}
-                          onChange={(e) => updateCol(i, 'showCount', e.target.value === 'hide' ? false : undefined)}
-                          className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
-                        >
-                          <option value="show">{t('selectionAdmin.show')}</option>
-                          <option value="hide">{t('selectionAdmin.doNotShow')}</option>
-                        </select>
+                          onChange={(value) => updateCol(i, 'showCount', value === 'hide' ? false : undefined)}
+                          options={[
+                            { value: 'show', label: t('selectionAdmin.show') },
+                            { value: 'hide', label: t('selectionAdmin.doNotShow') },
+                          ]}
+                        />
                       </label>
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">
                           {t('selectionAdmin.singleOption')}
                         </span>
-                        <select
-                          name="auto-select-single"
+                        <SelectMenu
+                          variant="field"
+                          ariaLabel={t('selectionAdmin.singleOption')}
                           disabled={mode !== 'select'}
                           value={col.autoSelectSingle === false ? 'manual' : 'auto'}
-                          onChange={(e) => updateSingleOptionBehavior(i, e.target.value as 'auto' | 'manual')}
-                          className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
-                        >
-                          <option value="auto">{t('selectionAdmin.autoConfirm')}</option>
-                          <option value="manual">{t('selectionAdmin.manualConfirm')}</option>
-                        </select>
+                          onChange={(value) => updateSingleOptionBehavior(i, value as 'auto' | 'manual')}
+                          options={[
+                            { value: 'auto', label: t('selectionAdmin.autoConfirm') },
+                            { value: 'manual', label: t('selectionAdmin.manualConfirm') },
+                          ]}
+                        />
                       </label>
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">
                           {t('selectionAdmin.requiredLabel')}
                         </span>
-                        <select
-                          name="required"
+                        <SelectMenu
+                          variant="field"
+                          ariaLabel={t('selectionAdmin.requiredLabel')}
                           disabled={mode !== 'select'}
                           value={col.required === true ? 'required' : 'skip'}
-                          onChange={(e) => updateEmptyBehavior(i, e.target.value as 'skip' | 'required')}
-                          className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
-                        >
-                          <option value="skip">{t('selectionAdmin.optionalEmpty')}</option>
-                          <option value="required">{t('selectionAdmin.requiredMissing')}</option>
-                        </select>
+                          onChange={(value) => updateEmptyBehavior(i, value as 'skip' | 'required')}
+                          options={[
+                            { value: 'skip', label: t('selectionAdmin.optionalEmpty') },
+                            { value: 'required', label: t('selectionAdmin.requiredMissing') },
+                          ]}
+                        />
                       </label>
                     </div>
                   </div>

@@ -2,6 +2,7 @@ import type { ProductWallItem, ProductWallKind } from '../../api/productWall';
 import { useTranslation } from 'react-i18next';
 import DialogOverlay from '../shared/DialogOverlay';
 import Icon from '../shared/Icon';
+import SelectMenu from '../shared/SelectMenu';
 
 type WallItem = ProductWallItem;
 
@@ -89,18 +90,14 @@ export function ProductWallEditDialog({
           </label>
           <label className="block">
             <span className="text-xs font-medium text-on-surface-variant">{t('productWallAdmin.fieldCategory')}</span>
-            <select
-              name="edit-kind"
+            <SelectMenu
+              variant="field"
+              className="mt-1"
+              ariaLabel={t('productWallAdmin.fieldCategory')}
               value={editKind}
-              onChange={(event) => setEditKind(event.target.value as ProductWallKind)}
-              className="mt-1 h-10 w-full border-b border-outline-variant/35 bg-transparent text-sm text-on-surface outline-none transition-colors focus:border-primary-container"
-            >
-              {categoryNames.map((kind) => (
-                <option key={kind} value={kind}>
-                  {kind}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => setEditKind(value as ProductWallKind)}
+              options={categoryNames.map((kind) => ({ value: kind, label: kind }))}
+            />
           </label>
           <label className="block">
             <span className="text-xs font-medium text-on-surface-variant">{t('productWallAdmin.fieldTags')}</span>

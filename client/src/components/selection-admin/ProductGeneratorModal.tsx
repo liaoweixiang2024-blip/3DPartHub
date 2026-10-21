@@ -2,13 +2,8 @@ import type { ColumnDef, SelectionCategory } from '../../api/selections';
 import { useTranslation } from 'react-i18next';
 import { AdminButton } from '../shared/AdminControls';
 import { AdminTableHeadCell, AdminTableHeadRow, ADMIN_TABLE_HEAD_CLASS } from '../shared/AdminDataTable';
-import {
-  APP_FIELD_HELP_CLASS,
-  APP_FIELD_LABEL_CLASS,
-  AppSelect,
-  AppTextArea,
-  AppTextInput,
-} from '../shared/FormControls';
+import { APP_FIELD_HELP_CLASS, APP_FIELD_LABEL_CLASS, AppTextArea, AppTextInput } from '../shared/FormControls';
+import SelectMenu from '../shared/SelectMenu';
 import SearchField from '../shared/SearchField';
 import { parseGenerateEntries } from './selectionAdminUtils';
 import type { GeneratedProductDraft } from './selectionAdminUtils';
@@ -222,20 +217,19 @@ export function ProductGeneratorModal({
                   />
                   <div className="flex items-center gap-2 text-xs text-on-surface-variant">
                     <span>{t('selectionAdmin.perPage')}</span>
-                    <AppSelect
-                      value={generatePreviewPageSize}
-                      onChange={(e) => {
-                        setGeneratePreviewPageSize(Number(e.target.value));
+                    <SelectMenu
+                      variant="chip"
+                      value={String(generatePreviewPageSize)}
+                      ariaLabel={t('selectionAdmin.perPage')}
+                      onChange={(value) => {
+                        setGeneratePreviewPageSize(Number(value));
                         setGeneratePreviewPage(1);
                       }}
-                      fieldSize="sm"
-                    >
-                      {[30, 50, 100, 200].map((size) => (
-                        <option key={size} value={size}>
-                          {t('selectionAdmin.perPageOption', { count: size })}
-                        </option>
-                      ))}
-                    </AppSelect>
+                      options={[30, 50, 100, 200].map((size) => ({
+                        value: String(size),
+                        label: t('selectionAdmin.perPageOption', { count: size }),
+                      }))}
+                    />
                   </div>
                 </div>
                 <div className="max-h-72 overflow-auto rounded-lg border border-outline-variant/10">

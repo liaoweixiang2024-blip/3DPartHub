@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import client from '../../api/client';
@@ -5,6 +6,7 @@ import { unwrapResponse } from '../../api/response';
 import { getErrorMessage } from '../../lib/errorNotifications';
 import { useAuthStore } from '../../stores/useAuthStore';
 import DialogOverlay from '../shared/DialogOverlay';
+import SelectMenu from '../shared/SelectMenu';
 import Icon from '../shared/Icon';
 import { useToast } from '../shared/Toast';
 import { useTranslation } from 'react-i18next';
@@ -33,6 +35,14 @@ interface AuditItem {
   details: unknown;
   createdAt: string;
   userId: string | null;
+  operatorName?: string | null;
+}
+
+/** 登录尝试行（含失败）：details 里有 ip 与 statusCode（200=成功） */
+interface LoginItem {
+  id: string;
+  details: unknown;
+  createdAt: string;
 }
 
 const ROLE_OPTIONS = [
@@ -59,6 +69,34 @@ const ROLE_LABEL: Record<string, string> = {
 function formatDate(value: string | null): string {
   if (!value) return '—';
   return new Date(value).toLocaleString();
+}
+
+/** 相对时间（与用户列表页 relativeTime 同款规则）：近期 x 前，>30 天回退日期 */
+function relativeTime(value: string | null | undefined, t: TFunction, fallback: string): string {
+  if (!value) return fallback;
+  const ms = Date.now() - new Date(value).getTime();
+  const day = Math.floor(ms / 86_400_000);
+  if (day > 30) return new Date(value).toLocaleDateString();
+  if (day > 0) return t('userAdmin.daysAgo', { count: day });
+  const hour = Math.floor(ms / 3_600_000);
+  if (hour > 0) return t('userAdmin.hoursAgo', { count: hour });
+  const min = Math.floor(ms / 60_000);
+  return min > 0 ? t('userAdmin.minutesAgo', { count: min }) : t('userAdmin.justNow');
+}
+
+/** 账号数据迷你卡：图标 + 值/标签（与列表页统计卡同族样式，紧凑版） */
+function StatTile({ icon, label, value }: { icon: string; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-outline-variant/10 bg-surface-container-low px-2 py-1.5">
+      <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-primary-container/10 text-primary">
+        <Icon name={icon} size={13} />
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-xs font-semibold leading-tight text-on-surface">{value}</span>
+        <span className="block truncate text-[10px] leading-tight text-on-surface-variant">{label}</span>
+      </span>
+    </div>
+  );
 }
 
 const inputClass =
@@ -94,7 +132,7 @@ export default function UserEditDialog({
 
   const { data: audit } = useSWR(`/admin/users/${user.id}/audit`, async (url) => {
     const res = await client.get(url);
-    return unwrapResponse<{ items: AuditItem[] }>(res);
+    return unwrapResponse<{ items: AuditItem[]; logins: LoginItem[] }>(res);
   });
 
   // 切换用户时重置表单
@@ -150,6 +188,38 @@ export default function UserEditDialog({
     } finally {
       setSaving(false);
     }
+  }
+
+  /** 审计行按请求路径还原具体操作（路径在 autoAudit details 里，历史记录同样生效）。
+      self=true 表示是用户本人的自助操作（改资料/改密/换绑邮箱），与管理员操作区分展示 */
+  function opLabelOf(a: AuditItem): { label: string; role?: string; self?: boolean } {
+    const d = (a.details ?? {}) as { path?: unknown; method?: unknown; body?: { role?: unknown } };
+    const path = typeof d.path === 'string' ? d.path : '';
+    const method = typeof d.method === 'string' ? d.method : '';
+    let label: string;
+    let self = false;
+    if (path.endsWith('/reset-password')) label = t('userAdmin.edit.opResetPassword');
+    else if (path.endsWith('/send-reset-email')) label = t('userAdmin.edit.opSendResetEmail');
+    else if (path.endsWith('/role')) label = t('userAdmin.edit.opRoleChange');
+    else if (path === '/api/auth/profile') {
+      label = t('userAdmin.edit.selfProfile');
+      self = true;
+    } else if (path === '/api/auth/password') {
+      label = t('userAdmin.edit.selfPassword');
+      self = true;
+    } else if (path === '/api/auth/change-email') {
+      label = t('userAdmin.edit.selfEmail');
+      self = true;
+    } else if (path === '/api/admin/users' && method === 'POST') label = t('userAdmin.edit.opCreate');
+    else if (/^\/api\/admin\/users\/[^/]+$/.test(path) && method === 'PUT') label = t('userAdmin.edit.opUpdate');
+    else if (method === 'DELETE') label = t('userAdmin.edit.opDelete');
+    else label = t(`auditLog.action.${a.action}`, { defaultValue: a.action });
+    const role = d.body?.role;
+    return {
+      label,
+      self,
+      role: typeof role === 'string' ? t(`userAdmin.roleLabel.${role}`, { defaultValue: role }) : undefined,
+    };
   }
 
   async function handleResetPassword() {
@@ -232,13 +302,13 @@ export default function UserEditDialog({
 
           <div>
             <span className={labelClass}>{t('userAdmin.edit.roleLabel')}</span>
-            <select name="role" value={role} onChange={(e) => setRole(e.target.value)} className={inputClass}>
-              {ROLE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {t(o.labelKey)}
-                </option>
-              ))}
-            </select>
+            <SelectMenu
+              variant="field"
+              value={role}
+              onChange={setRole}
+              ariaLabel={t('userAdmin.edit.roleLabel')}
+              options={ROLE_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -358,27 +428,81 @@ export default function UserEditDialog({
             </div>
             <div className="space-y-1 rounded-md bg-surface-container-low px-2.5 py-2 text-xs">
               {audit?.items?.length ? (
-                audit.items.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between gap-2 text-on-surface-variant">
-                    <span className="truncate">{a.action}</span>
-                    <span className="shrink-0 text-on-surface-variant/60">{formatDate(a.createdAt)}</span>
-                  </div>
-                ))
+                audit.items.map((a) => {
+                  const { label, role, self } = opLabelOf(a);
+                  return (
+                    <div key={a.id} className="flex items-center justify-between gap-2 text-on-surface-variant">
+                      <span className="truncate">
+                        {label}
+                        {role ? <span className="text-on-surface-variant/60">（{role}）</span> : null}
+                        {self ? (
+                          <span className="text-on-surface-variant/60"> · {t('userAdmin.edit.opSelf')}</span>
+                        ) : a.operatorName ? (
+                          <span className="text-on-surface-variant/60">
+                            {' '}
+                            · {t('userAdmin.edit.opBy', { name: a.operatorName })}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="shrink-0 text-on-surface-variant/60">{formatDate(a.createdAt)}</span>
+                    </div>
+                  );
+                })
               ) : (
                 <p className="text-on-surface-variant/60">{t('userAdmin.edit.noRecords')}</p>
               )}
             </div>
           </div>
 
-          <p className="text-[11px] text-on-surface-variant/60">
-            {t('userAdmin.edit.statsLine', {
-              downloads: user._count.downloads,
-              favorites: user._count.favorites,
-              createdAt: formatDate(user.createdAt),
-              lastLogin: formatDate(user.lastLoginAt),
-            })}
-            {user.lastActiveAt ? t('userAdmin.edit.lastActiveSegment', { time: formatDate(user.lastActiveAt) }) : ''}
-          </p>
+          <div>
+            <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
+              <Icon name="login" size={14} />
+              {t('userAdmin.edit.recentLogins')}
+            </div>
+            <div className="space-y-1 rounded-md bg-surface-container-low px-2.5 py-2 text-xs">
+              {audit?.logins?.length ? (
+                audit.logins.map((l) => {
+                  const d = (l.details ?? {}) as { ip?: unknown; statusCode?: unknown };
+                  const ok = d.statusCode === 200;
+                  const ip = typeof d.ip === 'string' ? d.ip : '';
+                  return (
+                    <div key={l.id} className="flex items-center justify-between gap-2">
+                      <span className={`truncate ${ok ? 'text-on-surface-variant' : 'text-error'}`}>
+                        {ok ? t('userAdmin.edit.loginOk') : t('userAdmin.edit.loginFailed')}
+                        {ip ? <span className="text-on-surface-variant/60"> · IP {ip}</span> : null}
+                      </span>
+                      <span className="shrink-0 text-on-surface-variant/60">{formatDate(l.createdAt)}</span>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="text-on-surface-variant/60">{t('userAdmin.edit.noRecords')}</p>
+              )}
+            </div>
+          </div>
+
+          {/* 账号数据：计数 + 关键时间改为迷你统计卡（原单行小字挤 5 项带秒级时间戳，难读） */}
+          <div className="grid grid-cols-3 gap-1.5">
+            <StatTile icon="download" label={t('userAdmin.edit.statDownloads')} value={String(user._count.downloads)} />
+            <StatTile icon="star" label={t('userAdmin.edit.statFavorites')} value={String(user._count.favorites)} />
+            <StatTile
+              icon="event"
+              label={t('userAdmin.edit.statRegistered')}
+              value={new Date(user.createdAt).toLocaleDateString()}
+            />
+          </div>
+          <div className="-mt-0.5 grid grid-cols-2 gap-1.5">
+            <StatTile
+              icon="login"
+              label={t('userAdmin.edit.statLastLogin')}
+              value={relativeTime(user.lastLoginAt, t, t('userAdmin.neverLoggedIn'))}
+            />
+            <StatTile
+              icon="schedule"
+              label={t('userAdmin.edit.statLastActive')}
+              value={relativeTime(user.lastActiveAt, t, '—')}
+            />
+          </div>
         </div>
 
         {/* Footer */}

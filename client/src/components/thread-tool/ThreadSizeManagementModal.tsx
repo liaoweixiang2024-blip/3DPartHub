@@ -10,6 +10,7 @@ import { useImeSafeSearchInput } from '../../hooks/useImeSafeSearchInput';
 import { AdminTableHeadCell, AdminTableHeadRow, ADMIN_TABLE_HEAD_CLASS } from '../shared/AdminDataTable';
 import ConfirmDialog from '../shared/ConfirmDialog';
 import Icon from '../shared/Icon';
+import SelectMenu from '../shared/SelectMenu';
 import ResponsiveSectionTabs from '../shared/ResponsiveSectionTabs';
 import SearchField from '../shared/SearchField';
 import { useToast } from '../shared/Toast';
@@ -361,19 +362,19 @@ function EntryEditorDialog({ editingEntry, entryDraft, setEntryDraft, onSave, on
           <div className="grid gap-3 md:grid-cols-3">
             <label className="block">
               <span className="text-xs font-bold text-on-surface-variant">{t('threadTool.fieldType')}</span>
-              <select
-                name="kind"
+              <SelectMenu
+                variant="field"
+                className="mt-1"
+                ariaLabel={t('threadTool.fieldType')}
                 value={entryDraft.kind}
-                onChange={(event) =>
-                  setEntryDraft((prev: typeof entryDraft) => ({ ...prev, kind: event.target.value as DataTab }))
-                }
-                className="mt-1 h-10 w-full rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none"
-              >
-                <option value="thread">{t('threadTool.kindThread')}</option>
-                <option value="pipe">{t('threadTool.kindPipe')}</option>
-                <option value="hose">{t('threadTool.kindHose')}</option>
-                <option value="fitting">{t('threadTool.kindFitting')}</option>
-              </select>
+                onChange={(value) => setEntryDraft((prev: typeof entryDraft) => ({ ...prev, kind: value as DataTab }))}
+                options={[
+                  { value: 'thread', label: t('threadTool.kindThread') },
+                  { value: 'pipe', label: t('threadTool.kindPipe') },
+                  { value: 'hose', label: t('threadTool.kindHose') },
+                  { value: 'fitting', label: t('threadTool.kindFitting') },
+                ]}
+              />
             </label>
             <label className="block">
               <span className="text-xs font-bold text-on-surface-variant">{t('threadTool.fieldFamily')}</span>

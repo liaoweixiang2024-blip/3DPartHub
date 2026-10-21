@@ -7,7 +7,7 @@ import UserCreateDialog from '../components/admin/UserCreateDialog';
 import UserEditDialog, { type AdminUserDetail } from '../components/admin/UserEditDialog';
 import { AdminIconButton } from '../components/shared/AdminControls';
 import { AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
-import AdminSortMenu from '../components/shared/AdminSortMenu';
+import SelectMenu from '../components/shared/SelectMenu';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import AdminRefreshButton from '../components/shared/AdminRefreshButton';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -70,6 +70,13 @@ const SORT_OPTIONS = [
   { value: 'last_login', labelKey: 'userAdmin.sortLastActive' },
   { value: 'downloads', labelKey: 'userAdmin.sortDownloads' },
   { value: 'favorites', labelKey: 'userAdmin.sortFavorites' },
+];
+
+const ROLE_OPTIONS: Array<{ value: string }> = [
+  { value: 'ADMIN' },
+  { value: 'EDITOR' },
+  { value: 'VIEWER' },
+  { value: 'INTERNAL' },
 ];
 
 const PERMISSION_HELP: Array<{ role: string; helpKey: string }> = [
@@ -335,7 +342,8 @@ export default function UserAdminPage() {
         ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <AdminSortMenu
+        <SelectMenu
+          variant="toolbar"
           value={sort}
           options={SORT_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
           onChange={setSort}
@@ -414,18 +422,14 @@ export default function UserAdminPage() {
           <span className="text-xs font-medium text-on-surface">
             {t('userAdmin.selectedCount', { count: selected.size })}
           </span>
-          <select
-            name="batch-role"
+          <SelectMenu
+            variant="chip"
             value={batchRole}
-            onChange={(e) => setBatchRole(e.target.value)}
-            className="rounded border border-outline-variant/20 bg-surface-container-high px-2 py-1 text-xs"
-          >
-            <option value="">{t('userAdmin.batchRolePlaceholder')}</option>
-            <option value="ADMIN">{t('userAdmin.roleLabel.ADMIN')}</option>
-            <option value="EDITOR">{t('userAdmin.roleLabel.EDITOR')}</option>
-            <option value="VIEWER">{t('userAdmin.roleLabel.VIEWER')}</option>
-            <option value="INTERNAL">{t('userAdmin.roleLabel.INTERNAL')}</option>
-          </select>
+            onChange={setBatchRole}
+            ariaLabel={t('userAdmin.batchRolePlaceholder')}
+            placeholder={t('userAdmin.batchRolePlaceholder')}
+            options={ROLE_OPTIONS.map((o) => ({ value: o.value, label: t(`userAdmin.roleLabel.${o.value}`) }))}
+          />
           <button
             type="button"
             disabled={!batchRole}
@@ -538,18 +542,13 @@ export default function UserAdminPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center justify-end gap-1.5">
-                  <select
-                    name="role"
+                  <SelectMenu
+                    variant="chip"
                     value={u.role}
-                    onChange={(e) => handleRoleSelect(u.id, u.username, e.target.value)}
-                    className="rounded border border-outline-variant/20 bg-surface-container-high px-2 py-1 text-xs text-on-surface"
-                    title={t('userAdmin.roleLabelTitle')}
-                  >
-                    <option value="ADMIN">{t('userAdmin.roleLabel.ADMIN')}</option>
-                    <option value="EDITOR">{t('userAdmin.roleLabel.EDITOR')}</option>
-                    <option value="VIEWER">{t('userAdmin.roleLabel.VIEWER')}</option>
-                    <option value="INTERNAL">{t('userAdmin.roleLabel.INTERNAL')}</option>
-                  </select>
+                    onChange={(value) => handleRoleSelect(u.id, u.username, value)}
+                    ariaLabel={t('userAdmin.roleLabelTitle')}
+                    options={ROLE_OPTIONS.map((o) => ({ value: o.value, label: t(`userAdmin.roleLabel.${o.value}`) }))}
+                  />
                   <AdminIconButton
                     icon={u.disabled ? 'lock_open' : 'block'}
                     onClick={() => handleQuickToggleDisable(u)}

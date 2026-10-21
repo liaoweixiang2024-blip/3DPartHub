@@ -14,7 +14,7 @@ const ACTION_GROUPS: Record<string, string[]> = {
   create: ['create', 'upload', 'register', 'favorite', 'comment', 'ticket_create', 'backup_create'],
   update: ['update'],
   delete: ['delete', 'unfavorite', 'backup_delete'],
-  login: ['login'],
+  login: ['login', 'logout'],
   download: ['download', 'backup_download'],
   ticket: ['ticket_create', 'ticket_reply', 'ticket_status'],
   settings: [

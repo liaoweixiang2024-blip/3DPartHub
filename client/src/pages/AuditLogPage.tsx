@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import client from '../api/client';
@@ -27,6 +27,7 @@ import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SearchField from '../components/shared/SearchField';
+import SelectMenu from '../components/shared/SelectMenu';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
@@ -100,6 +101,7 @@ const ACTION_COLORS: Record<string, string> = {
   update: 'text-blue-500 bg-blue-500/10',
   delete: 'text-red-500 bg-red-500/10',
   login: 'text-amber-500 bg-amber-500/10',
+  logout: 'text-amber-500 bg-amber-500/10',
   download: 'text-purple-500 bg-purple-500/10',
   register: 'text-teal-500 bg-teal-500/10',
   settings_update: 'text-cyan-500 bg-cyan-500/10',
@@ -137,6 +139,9 @@ const RESOURCE_KEYS: Record<string, string> = {
   backup: 'auditLog.resource.backup',
   audit: 'auditLog.resource.audit',
   project: 'auditLog.resource.project',
+  selection: 'auditLog.resource.selection',
+  product_wall: 'auditLog.resource.product_wall',
+  invite: 'auditLog.resource.invite',
   other: 'auditLog.resource.other',
 };
 
@@ -158,12 +163,16 @@ const RESOURCE_FILTERS: Array<{ value: string; labelKey: string; icon: string }>
   { value: 'category', labelKey: 'auditLog.resource.category', icon: 'folder' },
   { value: 'auth', labelKey: 'auditLog.resource.auth', icon: 'login' },
   { value: 'ticket', labelKey: 'auditLog.resource.ticket', icon: 'build' },
+  { value: 'selection', labelKey: 'auditLog.resource.selection', icon: 'tune' },
   { value: 'favorite', labelKey: 'auditLog.resource.favorite', icon: 'star' },
   { value: 'download', labelKey: 'auditLog.resource.download', icon: 'download' },
   { value: 'share', labelKey: 'auditLog.resource.share', icon: 'share' },
   { value: 'settings', labelKey: 'auditLog.filter.settings', icon: 'settings' },
   { value: 'backup', labelKey: 'auditLog.resource.backup', icon: 'database' },
+  { value: 'product_wall', labelKey: 'auditLog.resource.product_wall', icon: 'photo_library' },
+  { value: 'invite', labelKey: 'auditLog.resource.invite', icon: 'card_giftcard' },
   { value: 'audit', labelKey: 'auditLog.resource.audit', icon: 'policy' },
+  { value: 'other', labelKey: 'auditLog.resource.other', icon: 'more_horiz' },
 ];
 
 const BODY_LABELS: Record<string, string> = {
@@ -245,7 +254,10 @@ function getLogDetails(log: AuditEntry, t: TFunction) {
 
 function getLogSummary(log: AuditEntry, t: TFunction) {
   const body = log.details?.body;
-  const primary = valueToText(body?.title || body?.name || body?.description || body?.status || body?.classification);
+  // email 进 primary 链：登录/注册行没有 title/name，摘要显示尝试的邮箱比回退显示路径有用
+  const primary = valueToText(
+    body?.title || body?.name || body?.description || body?.status || body?.classification || body?.email,
+  );
   if (primary) return primary;
   if (log.details?.summary) return log.details.summary;
   if (log.details?.message) return log.details.message;
@@ -358,6 +370,18 @@ function LogRow({
   const resLabel = resourceLabel(log.resource, t);
   const detailLines = getLogDetails(log, t);
   const summary = getLogSummary(log, t);
+  // 登录失败的行在摘要后挂红色标记（成功是常态不标）：撞库/记错密码一眼可见
+  const loginFailed = log.action === 'login' && (log.details?.statusCode ?? 0) >= 400;
+  const summaryNode = (
+    <>
+      {summary}
+      {loginFailed ? (
+        <span className="ml-1.5 rounded-sm bg-error/10 px-1 py-0.5 text-[10px] font-medium text-error">
+          {t('auditLog.loginFailTag')}
+        </span>
+      ) : null}
+    </>
+  );
   // 登录/注册行 userId 为空（请求发生时未认证），用 details.body.email 兜底显示尝试者
   const actor =
     log.username ||
@@ -394,7 +418,7 @@ function LogRow({
             </span>
           </AdminTableCell>
           <AdminTableCell className="min-w-0">
-            <p className={`max-w-[520px] ${ADMIN_ROW_TITLE_CLASS}`}>{summary}</p>
+            <p className={`max-w-[520px] ${ADMIN_ROW_TITLE_CLASS}`}>{summaryNode}</p>
             <p className={`mt-0.5 max-w-[520px] font-mono text-[10px] ${ADMIN_ROW_META_CLASS}`}>
               {log.resourceId || log.details?.path || log.id}
             </p>
@@ -455,7 +479,7 @@ function LogRow({
               })}
             </span>
           </div>
-          <p className="line-clamp-2 text-xs font-medium leading-5 text-on-surface">{summary}</p>
+          <p className="line-clamp-2 text-xs font-medium leading-5 text-on-surface">{summaryNode}</p>
           <p className="mt-1 truncate font-mono text-[10px] text-on-surface-variant/50">{actor}</p>
         </div>
       </div>
@@ -541,43 +565,21 @@ function AuditHeaderActionTabs({
   );
 }
 
-function ResourceFilterChips({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+/** 资源范围筛选：下拉替代原第二行 chips（与动作 tab 的 登录/下载/工单/设置 大量重名，两行长条视觉冗余） */
+function ResourceFilterSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const { t } = useTranslation();
   return (
-    <div className="flex min-w-0 items-center gap-2 overflow-hidden border-t border-outline-variant/10 pt-2">
-      <span className="hidden shrink-0 text-[11px] font-medium text-on-surface-variant/60 md:inline">
-        {t('auditLog.resourceScope')}
-      </span>
-      <div className="flex min-w-0 flex-1 items-center overflow-x-auto scrollbar-none">
-        {RESOURCE_FILTERS.map((item, index) => {
-          const active = value === item.value;
-          return (
-            <Fragment key={item.value || 'all'}>
-              {index > 0 ? <span className="mx-2 h-3 w-px shrink-0 bg-outline-variant/16" /> : null}
-              <button
-                type="button"
-                onClick={() => onChange(item.value)}
-                className={`group relative inline-flex h-8 shrink-0 items-center gap-1.5 px-1.5 text-xs font-medium transition-colors ${
-                  active ? 'text-primary-container' : 'text-on-surface-variant/70 hover:text-on-surface'
-                }`}
-              >
-                <Icon
-                  name={item.icon}
-                  size={13}
-                  className={
-                    active ? 'text-primary-container/80' : 'text-on-surface-variant/45 group-hover:text-on-surface'
-                  }
-                />
-                <span>{t(item.labelKey)}</span>
-                {active ? (
-                  <span className="absolute inset-x-1.5 bottom-0 h-px rounded-full bg-primary-container/70" />
-                ) : null}
-              </button>
-            </Fragment>
-          );
-        })}
-      </div>
-    </div>
+    <SelectMenu
+      variant="toolbar"
+      ariaLabel={t('auditLog.resourceScope')}
+      value={value}
+      onChange={onChange}
+      options={RESOURCE_FILTERS.map((item) => ({
+        value: item.value,
+        label: t(item.labelKey),
+        icon: item.icon,
+      }))}
+    />
   );
 }
 
@@ -639,6 +641,7 @@ function AuditToolbar({
       <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
           <AdminSearchField inputProps={searchInputProps} value={searchInputValue} onClear={onClearSearch} />
+          <ResourceFilterSelect value={resource} onChange={onResourceChange} />
           <span className="shrink-0 whitespace-nowrap text-xs text-on-surface-variant">
             {t('auditLog.currentResults')} <strong className="text-on-surface tabular-nums">{total}</strong>
             {t('auditLog.resultUnit')}
@@ -646,7 +649,6 @@ function AuditToolbar({
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
       </div>
-      <ResourceFilterChips value={resource} onChange={onResourceChange} />
     </div>
   );
 }

@@ -1,6 +1,6 @@
-import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from './Icon';
+import SelectMenu from './SelectMenu';
 
 export const DEFAULT_PAGE_SIZE = 20;
 export const PAGE_SIZE_OPTIONS = [20, 40, 60, 120] as const;
@@ -40,7 +40,6 @@ export default function Pagination({
 }: PaginationProps) {
   const { t } = useTranslation();
   // 补稳定 id：满足浏览器 autofill 对表单控件 id/name 的要求（DevTools 表单审计）
-  const pageSizeSelectId = useId();
   const showPageSize = Boolean(pageSize && onPageSizeChange);
   const minPageSize = pageSizeOptions[0] || 1;
   if (totalPages <= 1 && (!showPageSize || totalItems <= minPageSize)) return null;
@@ -54,26 +53,16 @@ export default function Pagination({
   };
 
   const pageSizeSelect = showPageSize ? (
-    <label className="relative shrink-0">
-      <span className="sr-only">{t('pagination.pageSize')}</span>
-      <select
-        id={pageSizeSelectId}
-        value={pageSize}
-        onChange={(event) => onPageSizeChange?.(Number(event.target.value))}
-        className={`${compact ? 'h-9 border border-outline-variant/20 bg-surface-container px-2.5 pr-6 text-xs' : 'h-9 px-3 pr-8 text-sm'} appearance-none rounded-md font-medium text-on-surface outline-none transition-colors hover:bg-surface-container-high`}
-      >
-        {pageSizeOptions.map((size) => (
-          <option key={size} value={size}>
-            {t('pagination.sizePerPage', { size })}
-          </option>
-        ))}
-      </select>
-      <Icon
-        name="expand_more"
-        size={12}
-        className={`pointer-events-none absolute ${compact ? 'right-1.5' : 'right-2'} top-1/2 -translate-y-1/2 text-on-surface-variant`}
-      />
-    </label>
+    <SelectMenu
+      variant="chip"
+      ariaLabel={t('pagination.pageSize')}
+      value={String(pageSize ?? '')}
+      onChange={(value) => onPageSizeChange?.(Number(value))}
+      options={pageSizeOptions.map((size) => ({
+        value: String(size),
+        label: t('pagination.sizePerPage', { size }),
+      }))}
+    />
   ) : null;
 
   if (compact) {
