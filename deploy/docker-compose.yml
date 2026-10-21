@@ -76,6 +76,9 @@ services:
       TZ: Asia/Shanghai
       NODE_ENV: production
       PORT: 8000
+      # 生产代理链共 2 跳（宝塔 nginx → web 容器 nginx → api）：不设置时只信 1 跳，
+      # req.ip 停在宝塔 IP，审计日志的登录 IP 全变成代理 IP
+      TRUST_PROXY: ${TRUST_PROXY:-2}
       DATABASE_URL: 'postgresql://modeluser:${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}@postgres:5432/3dparthub?connection_limit=${DB_CONNECTION_LIMIT:-3}&pool_timeout=10'
       # <<< 建议在 .env 中覆盖为随机字符串 (openssl rand -hex 32)
       JWT_SECRET: '${JWT_SECRET:-3dparthub-default-jwt-secret-change-me-2026-04-30}'
