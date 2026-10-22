@@ -307,6 +307,47 @@ ${emailShellStart}
 ${emailShellEnd}`.trim(),
     tokens: [...commonTokens, 'modelName', 'downloadFormat'],
   },
+  security_notice: {
+    label: '账号安全提醒（发用户）',
+    description: '密码修改/换绑邮箱成功后通知用户本人',
+    subject: '{{siteTitle}} 账号安全提醒',
+    html: `
+${emailShellStart}
+  <h2 style="margin:0 0 14px;">账号安全提醒</h2>
+  <p style="margin:0 0 10px;">您好 {{username}}：</p>
+  <p style="margin:0 0 10px;"><strong>{{securityEvent}}</strong></p>
+  <p style="margin:0 0 10px;">操作 IP：{{ip}}<br />时间：{{time}}</p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">若非本人操作，请立即修改密码并联系管理员。</p>
+${emailShellEnd}`.trim(),
+    tokens: [...commonTokens, 'securityEvent', 'ip', 'time'],
+  },
+  security_email_changed: {
+    label: '换绑邮箱预警（发旧邮箱）',
+    description: '换绑邮箱成功后向原绑定邮箱发送安全预警（无条件直发）',
+    subject: '{{siteTitle}} 安全预警：您的账号绑定邮箱已被更换',
+    html: `
+${emailShellStart}
+  <h2 style="margin:0 0 14px;color:#dc2626;">安全预警：绑定邮箱已被更换</h2>
+  <p style="margin:0 0 10px;">您好 {{username}}：</p>
+  <p style="margin:0 0 10px;">使用此邮箱的 {{siteTitle}} 账号刚刚更换了绑定邮箱（新邮箱：{{newEmailMasked}}）。</p>
+  <p style="margin:0 0 10px;">操作 IP：{{ip}}<br />时间：{{time}}</p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">若非本人操作，说明您的账号可能已被他人控制，请立即联系站点管理员处理。</p>
+${emailShellEnd}`.trim(),
+    tokens: [...commonTokens, 'newEmailMasked', 'ip', 'time'],
+  },
+  model_update_notice: {
+    label: '收藏模型更新提醒（发收藏者）',
+    description: '收藏的模型发布新版本/更新文件/下架时通知收藏者',
+    subject: '{{siteTitle}} 您收藏的模型有更新',
+    html: `
+${emailShellStart}
+  <h2 style="margin:0 0 14px;">收藏的模型有更新</h2>
+  <p style="margin:0 0 10px;">您好 {{username}}：</p>
+  <p style="margin:0 0 10px;">您收藏的模型 <strong>{{modelName}}</strong> {{updateSummary}}。</p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">点击下方按钮查看模型详情。</p>
+${emailShellEnd}`.trim(),
+    tokens: [...commonTokens, 'modelName', 'updateSummary'],
+  },
 };
 
 export function parseEmailTemplates(value: unknown): EmailTemplateMap {

@@ -5,6 +5,8 @@ import { Router, Request, Response } from 'express';
 import { cacheDelByPrefix } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
 import { logger } from '../../lib/logger.js';
+import { notifyModelUpdate } from '../../lib/modelUpdateNotifications.js';
+import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
 import { requireRole } from '../../middleware/rbac.js';
@@ -203,6 +205,14 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
 
         await cacheDelByPrefix('cache:models:');
 
+        // 收藏者站内通知（24h 去重 + 排除操作者）
+        notifyModelUpdate({
+          modelId,
+          actorId: req.user!.userId,
+          summary: `发布了新版本 v${versionNumber}${changeLog ? `（${changeLog}）` : ''}`,
+          siteUrl: requestSiteUrl(req),
+        });
+
         res.json({
           version_id: version.id,
           version_number: versionNumber,
@@ -300,6 +310,14 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
         });
 
         await cacheDelByPrefix('cache:models:');
+
+        // 收藏者站内通知（24h 去重 + 排除操作者）
+        notifyModelUpdate({
+          modelId,
+          actorId: req.user!.userId,
+          summary: `已回滚到版本 v${version.versionNumber}`,
+          siteUrl: requestSiteUrl(req),
+        });
 
         res.json({ message: '已回滚', version_number: version.versionNumber });
       } catch {

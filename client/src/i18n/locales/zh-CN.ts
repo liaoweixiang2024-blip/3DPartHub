@@ -219,6 +219,9 @@ export const zhCN: { translation: TranslationMap } = {
       typeAll: '全部类型',
       typeTicket: '工单',
       typeInquiry: '询价',
+      typeSecurity: '账号安全',
+      typeModelUpdate: '收藏更新',
+      typeAnnouncement: '系统公告',
       typeFavorite: '收藏',
       typeDownload: '下载',
       typeModelConversion: '模型转换',
@@ -1102,6 +1105,10 @@ export const zhCN: { translation: TranslationMap } = {
         saveSettings: '保存通知设置',
         settings: '通知设置',
         items: {
+          announcement: {
+            description: '维护通知、全站消息等管理员公告',
+            label: '系统公告',
+          },
           backup: {
             description: '备份体检风险提醒',
             label: '备份通知',
@@ -1121,6 +1128,14 @@ export const zhCN: { translation: TranslationMap } = {
           model_conversion: {
             description: '模型转换完成或失败',
             label: '转换通知',
+          },
+          model_update: {
+            description: '你收藏的模型发布新版本或更新文件',
+            label: '收藏更新通知',
+          },
+          security: {
+            description: '密码修改、绑定邮箱更换等安全事件',
+            label: '账号安全通知',
           },
           ticket: {
             description: '工单回复、状态变更',

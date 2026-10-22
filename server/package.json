@@ -1,6 +1,6 @@
 {
   "name": "3dparthub-server",
-  "version": "6.0.2",
+  "version": "6.1.0",
   "type": "module",
   "scripts": {
     "dev": "node --import tsx src/main.ts",

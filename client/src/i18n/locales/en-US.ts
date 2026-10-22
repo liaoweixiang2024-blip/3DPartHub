@@ -221,6 +221,9 @@ export const enUS: { translation: TranslationMap } = {
       typeAll: 'All types',
       typeTicket: 'Tickets',
       typeInquiry: 'Inquiries',
+      typeSecurity: 'Security',
+      typeModelUpdate: 'Model updates',
+      typeAnnouncement: 'Announcements',
       typeFavorite: 'Favorites',
       typeDownload: 'Downloads',
       typeModelConversion: 'Model conversion',
@@ -1111,6 +1114,10 @@ export const enUS: { translation: TranslationMap } = {
         saveSettings: 'Save notification settings',
         settings: 'Notification Settings',
         items: {
+          announcement: {
+            description: 'Maintenance notices and site-wide messages from administrators',
+            label: 'System announcements',
+          },
           backup: {
             description: 'Backup health risk alerts',
             label: 'Backup notifications',
@@ -1130,6 +1137,14 @@ export const enUS: { translation: TranslationMap } = {
           model_conversion: {
             description: 'Model conversion completed or failed',
             label: 'Conversion notifications',
+          },
+          model_update: {
+            description: 'A model you favorited gets a new version or updated file',
+            label: 'Model update notifications',
+          },
+          security: {
+            description: 'Password changes, email changes and other account security events',
+            label: 'Security notifications',
           },
           ticket: {
             description: 'Ticket replies and status changes',

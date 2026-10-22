@@ -1,8 +1,14 @@
 import { Router, Response } from 'express';
 import { getBusinessConfig } from '../lib/businessConfig.js';
-import { createNotification, getBusinessNotificationActionPath } from '../lib/notificationDelivery.js';
+import { logger } from '../lib/logger.js';
+import {
+  createNotification,
+  getBusinessNotificationActionPath,
+  notificationPrefsFromMetadata,
+} from '../lib/notificationDelivery.js';
 import { prisma } from '../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
+import { requireRole } from '../middleware/rbac.js';
 
 const router = Router();
 
@@ -62,7 +68,9 @@ router.get('/api/notifications', authMiddleware, async (req: AuthRequest, res: R
           .filter(
             (n) =>
               n.relatedId &&
-              ['favorite', 'download', 'model_conversion', 'success', 'error', 'comment'].includes(n.type),
+              ['favorite', 'download', 'model_conversion', 'model_update', 'success', 'error', 'comment'].includes(
+                n.type,
+              ),
           )
           .map((n) => n.relatedId as string),
       ),
@@ -227,6 +235,56 @@ router.delete('/api/notifications/read/clear', authMiddleware, async (req: AuthR
     res.status(500).json({ detail: '清除失败' });
   }
 });
+
+// ── 系统公告（管理员向全员发站内通知）──
+// 收件人范围：全部未禁用账号；尊重收件人个人「系统公告」开关（默认开）。
+// 站内 only（announcement 无邮件模板）；分块 createMany 避免单条大事务。
+router.post(
+  '/api/notifications/announcements',
+  authMiddleware,
+  requireRole('ADMIN'),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      if (!prisma) {
+        res.status(503).json({ detail: '数据库未连接' });
+        return;
+      }
+      const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+      const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+      if (!title || title.length > 120) {
+        res.status(400).json({ detail: '公告标题不能为空且不超过 120 字' });
+        return;
+      }
+      if (!message || message.length > 2000) {
+        res.status(400).json({ detail: '公告内容不能为空且不超过 2000 字' });
+        return;
+      }
+
+      const users = await prisma.user.findMany({
+        where: { disabled: false },
+        select: { id: true, metadata: true },
+      });
+      const targets = users.filter((u) => notificationPrefsFromMetadata(u.metadata).announcement !== false);
+      const rows = targets.map((u) => ({
+        userId: u.id,
+        title,
+        message,
+        type: 'announcement',
+        relatedId: null,
+      }));
+      // 分块写入：每块 500 条
+      const CHUNK = 500;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        await prisma.notification.createMany({ data: rows.slice(i, i + CHUNK) });
+      }
+      logger.info({ total: users.length, sent: rows.length }, '[announcements] Broadcast sent');
+      res.json({ sent: rows.length, skipped: users.length - rows.length });
+    } catch (err) {
+      logger.error({ err }, '[announcements] Broadcast failed');
+      res.status(500).json({ detail: '公告发送失败' });
+    }
+  },
+);
 
 export { createNotification };
 

@@ -355,14 +355,38 @@ export const deDEAdminTranslation: TranslationMap = {
       ticketCreated: 'Ticket erstellt (an Nutzer)',
       ticketReplied: 'Ticket beantwortet (an Nutzer)',
       ticketStatusChanged: 'Ticket-Status geändert (an Nutzer)',
+      securityNotice: 'Kontosicherheits-Hinweis (an Nutzer)',
+      securityEmailChanged: 'E-Mail-Wechsel-Warnung (an alte E-Mail, immer gesendet)',
+      modelUpdateNotice: 'Favoriten-Modell-Update (an Favorisierer)',
     },
     emailChangeCodeDesc: 'Gesendet, wenn der Nutzer seine E-Mail wechselt',
     passwordResetDesc: 'Reset-Link für die Passwort-Wiederherstellung',
+    securityNoticeDesc: 'Benachrichtigt den Nutzer nach Passwort- oder E-Mail-Änderung',
+    securityEmailChangedDesc:
+      'Sicherheitswarnung an die bisherige E-Mail nach einem Wechsel (immer gesendet, Schutz vor Übernahme)',
+    modelUpdateNoticeDesc:
+      'Benachrichtigt Favorisierer bei neuer Version, Datei-Update oder Offline-Nahme eines Modells',
     emailTplEntranceDiv:
       '    <div>Einstieg: <a href="{{actionUrl}}" style="color:#f97316;text-decoration:none;">{{actionUrl}}</a></div>',
     emptyUseModelColor: 'Leer lassen für die eigenen Farben des Modells',
     emptyUseOriginal: 'Leer lassen für den Originalwert des Modells',
     enableAnnouncement: 'Ankündigung aktivieren',
+    sectionAnnouncementBroadcast: 'In-App-Ankündigung runden',
+    announcementBroadcastTitle: 'In-App-Ankündigung senden',
+    announcementBroadcastDesc:
+      'Sendet eine Ankündigung an das Benachrichtigungszentrum aller Nutzer (respektiert den individuellen Schalter „Systemankündigungen“)',
+    announcementBroadcastTitlePlaceholder: 'Ankündigungstitel (max. 120 Zeichen)',
+    announcementBroadcastMessagePlaceholder: 'Ankündigungstext (max. 2000 Zeichen)',
+    announcementBroadcastHint:
+      'Erscheint sofort im Benachrichtigungszentrum der Nutzer (Badge-Hinweis); unabhängig vom Homepage-Banner oben.',
+    announcementBroadcastSend: 'Ankündigung senden',
+    announcementBroadcastSending: 'Wird gesendet...',
+    announcementBroadcastEmpty: 'Bitte Titel und Text ausfüllen',
+    announcementBroadcastSent: 'Ankündigung gesendet: {{sent}} zugestellt, {{skipped}} übersprungen (Schalter aus)',
+    announcementBroadcastFailed: 'Senden fehlgeschlagen, bitte erneut versuchen',
+    announcementBroadcastConfirmTitle: 'Senden bestätigen',
+    announcementBroadcastConfirmDesc:
+      'Die Ankündigung wird sofort an alle Nutzer gesendet und kann nicht widerrufen werden. Jetzt senden?',
     enableSyncTool: 'Sync-Tool aktivieren',
     enableSyncToolFirst: 'Bitte zuerst „Sync-Tool aktivieren“ einschalten und die Einstellungen speichern',
     enabledLocales: 'Auswählbare Sprachen',
@@ -658,6 +682,8 @@ export const deDEAdminTranslation: TranslationMap = {
     notifyEmailDownloadSwitch: 'Download-Benachrichtigungen',
     notifyEmailFavoriteSwitch: 'Favoriten-Benachrichtigungen',
     notifyEmailInquirySwitch: 'Anfrage-bezogene E-Mails',
+    notifyEmailSecuritySwitch: 'Kontosicherheits-E-Mails',
+    notifyEmailModelUpdateSwitch: 'Favoriten-Modell-Update-E-Mails',
     notifyEmailSwitchDesc:
       'Steuert nur E-Mails: Wenn an, erhalten Nutzer für diese Ereignisse zusätzlich zur In-App-Benachrichtigung eine E-Mail; Bestätigungscodes und Passwort-Reset werden immer gesendet',
     notifyEmailTicketSwitch: 'Ticket-bezogene E-Mails',

@@ -69,6 +69,8 @@ export interface SystemSettings {
   notify_email_favorite: boolean;
   notify_email_model_conversion: boolean;
   notify_email_download: boolean;
+  notify_email_security: boolean;
+  notify_email_model_update: boolean;
   email_templates: string;
   interface_theme: string;
   mobile_interface_theme: string;

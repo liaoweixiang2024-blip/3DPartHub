@@ -30,7 +30,35 @@ const ROLE_LABEL_KEYS: Record<string, string> = {
   INTERNAL: 'profile.roles.internal',
 };
 
-const NOTIFICATION_ITEMS = ['ticket', 'inquiry', 'backup', 'favorite', 'model_conversion', 'download'] as const;
+const NOTIFICATION_ITEMS = [
+  'ticket',
+  'inquiry',
+  'security',
+  'announcement',
+  'model_update',
+  'backup',
+  'favorite',
+  'model_conversion',
+  'download',
+] as const;
+// 触发链路全部要求 ADMIN（上传/重转/备份体检），普通用户不可能收到这四类
+const ADMIN_ONLY_NOTIFICATION_ITEMS: ReadonlySet<string> = new Set([
+  'backup',
+  'favorite',
+  'model_conversion',
+  'download',
+]);
+// 有邮件模板的类型才显示「邮件」开关（announcement 仅站内；与 emailTemplates 注册表对应）
+const EMAIL_CAPABLE_NOTIFICATION_ITEMS: ReadonlySet<string> = new Set([
+  'ticket',
+  'inquiry',
+  'security',
+  'model_update',
+  'favorite',
+  'model_conversion',
+  'backup',
+  'download',
+]);
 
 function normalizePhone(value: unknown): string {
   return String(value ?? '')
@@ -88,11 +116,12 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
   const user = useAuthStore((s) => s.user);
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const showEmailPrefs = user?.role !== 'ADMIN';
-  // 备份体检通知只有管理员会收到（收件人是管理员），普通用户显示该项是永远收不到消息的死开关。
-  // auth 未水合时按完整列表渲染（管理员首帧不闪变「备份项」），水合后按角色定稿
+  // 备份（收件人是管理员）/ 收藏、下载（收件人=模型创建者）/ 转换（上传与重转入口）四类通知
+  // 的触发条件全部依赖 ADMIN 权限，普通用户显示这些是永远收不到消息的死开关，按角色隐藏。
+  // auth 未水合时按完整列表渲染（管理员首帧不闪变），水合后按角色定稿
   const isAdmin = user?.role === 'ADMIN';
   const visibleItems = hasHydrated
-    ? NOTIFICATION_ITEMS.filter((item) => item !== 'backup' || isAdmin)
+    ? NOTIFICATION_ITEMS.filter((item) => isAdmin || !ADMIN_ONLY_NOTIFICATION_ITEMS.has(item))
     : NOTIFICATION_ITEMS;
   const [prefs, setPrefs] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
@@ -167,7 +196,7 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
                     <span>{t('profile.notifications.inApp')}</span>
                     <Toggle checked={prefs[item] !== false} onChange={(v) => handleChange(item, v)} />
                   </label>
-                  {showEmailPrefs && (
+                  {showEmailPrefs && EMAIL_CAPABLE_NOTIFICATION_ITEMS.has(item) && (
                     <label className="flex items-center gap-1.5 text-[10px] text-on-surface-variant">
                       <span>{t('profile.notifications.email')}</span>
                       <Toggle
@@ -229,7 +258,7 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
                   <span>{t('profile.notifications.inApp')}</span>
                   <Toggle checked={prefs[item] !== false} onChange={(v) => handleChange(item, v)} />
                 </label>
-                {showEmailPrefs && (
+                {showEmailPrefs && EMAIL_CAPABLE_NOTIFICATION_ITEMS.has(item) && (
                   <label className="flex items-center gap-2 text-xs text-on-surface-variant">
                     <span>{t('profile.notifications.email')}</span>
                     <Toggle

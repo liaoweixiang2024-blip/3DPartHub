@@ -1951,6 +1951,10 @@ export const jaJPMajorFormsTranslation: TranslationMap = {
       saveSettings: '通知設定を保存',
       settings: '通知設定',
       items: {
+        announcement: {
+          description: 'メンテナンス通知や全ユーザー向けのお知らせ',
+          label: 'システムお知らせ',
+        },
         backup: {
           description: 'バックアップ健全性リスクの通知',
           label: 'バックアップ通知',
@@ -1970,6 +1974,14 @@ export const jaJPMajorFormsTranslation: TranslationMap = {
         model_conversion: {
           description: 'モデル変換の完了または失敗',
           label: '変換通知',
+        },
+        model_update: {
+          description: 'お気に入りのモデルに新しいバージョンやファイル更新',
+          label: 'お気に入り更新通知',
+        },
+        security: {
+          description: 'パスワード変更・メール変更などのセキュリティイベント',
+          label: 'アカウントセキュリティ通知',
         },
         ticket: {
           description: 'チケット返信と状態変更',
@@ -2875,6 +2887,9 @@ const jaJPLegacyPatch: TranslationMap = {
     typeAll: 'すべての種類',
     typeTicket: 'チケット',
     typeInquiry: '見積依頼',
+    typeSecurity: 'アカウントセキュリティ',
+    typeModelUpdate: 'お気に入り更新',
+    typeAnnouncement: 'システムお知らせ',
     typeFavorite: 'お気に入り',
     typeDownload: 'ダウンロード',
     typeModelConversion: 'モデル変換',

@@ -172,16 +172,20 @@ router.post('/api/models/:id/favorite', authMiddleware, async (req: AuthRequest,
           select: { createdById: true, name: true },
         });
         if (model && model.createdById !== req.user!.userId) {
+          const favoriter = await prisma.user.findUnique({
+            where: { id: req.user!.userId },
+            select: { username: true },
+          });
           await createNotification({
             userId: model.createdById,
             title: '新收藏',
-            message: `有用户收藏了模型「${model.name}」`,
+            message: `${favoriter ? `用户「${favoriter.username}」` : '有用户'}收藏了模型「${model.name}」`,
             type: 'favorite',
             audience: 'owner',
             relatedId: modelId,
             siteUrl: requestSiteUrl(req),
             emailTemplateKey: 'favorite_notice',
-            emailVars: { modelName: model.name },
+            emailVars: { modelName: model.name, favoriterName: favoriter?.username || '' },
           });
         }
       } catch {

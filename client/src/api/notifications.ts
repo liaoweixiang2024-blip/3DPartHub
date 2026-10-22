@@ -68,3 +68,9 @@ export async function clearReadNotifications() {
   const res = await client.delete('/notifications/read/clear');
   return unwrapResponse<{ count: number }>(res);
 }
+
+/** 管理员向全员发送站内公告（返回送达/跳过人数；跳过=收件人关闭了「系统公告」开关） */
+export async function sendAnnouncement(title: string, message: string) {
+  const res = await client.post('/notifications/announcements', { title, message });
+  return unwrapResponse<{ sent: number; skipped: number }>(res);
+}

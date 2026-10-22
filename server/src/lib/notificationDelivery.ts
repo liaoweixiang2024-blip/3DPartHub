@@ -11,6 +11,9 @@ const DEFAULT_IN_APP_NOTIFICATION_PREFS: Record<string, boolean> = {
   model_conversion: true,
   backup: true,
   download: false,
+  security: true,
+  model_update: true,
+  announcement: true,
 };
 
 const DEFAULT_EMAIL_NOTIFICATION_PREFS: Record<string, boolean> = {
@@ -20,6 +23,11 @@ const DEFAULT_EMAIL_NOTIFICATION_PREFS: Record<string, boolean> = {
   model_conversion: true,
   backup: true,
   download: false,
+  // 安全事件邮件确认默认开（仍受站点级 notify_email_security 二次闸控）
+  security: true,
+  model_update: false,
+  // announcement 无邮件模板，仅站内
+  announcement: false,
 };
 
 export const DEFAULT_NOTIFICATION_PREFS: Record<string, boolean> = {
@@ -88,6 +96,8 @@ export function getBusinessNotificationActionPath(
   const id = encodedRelatedId(params.relatedId);
 
   if (type === 'backup') return '/admin/settings#backup';
+  if (type === 'security') return '/profile';
+  if (type === 'announcement') return '/';
   if (!id) return '/';
   if (type === 'ticket')
     return params.audience === 'admin' ? `/admin/tickets/${id}#messages` : `/my-tickets/${id}#messages`;
@@ -98,6 +108,7 @@ export function getBusinessNotificationActionPath(
     type === 'favorite' ||
     type === 'download' ||
     type === 'model_conversion' ||
+    type === 'model_update' ||
     type === 'success' ||
     type === 'error'
   ) {
@@ -109,9 +120,12 @@ export function getBusinessNotificationActionPath(
 function actionLabelForNotification(params: BusinessNotificationParams): string {
   const type = params.type || 'info';
   if (type === 'backup') return '打开备份设置';
+  if (type === 'security') return '打开账号设置';
+  if (type === 'announcement') return '打开首页';
   if (type === 'ticket') return '打开工单';
   if (type === 'inquiry') return '打开询价';
-  if (type === 'favorite' || type === 'download' || type === 'model_conversion') return '打开模型';
+  if (type === 'favorite' || type === 'download' || type === 'model_conversion' || type === 'model_update')
+    return '打开模型';
   return '打开详情';
 }
 

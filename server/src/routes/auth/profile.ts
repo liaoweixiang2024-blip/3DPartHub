@@ -2,9 +2,10 @@ import { randomInt } from 'node:crypto';
 import { Router, Response } from 'express';
 import { cacheDel, redis } from '../../lib/cache.js';
 import { checkRateLimit, storeEmailCode, verifyEmailCode } from '../../lib/captcha.js';
-import { sendChangeEmailCode } from '../../lib/email.js';
+import { sendChangeEmailCode, sendTemplateEmail } from '../../lib/email.js';
 import { revokeAllTokensBefore, signAccessToken, signRefreshToken, verifyRefreshToken } from '../../lib/jwt.js';
 import { logger } from '../../lib/logger.js';
+import { createNotification } from '../../lib/notificationDelivery.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 import { prisma } from '../../lib/prisma.js';
 import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
@@ -29,6 +30,11 @@ function normalizeEmailInput(value: unknown): string | null {
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+/** 安全事件时间戳（UTC 显式标注，邮件/通知文案用） */
+function securityEventTime(): string {
+  return `${new Date().toISOString().replace('T', ' ').slice(0, 16)} UTC`;
 }
 
 export function createAuthProfileRouter() {
@@ -236,7 +242,7 @@ export function createAuthProfileRouter() {
     try {
       const user = await prisma.user.findUnique({
         where: { id: req.user!.userId },
-        select: { id: true, email: true },
+        select: { id: true, email: true, username: true },
       });
       if (!user?.email) {
         res.status(400).json({ detail: '当前账号没有绑定邮箱' });
@@ -271,6 +277,36 @@ export function createAuthProfileRouter() {
       await cacheDel(`auth:user:${user.id}`).catch(() => {});
       redis.del(`change_email_rate:${user.id}:old`).catch(() => {});
       redis.del(`change_email_rate:${user.id}:new`).catch(() => {});
+
+      // 账号安全事件通知（站内）：邮箱变更留痕，非本人操作时用户可及时发现
+      const maskedEmail = newEmail.replace(/^(.).*(@.*)$/, '$1***$2');
+      const eventIp = req.ip || '未知';
+      const eventTime = securityEventTime();
+      await createNotification({
+        userId: user.id,
+        title: '绑定邮箱已更换',
+        message: `您的账号绑定邮箱已更换为 ${maskedEmail}（IP ${eventIp}，${eventTime}）。若非本人操作，请立即联系管理员。`,
+        type: 'security',
+        audience: 'user',
+        relatedId: null,
+        emailTemplateKey: 'security_notice',
+        emailVars: {
+          securityEvent: `您的账号绑定邮箱已更换为 ${maskedEmail}`,
+          ip: eventIp,
+          time: eventTime,
+        },
+      }).catch(() => {});
+
+      // 旧邮箱预警（无条件直发，不走通知偏好/全局开关——防盗号信道，与验证码类同级）：
+      // 换绑后站内通知攻击者也能看到，真正需要知道的是原邮箱主人
+      void sendTemplateEmail('security_email_changed', user.email, {
+        username: user.username || user.email,
+        newEmailMasked: maskedEmail,
+        ip: eventIp,
+        time: eventTime,
+      }).catch((err) => {
+        logger.warn({ err, userId: user.id }, '[auth] Failed to send old-email hijack alert');
+      });
 
       res.json({ message: '邮箱已更换，请重新登录' });
     } catch (err) {
@@ -378,6 +414,20 @@ export function createAuthProfileRouter() {
       await cacheDel(`auth:user:${req.user!.userId}`).catch((err) => {
         logger.warn({ err, userId: req.user!.userId }, '[password] Failed to clear auth user cache');
       });
+
+      // 账号安全事件通知（站内 + 邮件）：密码变更留痕，非本人操作时用户可及时发现
+      const eventIp = req.ip || '未知';
+      const eventTime = securityEventTime();
+      await createNotification({
+        userId: req.user!.userId,
+        title: '密码已修改',
+        message: `您的账号密码刚刚被修改（IP ${eventIp}，${eventTime}）。若非本人操作，请立即通过「忘记密码」找回。`,
+        type: 'security',
+        audience: 'user',
+        relatedId: null,
+        emailTemplateKey: 'security_notice',
+        emailVars: { securityEvent: '您的账号密码刚刚被修改', ip: eventIp, time: eventTime },
+      }).catch(() => {});
 
       if (req.user) {
         try {

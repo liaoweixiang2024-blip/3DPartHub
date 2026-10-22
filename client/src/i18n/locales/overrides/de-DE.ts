@@ -1726,6 +1726,10 @@ export const deDEMajorFormsTranslation: TranslationMap = {
       saveSettings: 'Benachrichtigungseinstellungen speichern',
       settings: 'Benachrichtigungseinstellungen',
       items: {
+        announcement: {
+          description: 'Wartungshinweise und seitenweite Nachrichten der Administratoren',
+          label: 'Systemankündigungen',
+        },
         backup: { description: 'Warnungen zu Backup-Gesundheitsrisiken', label: 'Backup-Benachrichtigungen' },
         download: {
           description: 'Benachrichtigen, wenn Ihr Modell heruntergeladen wird',
@@ -1739,6 +1743,14 @@ export const deDEMajorFormsTranslation: TranslationMap = {
         model_conversion: {
           description: 'Modellkonvertierung abgeschlossen oder fehlgeschlagen',
           label: 'Konvertierungs-Benachrichtigungen',
+        },
+        model_update: {
+          description: 'Ein favorisiertes Modell erhält eine neue Version oder aktualisierte Datei',
+          label: 'Modell-Update-Benachrichtigungen',
+        },
+        security: {
+          description: 'Passwortänderungen, E-Mail-Wechsel und weitere Sicherheitsereignisse',
+          label: 'Sicherheits-Benachrichtigungen',
         },
         ticket: { description: 'Ticketantworten und Statusänderungen', label: 'Ticket-Benachrichtigungen' },
       },
@@ -2925,6 +2937,9 @@ const deDELegacyPatch: TranslationMap = {
     typeAll: 'Alle Typen',
     typeTicket: 'Tickets',
     typeInquiry: 'Anfragen',
+    typeSecurity: 'Kontosicherheit',
+    typeModelUpdate: 'Modell-Updates',
+    typeAnnouncement: 'Ankündigungen',
     typeFavorite: 'Favoriten',
     typeDownload: 'Downloads',
     typeModelConversion: 'Modellkonvertierung',

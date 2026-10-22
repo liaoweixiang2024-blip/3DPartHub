@@ -46,16 +46,23 @@ function notifyModelOwnerAboutDownload(
         select: { id: true, name: true, createdById: true },
       });
       if (!model || model.createdById === downloaderId) return;
+      const downloader = downloaderId
+        ? await prisma.user.findUnique({ where: { id: downloaderId }, select: { username: true } })
+        : null;
       await createNotification({
         userId: model.createdById,
         title: '模型被下载',
-        message: `模型「${model.name}」被下载`,
+        message: `${downloader ? `用户「${downloader.username}」` : '有用户'}下载了模型「${model.name}」`,
         type: 'download',
         audience: 'owner',
         relatedId: model.id,
         siteUrl,
         emailTemplateKey: 'download_notice',
-        emailVars: { modelName: model.name, downloadFormat: format.toUpperCase() },
+        emailVars: {
+          modelName: model.name,
+          downloadFormat: format.toUpperCase(),
+          downloaderName: downloader?.username || '',
+        },
       });
     } catch (err) {
       logger.warn({ err, modelId }, '[models] Failed to notify model owner about download');

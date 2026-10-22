@@ -9,6 +9,8 @@ import { cacheDelByPrefix } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
 import { normalizeUploadFilename } from '../../lib/filenameEncoding.js';
 import { logger } from '../../lib/logger.js';
+import { notifyModelUpdate } from '../../lib/modelUpdateNotifications.js';
+import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { conversionChildHeapLimitMb, conversionQueue } from '../../lib/queue.js';
 import { persistFile } from '../../lib/storageProvider.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
@@ -330,6 +332,15 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         }
 
         await cacheDelByPrefix('cache:models:');
+
+        // 收藏者站内通知（24h 去重 + 排除操作者）：替换源文件也是一次内容更新
+        notifyModelUpdate({
+          modelId: id,
+          actorId: req.user!.userId,
+          summary: '更新了源文件',
+          siteUrl: requestSiteUrl(req),
+        });
+
         res.json({ success: true, data: { model_id: id, status: MODEL_STATUS.PROCESSING } });
       } catch (err: unknown) {
         if (prisma) {

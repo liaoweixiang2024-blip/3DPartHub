@@ -5,6 +5,8 @@ import { Router, Response } from 'express';
 import { cacheDelByPrefix, cacheDel } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
 import { logger } from '../../lib/logger.js';
+import { notifyModelUpdate } from '../../lib/modelUpdateNotifications.js';
+import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { MAX_MODEL_PAGE, modelTextSearchWhere, normalizeSearchParam, numericQuery } from '../../lib/searchQuery.js';
 import { persistFile } from '../../lib/storageProvider.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
@@ -858,6 +860,14 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
           }
         });
         await clearModelManagementCaches();
+        // 收藏者站内通知：模型重新上架（不去重，带详情链接）
+        notifyModelUpdate({
+          modelId: id,
+          actorId: req.user!.userId,
+          summary: '已恢复上架',
+          siteUrl: requestSiteUrl(req),
+          dedupe: false,
+        });
         res.json({ message: '模型已恢复', model_id: id });
       } catch (err) {
         logger.error({ err, modelId: id }, '[models] Restore failed');
@@ -960,6 +970,15 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
       res.json({ message: '删除成功，但部分文件清理失败', warnings: result.warnings.length });
       return;
     }
+    // 收藏者站内通知：模型下架（不去重——「更新后短时间内删除」是常见时序，必须送达；不带详情链接）
+    notifyModelUpdate({
+      modelId: req.params.id as string,
+      actorId: req.user!.userId,
+      summary: '已删除下架',
+      siteUrl: requestSiteUrl(req),
+      link: false,
+      dedupe: false,
+    });
     res.json({ message: '删除成功' });
   });
 

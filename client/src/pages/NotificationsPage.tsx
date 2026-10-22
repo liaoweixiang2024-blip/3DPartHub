@@ -33,20 +33,29 @@ const TYPE_META: Record<string, { icon: string; color: string }> = {
   error: { icon: 'error', color: 'text-red-500 bg-red-500/10' },
   info: { icon: 'notifications', color: 'text-primary-container bg-primary-container/10' },
   model_conversion: { icon: 'view_in_ar', color: 'text-cyan-500 bg-cyan-500/10' },
+  model_update: { icon: 'update', color: 'text-indigo-500 bg-indigo-500/10' },
   inquiry: { icon: 'request_quote', color: 'text-amber-500 bg-amber-500/10' },
   backup: { icon: 'database', color: 'text-orange-500 bg-orange-500/10' },
+  security: { icon: 'shield', color: 'text-emerald-500 bg-emerald-500/10' },
+  announcement: { icon: 'campaign', color: 'text-teal-500 bg-teal-500/10' },
 };
 
 const TYPE_OPTIONS: Array<{ value: string; labelKey: string }> = [
   { value: '', labelKey: 'notificationsPage.typeAll' },
   { value: 'ticket', labelKey: 'notificationsPage.typeTicket' },
   { value: 'inquiry', labelKey: 'notificationsPage.typeInquiry' },
+  { value: 'security', labelKey: 'notificationsPage.typeSecurity' },
+  { value: 'model_update', labelKey: 'notificationsPage.typeModelUpdate' },
+  { value: 'announcement', labelKey: 'notificationsPage.typeAnnouncement' },
   { value: 'favorite', labelKey: 'notificationsPage.typeFavorite' },
   { value: 'download', labelKey: 'notificationsPage.typeDownload' },
   { value: 'model_conversion', labelKey: 'notificationsPage.typeModelConversion' },
   { value: 'backup', labelKey: 'notificationsPage.typeBackup' },
   { value: 'comment', labelKey: 'notificationsPage.typeComment' },
 ];
+// 与 ProfilePage 通知偏好同款角色治理：收藏/下载/转换/备份的触发链路全部要求 ADMIN，
+// 普通用户不可能收到，筛选下拉里对非管理员隐藏
+const ADMIN_ONLY_TYPE_OPTIONS: ReadonlySet<string> = new Set(['favorite', 'download', 'model_conversion', 'backup']);
 
 function getTypeMeta(type: string) {
   return TYPE_META[type] || TYPE_META.info;
@@ -56,6 +65,8 @@ function getTypeMeta(type: string) {
 function getNotificationRoute(n: Notification, isAdmin: boolean): string | null {
   if (n.actionPath) return n.actionPath;
   if (n.type === 'backup') return isAdmin ? '/admin/settings#backup' : null;
+  if (n.type === 'security') return '/profile';
+  if (n.type === 'announcement') return '/';
   if (!n.relatedId) return null;
   if (n.type === 'ticket')
     return isAdmin ? `/admin/tickets/${n.relatedId}#messages` : `/my-tickets/${n.relatedId}#messages`;
@@ -65,6 +76,7 @@ function getNotificationRoute(n: Notification, isAdmin: boolean): string | null 
   if (n.type === 'success') return `/model/${n.relatedId}`;
   if (n.type === 'error') return `/model/${n.relatedId}`;
   if (n.type === 'model_conversion') return `/model/${n.relatedId}`;
+  if (n.type === 'model_update') return `/model/${n.relatedId}`;
   if (n.type === 'inquiry') {
     return isAdmin ? `/admin/inquiries/${n.relatedId}#messages` : `/my-inquiries/${n.relatedId}#messages`;
   }
@@ -304,7 +316,9 @@ export default function NotificationsPage() {
         variant="chip"
         value={typeFilter}
         onChange={(value) => changeFilter({ type: value })}
-        options={TYPE_OPTIONS.map((opt) => ({ value: opt.value, label: t(opt.labelKey) }))}
+        options={(isAdmin ? TYPE_OPTIONS : TYPE_OPTIONS.filter((opt) => !ADMIN_ONLY_TYPE_OPTIONS.has(opt.value))).map(
+          (opt) => ({ value: opt.value, label: t(opt.labelKey) }),
+        )}
       />
     </div>
   );

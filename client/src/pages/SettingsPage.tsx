@@ -82,6 +82,7 @@ import Icon from '../components/shared/Icon';
 import SelectMenu from '../components/shared/SelectMenu';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
+import { sendAnnouncement } from '../api/notifications';
 import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -205,6 +206,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
   notify_email_favorite: false,
   notify_email_model_conversion: false,
   notify_email_download: false,
+  notify_email_security: false,
+  notify_email_model_update: false,
   email_templates: '',
   interface_theme: DEFAULT_INTERFACE_THEME,
   mobile_interface_theme: DEFAULT_MOBILE_THEME,
@@ -432,6 +435,7 @@ type SettingItemType =
   | 'storage-test'
   | 'storage-policy-info'
   | 'storage-sync'
+  | 'announcement-send'
   | 'color-scheme';
 
 interface SettingItemBase {
@@ -447,7 +451,10 @@ interface SettingItemBase {
 
 type SystemSettingItem = SettingItemBase & {
   key: keyof SystemSettings;
-  type: Exclude<SettingItemType, 'email-test' | 'cache-test' | 'storage-test' | 'storage-policy-info' | 'storage-sync'>;
+  type: Exclude<
+    SettingItemType,
+    'email-test' | 'cache-test' | 'storage-test' | 'storage-policy-info' | 'storage-sync' | 'announcement-send'
+  >;
 };
 
 type ActionSettingItem =
@@ -470,6 +477,10 @@ type ActionSettingItem =
   | (SettingItemBase & {
       key: 'storage_sync';
       type: 'storage-sync';
+    })
+  | (SettingItemBase & {
+      key: 'announcement_send';
+      type: 'announcement-send';
     });
 
 type SettingItem = SystemSettingItem | ActionSettingItem;
@@ -481,7 +492,14 @@ interface SettingGroup {
 }
 
 function isSystemSettingKey(key: SettingItem['key']): key is keyof SystemSettings {
-  return !['smtp_test', 'cache_test', 'storage_test', 'storage_policy_info', 'storage_sync'].includes(String(key));
+  return ![
+    'smtp_test',
+    'cache_test',
+    'storage_test',
+    'storage_policy_info',
+    'storage_sync',
+    'announcement_send',
+  ].includes(String(key));
 }
 
 function isSection(item: SettingItem | { _section: string }): item is { _section: string } {
@@ -793,6 +811,13 @@ const GROUPS: SettingGroup[] = [
         label: 'adminSettings.customColor',
         desc: 'adminSettings.watermarkColorHint',
         type: 'color',
+      },
+      { _section: 'adminSettings.sectionAnnouncementBroadcast' },
+      {
+        key: 'announcement_send',
+        label: 'adminSettings.announcementBroadcastTitle',
+        desc: 'adminSettings.announcementBroadcastDesc',
+        type: 'announcement-send',
       },
     ],
   },
@@ -1666,6 +1691,18 @@ const GROUPS: SettingGroup[] = [
       {
         key: 'notify_email_download',
         label: 'adminSettings.notifyEmailDownloadSwitch',
+        desc: 'adminSettings.notifyEmailSwitchDesc',
+        type: 'switch',
+      },
+      {
+        key: 'notify_email_security',
+        label: 'adminSettings.notifyEmailSecuritySwitch',
+        desc: 'adminSettings.notifyEmailSwitchDesc',
+        type: 'switch',
+      },
+      {
+        key: 'notify_email_model_update',
+        label: 'adminSettings.notifyEmailModelUpdateSwitch',
         desc: 'adminSettings.notifyEmailSwitchDesc',
         type: 'switch',
       },
@@ -2704,6 +2741,44 @@ ${emailShellEnd}`,
   <p style="margin:0 0 10px;">下载格式：{{downloadFormat}}</p>
 ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'modelName', 'downloadFormat'],
+  },
+  security_notice: {
+    label: 'adminSettings.emailTplNames.securityNotice',
+    description: 'adminSettings.securityNoticeDesc',
+    subject: '{{siteTitle}} 账号安全提醒',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;">账号安全提醒</h2>
+  <p style="margin:0 0 10px;">您好 {{username}}：</p>
+  <p style="margin:0 0 10px;"><strong>{{securityEvent}}</strong></p>
+  <p style="margin:0 0 10px;">操作 IP：{{ip}}<br />时间：{{time}}</p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">若非本人操作，请立即修改密码并联系管理员。</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'securityEvent', 'ip', 'time'],
+  },
+  security_email_changed: {
+    label: 'adminSettings.emailTplNames.securityEmailChanged',
+    description: 'adminSettings.securityEmailChangedDesc',
+    subject: '{{siteTitle}} 安全预警：您的账号绑定邮箱已被更换',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;color:#dc2626;">安全预警：绑定邮箱已被更换</h2>
+  <p style="margin:0 0 10px;">您好 {{username}}：</p>
+  <p style="margin:0 0 10px;">使用此邮箱的 {{siteTitle}} 账号刚刚更换了绑定邮箱（新邮箱：{{newEmailMasked}}）。</p>
+  <p style="margin:0 0 10px;">操作 IP：{{ip}}<br />时间：{{time}}</p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">若非本人操作，说明您的账号可能已被他人控制，请立即联系站点管理员处理。</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'newEmailMasked', 'ip', 'time'],
+  },
+  model_update_notice: {
+    label: 'adminSettings.emailTplNames.modelUpdateNotice',
+    description: 'adminSettings.modelUpdateNoticeDesc',
+    subject: '{{siteTitle}} 您收藏的模型有更新',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;">收藏的模型有更新</h2>
+  <p style="margin:0 0 10px;">您好 {{username}}：</p>
+  <p style="margin:0 0 10px;">您收藏的模型 <strong>{{modelName}}</strong> {{updateSummary}}。</p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">点击下方按钮查看模型详情。</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'modelName', 'updateSummary'],
   },
 };
 
@@ -4357,6 +4432,84 @@ function LegalSectionsEditor({
   );
 }
 
+function AnnouncementSendPanel() {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const handleSend = async () => {
+    if (!title.trim() || !message.trim()) {
+      toast(t('adminSettings.announcementBroadcastEmpty'), 'error');
+      return;
+    }
+    setConfirmOpen(false);
+    setSending(true);
+    try {
+      const result = await sendAnnouncement(title.trim(), message.trim());
+      toast(
+        t('adminSettings.announcementBroadcastSent', {
+          sent: result?.sent ?? 0,
+          skipped: result?.skipped ?? 0,
+        }),
+        'success',
+      );
+      setTitle('');
+      setMessage('');
+    } catch (err) {
+      toast(errorMessage(err, t('adminSettings.announcementBroadcastFailed')), 'error');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-outline-variant/20 p-4">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        maxLength={120}
+        placeholder={t('adminSettings.announcementBroadcastTitlePlaceholder')}
+        className="w-full rounded-md border border-outline-variant/30 px-3 py-2 text-sm outline-none focus:border-primary"
+      />
+      <textarea
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        maxLength={2000}
+        rows={4}
+        placeholder={t('adminSettings.announcementBroadcastMessagePlaceholder')}
+        className="w-full resize-y rounded-md border border-outline-variant/30 px-3 py-2 text-sm outline-none focus:border-primary"
+      />
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs leading-snug text-on-surface-variant/70">
+          {t('adminSettings.announcementBroadcastHint')}
+        </p>
+        <button
+          type="button"
+          onClick={() => setConfirmOpen(true)}
+          disabled={sending || !title.trim() || !message.trim()}
+          className="shrink-0 rounded-md bg-primary-container px-4 py-2 text-xs font-medium text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {sending ? t('adminSettings.announcementBroadcastSending') : t('adminSettings.announcementBroadcastSend')}
+        </button>
+      </div>
+      {confirmOpen && (
+        <ConfirmDialog
+          open={confirmOpen}
+          onClose={() => setConfirmOpen(false)}
+          onConfirm={handleSend}
+          title={t('adminSettings.announcementBroadcastConfirmTitle')}
+          description={t('adminSettings.announcementBroadcastConfirmDesc')}
+          confirmLabel={t('adminSettings.announcementBroadcastSend')}
+        />
+      )}
+    </div>
+  );
+}
+
 function EmailTestPanel({
   value,
   onChange,
@@ -5183,7 +5336,7 @@ function getEmailTemplates(settings: SystemSettings) {
 const EMAIL_TEMPLATE_GROUPS: { titleKey: string; keys: string[] }[] = [
   {
     titleKey: 'adminSettings.emailTplGroupAccountV2',
-    keys: ['register_verify', 'change_email', 'password_reset'],
+    keys: ['register_verify', 'change_email', 'password_reset', 'security_notice', 'security_email_changed'],
   },
   {
     titleKey: 'adminSettings.emailTplGroupSystemV2',
@@ -5203,6 +5356,7 @@ const EMAIL_TEMPLATE_GROUPS: { titleKey: string; keys: string[] }[] = [
       'download_notice',
       'model_conversion_completed',
       'model_conversion_failed',
+      'model_update_notice',
     ],
   },
   {
@@ -7383,7 +7537,8 @@ function Content() {
                                 item.type === 'cache-test' ||
                                 item.type === 'storage-test' ||
                                 item.type === 'storage-policy-info' ||
-                                item.type === 'storage-sync';
+                                item.type === 'storage-sync' ||
+                                item.type === 'announcement-send';
                               const rowClass =
                                 item.type === 'color-scheme'
                                   ? 'px-4 sm:px-6 py-4 flex flex-col gap-4'
@@ -7520,6 +7675,8 @@ function Content() {
                                           <StoragePolicyInfoPanel settings={settings} />
                                         ) : item.type === 'storage-sync' ? (
                                           <StorageSyncPanel settings={settings} />
+                                        ) : item.type === 'announcement-send' ? (
+                                          <AnnouncementSendPanel />
                                         ) : isReadonlySettingItem(item) ? (
                                           <ReadonlySettingValue item={item} value={settings[item.key]} />
                                         ) : item.type === 'switch' ? (
