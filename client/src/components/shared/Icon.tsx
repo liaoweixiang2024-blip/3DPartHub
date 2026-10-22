@@ -260,6 +260,7 @@ const iconMap: Record<string, LucideIcon> = {
   progress_activity: RefreshCw,
   loader: Loader2,
   schedule: Clock,
+  event: Calendar /* 用户弹窗「注册时间」统计卡（缺映射会渲染成空 span） */,
   science: FlaskConical,
   view_in_ar: Box,
   photo_camera: Camera,

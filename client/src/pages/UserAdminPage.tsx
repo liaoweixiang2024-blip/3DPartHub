@@ -38,7 +38,7 @@ interface UserItem {
   lastLoginAt: string | null;
   lastActiveAt: string | null;
   createdAt: string;
-  _count: { downloads: number; favorites: number };
+  _count: { downloads: number; favorites: number; shareLinks: number };
 }
 
 interface UserStats {

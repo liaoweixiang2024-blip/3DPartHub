@@ -1746,6 +1746,7 @@ export const zhCNAdmin: TranslationMap = {
       loginFailed: '登录失败',
       statDownloads: '下载',
       statFavorites: '收藏',
+      statShares: '分享',
       statRegistered: '注册于',
       statLastLogin: '最近登录',
       statLastActive: '最近活跃',

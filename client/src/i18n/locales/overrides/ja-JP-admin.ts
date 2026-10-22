@@ -1897,6 +1897,7 @@ export const jaJPAdminTranslation: TranslationMap = {
       loginFailed: 'ログイン失敗',
       statDownloads: 'ダウンロード',
       statFavorites: 'お気に入り',
+      statShares: '共有',
       statRegistered: '登録日',
       statLastLogin: '最終ログイン',
       statLastActive: '最終アクティブ',

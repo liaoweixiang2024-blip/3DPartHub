@@ -1921,6 +1921,7 @@ export const deDEAdminTranslation: TranslationMap = {
       loginFailed: 'Anmeldung fehlgeschlagen',
       statDownloads: 'Downloads',
       statFavorites: 'Favoriten',
+      statShares: 'Freigaben',
       statRegistered: 'Registriert',
       statLastLogin: 'Letzte Anmeldung',
       statLastActive: 'Letzte Aktivität',

@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/shared/Icon';
@@ -7,7 +7,7 @@ import { checkProtectedAccess } from '../../../components/shared/ProtectedLink';
 import { useAuthEntry } from '../../../components/shared/useAuthEntry';
 import { localizeNavItems } from '../../../i18n/nav';
 import { getBusinessConfig } from '../../../lib/businessConfig';
-import { overlayMotion, sideSheetMotion } from '../../../lib/motion';
+import { overlayMotion, sideSheetPersistentMotion } from '../../../lib/motion';
 import { usePublicSettings } from '../../../lib/publicSettings';
 import { preloadRouteForPath } from '../../../lib/routeLoaders';
 import { useAuthStore } from '../../../stores/useAuthStore';
@@ -42,106 +42,117 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
   const navItems = localizeNavItems(isAdmin ? business.adminNav : business.userNav, t, 'mobile');
   const { authNodes, handleProtectedLinkClick } = useAuthEntry(settings, { onBeforeAuth: onClose });
 
+  const asideRef = useRef<HTMLElement>(null);
+
   useEffect(() => {
     document.documentElement.classList.toggle('mobile-nav-drawer-open', open);
     return () => document.documentElement.classList.remove('mobile-nav-drawer-open');
   }, [open]);
 
+  // 常驻挂载下关闭时焦点可能仍留在抽屉内链接/按钮上，aria 隐藏含焦点元素会被浏览器告警——
+  // 主动移走焦点兜底（inert 自身也会清）
+  useEffect(() => {
+    const el = asideRef.current;
+    if (!open && el && el.contains(document.activeElement)) {
+      (document.activeElement as HTMLElement | null)?.blur();
+    }
+  }, [open]);
+
   return (
     <>
+      {/* 遮罩轻量，条件渲染 + AnimatePresence 淡出；面板常驻挂载（见 sideSheetPersistentMotion 注释） */}
       <AnimatePresence>
         {open && (
-          <>
-            <motion.div
-              variants={overlayMotion}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className={appearance.overlayClassName}
-              onClick={onClose}
-            />
-            <motion.aside
-              variants={sideSheetMotion}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className={appearance.sheetClassName}
-              style={{
-                paddingTop: 'env(safe-area-inset-top, 0px)',
-                paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-                willChange: 'transform',
-              }}
-            >
-              <div className={appearance.headerClassName}>
-                <span className={appearance.titleClassName}>{t('common.navigation')}</span>
-                <button onClick={onClose} className={appearance.closeButtonClassName}>
-                  <Icon name="close" size={24} />
-                </button>
-              </div>
-              <nav className={appearance.navClassName}>
-                {navItems.map((item) => {
-                  const isActive =
-                    location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
-                  return (
-                    <Link
-                      key={item.path}
-                      to={item.path}
-                      onPointerEnter={() => preloadRouteForPath(item.path)}
-                      onPointerDown={() => preloadRouteForPath(item.path)}
-                      onFocus={() => preloadRouteForPath(item.path)}
-                      onClick={(e) => {
-                        const result = checkProtectedAccess(item.path, settings);
-                        if (result.action === 'allow') {
-                          onClose();
-                          return;
-                        }
-                        handleProtectedLinkClick(e, item.path);
-                      }}
-                      className={appearance.itemClassName(isActive)}
-                    >
-                      <Icon name={item.icon} size={appearance.iconSize} />
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </nav>
-              {user && (
-                <div className={appearance.footerClassName}>
-                  <Link
-                    to="/profile"
-                    onPointerEnter={() => preloadRouteForPath('/profile')}
-                    onPointerDown={() => preloadRouteForPath('/profile')}
-                    onFocus={() => preloadRouteForPath('/profile')}
-                    onClick={(e) => {
-                      const result = checkProtectedAccess('/profile', settings);
-                      if (result.action === 'allow') {
-                        onClose();
-                        return;
-                      }
-                      handleProtectedLinkClick(e, '/profile');
-                    }}
-                    className={appearance.footerLinkClassName}
-                  >
-                    <Icon name="settings" size={appearance.iconSize} />
-                    {t('nav.profileSettings')}
-                  </Link>
-                  <button
-                    onClick={() => {
-                      logout();
-                      onClose();
-                      navigate('/login');
-                    }}
-                    className={appearance.footerLinkClassName}
-                  >
-                    <Icon name="logout" size={appearance.iconSize} />
-                    {t('common.logout')}
-                  </button>
-                </div>
-              )}
-            </motion.aside>
-          </>
+          <motion.div
+            variants={overlayMotion}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={appearance.overlayClassName}
+            onClick={onClose}
+          />
         )}
       </AnimatePresence>
+      <motion.aside
+        ref={asideRef}
+        variants={sideSheetPersistentMotion}
+        initial={false}
+        animate={open ? 'open' : 'closed'}
+        inert={!open}
+        className={appearance.sheetClassName}
+        style={{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          willChange: 'transform',
+        }}
+      >
+        <div className={appearance.headerClassName}>
+          <span className={appearance.titleClassName}>{t('common.navigation')}</span>
+          <button onClick={onClose} className={appearance.closeButtonClassName}>
+            <Icon name="close" size={24} />
+          </button>
+        </div>
+        <nav className={appearance.navClassName}>
+          {navItems.map((item) => {
+            const isActive =
+              location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                onPointerEnter={() => preloadRouteForPath(item.path)}
+                onPointerDown={() => preloadRouteForPath(item.path)}
+                onFocus={() => preloadRouteForPath(item.path)}
+                onClick={(e) => {
+                  const result = checkProtectedAccess(item.path, settings);
+                  if (result.action === 'allow') {
+                    onClose();
+                    return;
+                  }
+                  handleProtectedLinkClick(e, item.path);
+                }}
+                className={appearance.itemClassName(isActive)}
+              >
+                <Icon name={item.icon} size={appearance.iconSize} />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+        {user && (
+          <div className={appearance.footerClassName}>
+            <Link
+              to="/profile"
+              onPointerEnter={() => preloadRouteForPath('/profile')}
+              onPointerDown={() => preloadRouteForPath('/profile')}
+              onFocus={() => preloadRouteForPath('/profile')}
+              onClick={(e) => {
+                const result = checkProtectedAccess('/profile', settings);
+                if (result.action === 'allow') {
+                  onClose();
+                  return;
+                }
+                handleProtectedLinkClick(e, '/profile');
+              }}
+              className={appearance.footerLinkClassName}
+            >
+              <Icon name="settings" size={appearance.iconSize} />
+              {t('nav.profileSettings')}
+            </Link>
+            <button
+              onClick={() => {
+                logout();
+                onClose();
+                navigate('/login');
+              }}
+              className={appearance.footerLinkClassName}
+            >
+              <Icon name="logout" size={appearance.iconSize} />
+              {t('common.logout')}
+            </button>
+          </div>
+        )}
+      </motion.aside>
       {authNodes}
     </>
   );

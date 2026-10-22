@@ -1848,6 +1848,7 @@ export const koKRAdminTranslation: TranslationMap = {
       loginFailed: '로그인 실패',
       statDownloads: '다운로드',
       statFavorites: '즐겨찾기',
+      statShares: '공유',
       statRegistered: '가입일',
       statLastLogin: '최근 로그인',
       statLastActive: '최근 활동',

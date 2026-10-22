@@ -26,7 +26,7 @@ export interface AdminUserDetail {
   lastLoginAt: string | null;
   lastActiveAt?: string | null;
   createdAt: string;
-  _count: { downloads: number; favorites: number };
+  _count: { downloads: number; favorites: number; shareLinks: number };
 }
 
 interface AuditItem {
@@ -45,7 +45,7 @@ interface LoginItem {
   createdAt: string;
 }
 
-/** 操作/登录区块折叠态显示条数（数据侧仍取 30/5，展开后限高滚动） */
+/** 操作/登录区块折叠态显示条数（数据侧各取 30，展开后限高滚动） */
 const COLLAPSED_ROWS = 5;
 
 const ROLE_OPTIONS = [
@@ -138,7 +138,7 @@ export default function UserEditDialog({
     return unwrapResponse<{ items: AuditItem[]; logins: LoginItem[] }>(res);
   });
 
-  // 操作/登录区块默认各显示 COLLAPSED_ROWS 条，超出折叠（数据侧仍取 30/5），展开后限高滚动防撑爆弹窗
+  // 操作/登录区块默认各显示 COLLAPSED_ROWS 条，超出折叠（数据侧各取 30），展开后限高滚动防撑爆弹窗
   const [opsExpanded, setOpsExpanded] = useState(false);
   const [loginsExpanded, setLoginsExpanded] = useState(false);
   useEffect(() => {
@@ -524,17 +524,18 @@ export default function UserEditDialog({
             </div>
           </div>
 
-          {/* 账号数据：计数 + 关键时间改为迷你统计卡（原单行小字挤 5 项带秒级时间戳，难读） */}
+          {/* 账号数据：计数三项一行（下载/收藏/分享），时间三项一行（注册/最后登录/最后活跃） */}
           <div className="grid grid-cols-3 gap-1.5">
             <StatTile icon="download" label={t('userAdmin.edit.statDownloads')} value={String(user._count.downloads)} />
             <StatTile icon="star" label={t('userAdmin.edit.statFavorites')} value={String(user._count.favorites)} />
+            <StatTile icon="share" label={t('userAdmin.edit.statShares')} value={String(user._count.shareLinks ?? 0)} />
+          </div>
+          <div className="-mt-0.5 grid grid-cols-3 gap-1.5">
             <StatTile
               icon="event"
               label={t('userAdmin.edit.statRegistered')}
               value={new Date(user.createdAt).toLocaleDateString()}
             />
-          </div>
-          <div className="-mt-0.5 grid grid-cols-2 gap-1.5">
             <StatTile
               icon="login"
               label={t('userAdmin.edit.statLastLogin')}

@@ -613,7 +613,6 @@ export default function TempViewerPage() {
     fallback: 'compact',
   });
   const peekHeight = getModelDetailMobilePeekHeight(mobilePeekVariant);
-  const mobileSheetHeight = mobileSheetExpanded ? '94%' : peekHeight;
   const mobileViewerStyle = useMemo<CSSProperties>(() => ({ bottom: peekHeight }), [peekHeight]);
   const mobileTitleClassName =
     mobilePeekVariant === 'tall' ? 'line-clamp-2 min-h-[2.3rem]' : 'line-clamp-1 min-h-[1.15rem]';
@@ -890,8 +889,12 @@ export default function TempViewerPage() {
           <div
             className="absolute bottom-0 left-0 right-0 z-30 flex flex-col overflow-hidden rounded-t-2xl border-t border-outline-variant/10 bg-surface-container-low shadow-bottom-panel"
             style={{
-              height: mobileSheetHeight,
-              transition: 'height 0.32s cubic-bezier(0.22, 1, 0.36, 1)',
+              // 与 ModelDetailPage 同款：height 过渡每帧 layout 整棵内容树（低端机掉帧），
+              // 固定满高 + translateY（百分比相对自身高度，calc(100% - peek) = 底部对齐露出 peek）
+              height: '94%',
+              transform: `translateY(${mobileSheetExpanded ? '0px' : `calc(100% - ${peekHeight}px)`})`,
+              transition: 'transform 0.32s cubic-bezier(0.22, 1, 0.36, 1)',
+              willChange: 'transform',
             }}
           >
             <div className="flex shrink-0 items-center gap-2 px-3 pb-1.5 pt-2.5">
@@ -952,10 +955,8 @@ export default function TempViewerPage() {
               </button>
             </div>
 
-            <div
-              className={`min-h-0 flex-1 overflow-y-auto scrollbar-hidden ${!mobileSheetExpanded ? 'hidden' : ''}`}
-              aria-hidden={!mobileSheetExpanded}
-            >
+            {/* 常驻渲染（收起态在屏外），避免展开瞬间挂载内容树掉帧 */}
+            <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hidden" inert={!mobileSheetExpanded}>
               <div className="space-y-4 px-4 pb-8">
                 {uploadDropHint}
                 {fileInfoPanel}

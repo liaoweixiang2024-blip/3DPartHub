@@ -1851,6 +1851,7 @@ export const enUSAdmin: TranslationMap = {
       loginFailed: 'Login failed',
       statDownloads: 'Downloads',
       statFavorites: 'Favorites',
+      statShares: 'Shares',
       statRegistered: 'Registered',
       statLastLogin: 'Last login',
       statLastActive: 'Last active',

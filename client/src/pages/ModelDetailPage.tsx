@@ -822,13 +822,13 @@ export default function ModelDetailPage() {
           onTouchCancel={cancelSheetDrag}
           onMouseDown={handleSheetMouseDown}
           style={{
-            height: sheetExpanded ? '94%' : peekHeight,
-            transform: `translate3d(0, ${sheetDragOffset}px, 0)`,
-            transition:
-              sheetDragOffset === 0
-                ? 'height 0.32s cubic-bezier(0.22, 1, 0.36, 1), transform 0.2s cubic-bezier(0.22, 1, 0.36, 1)'
-                : 'none',
-            willChange: 'height, transform',
+            // 固定满高，收起态用 translateY 只露 peekHeight——height 过渡每帧 layout 整棵内容树
+            // （低端机掉帧、展开「卡一下」），transform 走纯合成器。translateY 百分比相对自身高度：
+            // calc(100% - peek) 即「底部对齐、露出 peek」。
+            height: '94%',
+            transform: `translate3d(0, calc(${sheetExpanded ? '0px' : `100% - ${peekHeight}px`} + ${sheetDragOffset}px), 0)`,
+            transition: sheetDragOffset === 0 ? 'transform 0.32s cubic-bezier(0.22, 1, 0.36, 1)' : 'none',
+            willChange: 'transform',
             backfaceVisibility: 'hidden',
           }}
         >
@@ -904,12 +904,8 @@ export default function ModelDetailPage() {
             )}
           </div>
 
-          {/* Expanded content — scrollable */}
-          <div
-            ref={sheetContentRef}
-            className={`flex-1 min-h-0 overflow-y-auto scrollbar-hidden ${!sheetExpanded ? 'hidden' : ''}`}
-            aria-hidden={!sheetExpanded}
-          >
+          {/* Expanded content — scrollable。常驻渲染（收起态在屏外），避免展开瞬间挂载整棵内容树掉帧 */}
+          <div ref={sheetContentRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-hidden" inert={!sheetExpanded}>
             <div className="px-4 pb-8 space-y-5">
               {/* Category breadcrumb */}
               <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant overflow-x-auto scrollbar-hidden">

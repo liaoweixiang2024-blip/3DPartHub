@@ -93,7 +93,7 @@ const userListItemSelect = {
   mustChangePassword: true,
   canInvite: true,
   createdAt: true,
-  _count: { select: { downloads: true, favorites: true } },
+  _count: { select: { downloads: true, favorites: true, shareLinks: true } },
 } satisfies Prisma.UserSelect;
 
 function buildListWhere(query: Record<string, unknown>): Prisma.UserWhereInput {
@@ -293,7 +293,7 @@ export function createAdminUsersRouter() {
               details: { path: ['body', 'email'], equals: target.email },
             },
             orderBy: { createdAt: 'desc' },
-            take: 5,
+            take: 30,
             select: { id: true, details: true, createdAt: true },
           }),
         ]);
