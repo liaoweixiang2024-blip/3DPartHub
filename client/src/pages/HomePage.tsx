@@ -40,6 +40,7 @@ import {
   type HomeRefreshScrollTarget,
 } from '../components/home/homeUtils';
 import { MobileDrawer } from '../components/home/MobileDrawer';
+import { useMobileDrawerStore } from '../stores/useMobileDrawerStore';
 import { ProductCard } from '../components/home/ProductCard';
 import { ProductCardMobile } from '../components/home/ProductCardMobile';
 import AuthModal from '../components/shared/AuthModal';
@@ -383,7 +384,8 @@ export default function HomePage() {
     setSearchParams,
     sortBy,
   ]);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const openCategoryDrawer = useMobileDrawerStore((s) => s.openCategory);
+  const toggleCategoryDrawer = useMobileDrawerStore((s) => s.toggleCategory);
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
 
   useEffect(() => {
@@ -1137,8 +1139,6 @@ export default function HomePage() {
   // Mobile layout
   const mobileFilterDrawer = (
     <MobileDrawer
-      open={drawerOpen}
-      onClose={() => setDrawerOpen(false)}
       expandedCategories={expandedCategories}
       activeCategory={activeCategory}
       categories={categories}
@@ -1149,7 +1149,7 @@ export default function HomePage() {
   );
 
   return (
-    <PublicPageShell onMobileMenuToggle={() => setDrawerOpen((prev) => !prev)}>
+    <PublicPageShell onMobileMenuToggle={toggleCategoryDrawer}>
       {createPortal(mobileFilterDrawer, document.body)}
       <main
         ref={scrollContainerRef}
@@ -1208,7 +1208,7 @@ export default function HomePage() {
               </span>
             </div>
             <button
-              onClick={() => setDrawerOpen(true)}
+              onClick={openCategoryDrawer}
               className={`p-2 text-on-surface-variant hover:text-on-surface bg-surface-container-high rounded-sm flex items-center gap-1.5 transition-opacity duration-200 ${chipsStuck ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
             >
               <Icon name="tune" size={18} />
@@ -1259,7 +1259,7 @@ export default function HomePage() {
                 })}
               </div>
               <button
-                onClick={() => setDrawerOpen(true)}
+                onClick={openCategoryDrawer}
                 className={`absolute right-0 top-1/2 -translate-y-1/2 shrink-0 text-on-surface-variant hover:text-on-surface bg-surface-container-high rounded-sm flex items-center justify-center shadow-sm transition-opacity duration-300 p-2 ${chipsStuck && products.length >= 6 ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
               >
                 <Icon name="tune" size={16} />

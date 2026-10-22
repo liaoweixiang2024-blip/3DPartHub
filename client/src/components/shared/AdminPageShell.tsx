@@ -8,6 +8,7 @@ import { getFooterCopyright, useFeatureFlags, usePublicSettings } from '../../li
 import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry';
 import type { FloatingMenuThemeProps } from '../../themes/interfaceThemes/types';
 import { getMobileThemePackage } from '../../themes/mobileThemes/registry';
+import { useMobileDrawerStore } from '../../stores/useMobileDrawerStore';
 import HomeFooter from './HomeFooter';
 import { mergeClassName } from './PagePrimitives';
 import TopNav from './TopNav';
@@ -55,7 +56,7 @@ function useFloatingMenuThemeProps(): FloatingMenuThemeProps {
 // ─── Layout route: admin pages (TopNav + Sidebar) ───
 export function AdminLayout() {
   const isDesktop = useMediaQuery('(min-width: 768px)');
-  const [navOpen, setNavOpen] = useState(false);
+  const toggleNavDrawer = useMobileDrawerStore((s) => s.toggleNav);
   const [hideBottomNav, setHideBottomNav] = useState(false);
   const location = useLocation();
   const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
@@ -110,8 +111,8 @@ export function AdminLayout() {
           data-interface-theme={interfaceTheme}
           data-mobile-theme={mobileTheme}
         >
-          <TopNav source="layout" compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
-          <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
+          <TopNav source="layout" compact onMenuToggle={toggleNavDrawer} />
+          <MobileNavDrawer />
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{content}</div>
           {hideBottomNav ? null : <BottomNav />}
         </div>
@@ -123,7 +124,7 @@ export function AdminLayout() {
 // ─── Layout route: public pages (TopNav only, no sidebar) ───
 export function PublicLayout() {
   const isDesktop = useMediaQuery('(min-width: 768px)');
-  const [navOpen, setNavOpen] = useState(false);
+  const toggleNavDrawer = useMobileDrawerStore((s) => s.toggleNav);
   const location = useLocation();
   const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const {
@@ -165,8 +166,8 @@ export function PublicLayout() {
         data-interface-theme={interfaceTheme}
         data-mobile-theme={mobileTheme}
       >
-        <TopNav source="layout" compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
-        <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
+        <TopNav source="layout" compact onMenuToggle={toggleNavDrawer} />
+        <MobileNavDrawer />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <Outlet />
         </div>
@@ -198,7 +199,7 @@ export function AdminPageShell({
   const inLayout = useContext(ShellLayoutContext);
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const bottomNavCtx = useContext(HideBottomNavContext);
-  const [navOpen, setNavOpen] = useState(false);
+  const toggleNavDrawer = useMobileDrawerStore((s) => s.toggleNav);
   const location = useLocation();
   const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const { themePackage: ThemePackage, mobilePkg: MobileThemePackage } = useShellThemePackages(isAdminRoute, isDesktop);
@@ -290,8 +291,8 @@ export function AdminPageShell({
       data-interface-theme={interfaceTheme}
       data-mobile-theme={mobileTheme}
     >
-      <TopNav source="standalone" compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
-      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
+      <TopNav source="standalone" compact onMenuToggle={toggleNavDrawer} />
+      <MobileNavDrawer />
       <motion.main
         key={location.pathname}
         ref={mobileMainRef}

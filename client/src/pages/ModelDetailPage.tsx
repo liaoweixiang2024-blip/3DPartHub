@@ -794,7 +794,7 @@ export default function ModelDetailPage() {
   }
 
   return (
-    <PublicPageShell mobileClassName="flex flex-col h-dvh bg-surface" keepMobileDrawerMounted>
+    <PublicPageShell mobileClassName="flex flex-col h-dvh bg-surface">
       {/* Main area: 3D viewer + bottom sheet */}
       <div className="flex-1 min-h-0 relative" style={{ marginBottom: MODEL_DETAIL_MOBILE_BOTTOM_NAV_OFFSET }}>
         <CadViewerPanel
@@ -904,8 +904,18 @@ export default function ModelDetailPage() {
             )}
           </div>
 
-          {/* Expanded content — scrollable。常驻渲染（收起态在屏外），避免展开瞬间挂载整棵内容树掉帧 */}
-          <div ref={sheetContentRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-hidden" inert={!sheetExpanded}>
+          {/* Expanded content — scrollable。常驻渲染（收起态在屏外），避免展开瞬间挂载整棵内容树掉帧。
+              收起态再叠一层 translateY(peek)：peekHeight 常量略大于手柄+peek 条实际高度，
+              不补偿的话内容区顶部（面包屑）会从 peek 线上方的空隙里露出一截 */}
+          <div
+            ref={sheetContentRef}
+            className="flex-1 min-h-0 overflow-y-auto scrollbar-hidden"
+            inert={!sheetExpanded}
+            style={{
+              transform: sheetExpanded ? 'none' : `translateY(${peekHeight}px)`,
+              transition: sheetDragOffset === 0 ? 'transform 0.32s cubic-bezier(0.22, 1, 0.36, 1)' : 'none',
+            }}
+          >
             <div className="px-4 pb-8 space-y-5">
               {/* Category breadcrumb */}
               <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant overflow-x-auto scrollbar-hidden">

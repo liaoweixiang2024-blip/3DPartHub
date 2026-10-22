@@ -1,13 +1,25 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { overlayMotion, sideSheetPersistentMotion } from '../../lib/motion';
 import Icon from '../shared/Icon';
+import { useMobileDrawerStore } from '../../stores/useMobileDrawerStore';
 import type { Category } from './homeTypes';
 
+/**
+ * 面板与遮罩均常驻挂载 + CSS transition 驱动：
+ * - 常驻（关闭态 visibility:hidden 不参与绘制）→ 打开首帧零 DOM 构建/布局；
+ * - CSS transition 在合成器线程独立运行，主线程再忙也不掉帧（framer-motion 等 JS 动画
+ *   逐帧占用主线程，任何抖动都会让动画像降了刷新率）；
+ * - visibility 参与 transition 时按离散插值规则整个过渡期保持 visible——打开立即可见、
+ *   关闭等滑出动画播完才隐藏，无需手工 delay；
+ * - 开合状态走 useMobileDrawerStore，点击入口时页面树零 re-render。
+ */
+const SHEET_TRANSITION = {
+  open: 'transform 0.26s cubic-bezier(0.32, 0.72, 0, 1), visibility 0.26s',
+  closed: 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), visibility 0.22s',
+} as const;
+
 export function MobileDrawer({
-  open,
-  onClose,
   expandedCategories,
   activeCategory,
   categories: categoriesData,
@@ -15,8 +27,6 @@ export function MobileDrawer({
   onToggle,
   onSelect,
 }: {
-  open: boolean;
-  onClose: () => void;
   expandedCategories: Set<string>;
   activeCategory: string;
   categories: Category[];
@@ -26,15 +36,12 @@ export function MobileDrawer({
   onSelect: (id: string) => void;
 }) {
   const { t } = useTranslation();
+  const open = useMobileDrawerStore((s) => s.categoryOpen);
+  const closeDrawer = useMobileDrawerStore((s) => s.closeCategory);
   const asideRef = useRef<HTMLElement>(null);
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('mobile-nav-drawer-open', open);
-    return () => document.documentElement.classList.remove('mobile-nav-drawer-open');
-  }, [open]);
-
-  // 常驻挂载下关闭时焦点可能仍留在抽屉内按钮上（如刚点过的关闭按钮），
-  // aria 隐藏含焦点元素会被浏览器告警——主动移走焦点兜底（inert 自身也会清）
+  // 常驻挂载下关闭时焦点可能仍留在抽屉内按钮上，aria 隐藏含焦点元素会被浏览器告警——
+  // 主动移走焦点兜底（inert 自身也会清）
   useEffect(() => {
     const el = asideRef.current;
     if (!open && el && el.contains(document.activeElement)) {
@@ -44,29 +51,24 @@ export function MobileDrawer({
 
   return (
     <>
-      {/* 遮罩轻量，条件渲染 + AnimatePresence 淡出；面板常驻挂载（见 sideSheetPersistentMotion 注释） */}
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            variants={overlayMotion}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="fixed inset-0 bg-black/50 z-[260]"
-            onClick={onClose}
-          />
-        )}
-      </AnimatePresence>
-      <motion.aside
+      {/* 遮罩常驻（opacity 切换 + 关闭态穿透点击） */}
+      <div
+        aria-hidden="true"
+        onClick={closeDrawer}
+        className={`fixed inset-0 bg-black/50 z-[260] transition-opacity duration-200 ${
+          open ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      />
+      <aside
         ref={asideRef}
-        variants={sideSheetPersistentMotion}
-        initial={false}
-        animate={open ? 'open' : 'closed'}
         inert={!open}
         className="fixed left-0 top-0 w-[min(82vw,280px)] h-dvh bg-surface-container-low z-[270] flex flex-col overflow-y-auto scrollbar-hidden shadow-2xl"
         style={{
           paddingTop: 'env(safe-area-inset-top, 0px)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          transform: open ? 'translate3d(0, 0, 0)' : 'translate3d(-100%, 0, 0)',
+          visibility: open ? 'visible' : 'hidden',
+          transition: open ? SHEET_TRANSITION.open : SHEET_TRANSITION.closed,
           willChange: 'transform',
         }}
       >
@@ -74,7 +76,7 @@ export function MobileDrawer({
           <h2 className="text-sm font-bold text-on-surface-variant tracking-wider uppercase font-headline">
             {t('home.catalog')}
           </h2>
-          <button onClick={onClose} className="p-1 text-on-surface-variant">
+          <button onClick={closeDrawer} className="p-1 text-on-surface-variant">
             <Icon name="close" size={24} />
           </button>
         </div>
@@ -82,7 +84,7 @@ export function MobileDrawer({
           <button
             onClick={() => {
               onSelect('all');
-              onClose();
+              closeDrawer();
             }}
             className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors ${
               activeCategory === 'all'
@@ -111,7 +113,7 @@ export function MobileDrawer({
                       onToggle(cat.id);
                     } else {
                       onSelect(cat.id);
-                      onClose();
+                      closeDrawer();
                     }
                   }}
                   className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors ${
@@ -152,7 +154,7 @@ export function MobileDrawer({
                           key={child.id}
                           onClick={() => {
                             onSelect(child.id);
-                            onClose();
+                            closeDrawer();
                           }}
                           className={`w-full text-left ml-8 pr-4 py-2 text-[12px] flex items-center gap-2 ${
                             activeCategory === child.id ? 'text-primary-container' : 'text-slate-500'
@@ -174,7 +176,7 @@ export function MobileDrawer({
             );
           })}
         </div>
-      </motion.aside>
+      </aside>
     </>
   );
 }

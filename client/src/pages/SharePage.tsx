@@ -493,7 +493,7 @@ export default function SharePage() {
 
   // Main share page
   return (
-    <PublicPageShell mobileClassName="flex h-dvh flex-col bg-surface" keepMobileDrawerMounted>
+    <PublicPageShell mobileClassName="flex h-dvh flex-col bg-surface">
       {/* WeChat open-in-browser guide */}
       {isWechat && (
         <div className="bg-primary-container/90 text-on-primary px-4 py-3 text-center text-sm font-bold relative shrink-0">

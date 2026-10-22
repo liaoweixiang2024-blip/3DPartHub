@@ -1,4 +1,4 @@
-import { useContext, useState, type ReactNode } from 'react';
+import { useContext, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { useResolvedPublicInterfaceTheme } from '../../lib/interfaceThemePreference';
@@ -7,6 +7,7 @@ import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry'
 import { getMobileThemePackage } from '../../themes/mobileThemes/registry';
 import { ShellLayoutContext } from './AdminPageShell';
 import { mergeClassName } from './PagePrimitives';
+import { useMobileDrawerStore } from '../../stores/useMobileDrawerStore';
 import TopNav from './TopNav';
 
 interface PublicPageShellProps {
@@ -16,7 +17,6 @@ interface PublicPageShellProps {
   mobileDrawer?: ReactNode;
   onMobileMenuToggle?: () => void;
   showMobileBottomNav?: boolean;
-  keepMobileDrawerMounted?: boolean;
   /** 移动端补标准内容包装层（px-4 py-4 + 底部安全区）：默认分支无内边距，
       供全屏自管布局页（模型详情/登录/分享）使用；标准管理结构页
       （AdminManagementPage + AdminPageHero）传 true——否则标题卡贴死顶栏与屏幕边缘，
@@ -31,13 +31,12 @@ export function PublicPageShell({
   mobileDrawer,
   onMobileMenuToggle,
   showMobileBottomNav = true,
-  keepMobileDrawerMounted = false,
   mobilePadded = false,
 }: PublicPageShellProps) {
   const inLayout = useContext(ShellLayoutContext);
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const location = useLocation();
-  const [navOpen, setNavOpen] = useState(false);
+  const toggleNavDrawer = useMobileDrawerStore((s) => s.toggleNav);
   const { settings } = usePublicSettings();
   const resolvedPublicTheme = useResolvedPublicInterfaceTheme(settings);
   const ThemePackage = getInterfaceThemePackage(isDesktop ? resolvedPublicTheme : settings?.interface_theme);
@@ -87,7 +86,7 @@ export function PublicPageShell({
     );
   }
 
-  const handleMenuToggle = onMobileMenuToggle || (() => setNavOpen((prev) => !prev));
+  const handleMenuToggle = onMobileMenuToggle || toggleNavDrawer;
 
   return (
     <div
@@ -96,10 +95,8 @@ export function PublicPageShell({
       data-mobile-theme={mobileTheme}
     >
       <TopNav source="standalone" compact onMenuToggle={handleMenuToggle} />
-      {mobileDrawer ||
-        (keepMobileDrawerMounted || navOpen ? (
-          <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-        ) : null)}
+      {/* 抽屉常驻挂载（renderer 内部走 store），条件挂载会让首次打开首帧建 DOM 掉帧 */}
+      {mobileDrawer || <MobileNavDrawer />}
       {mobilePadded ? <div className="flex min-h-0 flex-1 flex-col px-4 py-4 pb-safe-nav">{children}</div> : children}
       {showMobileBottomNav ? <BottomNav /> : null}
     </div>

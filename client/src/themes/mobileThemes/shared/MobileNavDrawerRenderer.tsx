@@ -1,4 +1,3 @@
-import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -7,11 +6,10 @@ import { checkProtectedAccess } from '../../../components/shared/ProtectedLink';
 import { useAuthEntry } from '../../../components/shared/useAuthEntry';
 import { localizeNavItems } from '../../../i18n/nav';
 import { getBusinessConfig } from '../../../lib/businessConfig';
-import { overlayMotion, sideSheetPersistentMotion } from '../../../lib/motion';
 import { usePublicSettings } from '../../../lib/publicSettings';
 import { preloadRouteForPath } from '../../../lib/routeLoaders';
 import { useAuthStore } from '../../../stores/useAuthStore';
-import type { MobileNavDrawerThemeProps } from '../types';
+import { useMobileDrawerStore } from '../../../stores/useMobileDrawerStore';
 
 export interface MobileNavDrawerAppearance {
   overlayClassName: string;
@@ -26,28 +24,38 @@ export interface MobileNavDrawerAppearance {
   iconSize: number;
 }
 
-interface MobileNavDrawerRendererProps extends MobileNavDrawerThemeProps {
+interface MobileNavDrawerRendererProps {
   appearance: MobileNavDrawerAppearance;
 }
 
-export default function MobileNavDrawerRenderer({ open, onClose, appearance }: MobileNavDrawerRendererProps) {
+/**
+ * 面板与遮罩均常驻挂载 + CSS transition 驱动：
+ * - 常驻（关闭态 visibility:hidden 不参与绘制）→ 打开首帧零 DOM 构建/布局；
+ * - CSS transition 在合成器线程独立运行，主线程再忙也不掉帧（framer-motion 等 JS 动画
+ *   逐帧占用主线程，任何抖动都会让动画像降了刷新率）；
+ * - visibility 参与 transition 时按离散插值规则整个过渡期保持 visible——打开立即可见、
+ *   关闭等滑出动画播完才隐藏，无需手工 delay；
+ * - 开合状态走 useMobileDrawerStore，点击入口时页面树零 re-render。
+ */
+const SHEET_TRANSITION = {
+  open: 'transform 0.26s cubic-bezier(0.32, 0.72, 0, 1), visibility 0.26s',
+  closed: 'transform 0.22s cubic-bezier(0.32, 0.72, 0, 1), visibility 0.22s',
+} as const;
+
+export default function MobileNavDrawerRenderer({ appearance }: MobileNavDrawerRendererProps) {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
+  const open = useMobileDrawerStore((s) => s.navOpen);
+  const closeNav = useMobileDrawerStore((s) => s.closeNav);
   const { settings } = usePublicSettings();
   const isAdmin = user?.role === 'ADMIN';
   const business = getBusinessConfig(settings);
   const navItems = localizeNavItems(isAdmin ? business.adminNav : business.userNav, t, 'mobile');
-  const { authNodes, handleProtectedLinkClick } = useAuthEntry(settings, { onBeforeAuth: onClose });
-
+  const { authNodes, handleProtectedLinkClick } = useAuthEntry(settings, { onBeforeAuth: closeNav });
   const asideRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('mobile-nav-drawer-open', open);
-    return () => document.documentElement.classList.remove('mobile-nav-drawer-open');
-  }, [open]);
 
   // 常驻挂载下关闭时焦点可能仍留在抽屉内链接/按钮上，aria 隐藏含焦点元素会被浏览器告警——
   // 主动移走焦点兜底（inert 自身也会清）
@@ -60,36 +68,31 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
 
   return (
     <>
-      {/* 遮罩轻量，条件渲染 + AnimatePresence 淡出；面板常驻挂载（见 sideSheetPersistentMotion 注释） */}
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            variants={overlayMotion}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className={appearance.overlayClassName}
-            onClick={onClose}
-          />
-        )}
-      </AnimatePresence>
-      <motion.aside
+      {/* 遮罩常驻（opacity 切换 + 关闭态穿透点击） */}
+      <div
+        aria-hidden="true"
+        onClick={closeNav}
+        className={`${appearance.overlayClassName} transition-opacity duration-200 ${
+          open ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      />
+      <aside
         ref={asideRef}
-        variants={sideSheetPersistentMotion}
-        initial={false}
-        animate={open ? 'open' : 'closed'}
         inert={!open}
         className={appearance.sheetClassName}
         style={{
           paddingTop: 'env(safe-area-inset-top, 0px)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          transform: open ? 'translate3d(0, 0, 0)' : 'translate3d(-100%, 0, 0)',
+          visibility: open ? 'visible' : 'hidden',
+          transition: open ? SHEET_TRANSITION.open : SHEET_TRANSITION.closed,
           willChange: 'transform',
         }}
         data-mobile-theme-drawer
       >
         <div className={appearance.headerClassName}>
           <span className={appearance.titleClassName}>{t('common.navigation')}</span>
-          <button onClick={onClose} className={appearance.closeButtonClassName}>
+          <button onClick={closeNav} className={appearance.closeButtonClassName}>
             <Icon name="close" size={24} />
           </button>
         </div>
@@ -107,7 +110,7 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
                 onClick={(e) => {
                   const result = checkProtectedAccess(item.path, settings);
                   if (result.action === 'allow') {
-                    onClose();
+                    closeNav();
                     return;
                   }
                   handleProtectedLinkClick(e, item.path);
@@ -130,7 +133,7 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
               onClick={(e) => {
                 const result = checkProtectedAccess('/profile', settings);
                 if (result.action === 'allow') {
-                  onClose();
+                  closeNav();
                   return;
                 }
                 handleProtectedLinkClick(e, '/profile');
@@ -143,7 +146,7 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
             <button
               onClick={() => {
                 logout();
-                onClose();
+                closeNav();
                 navigate('/login');
               }}
               className={appearance.footerLinkClassName}
@@ -153,7 +156,7 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
             </button>
           </div>
         )}
-      </motion.aside>
+      </aside>
       {authNodes}
     </>
   );

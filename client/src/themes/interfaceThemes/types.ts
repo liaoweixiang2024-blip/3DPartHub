@@ -47,11 +47,6 @@ export interface DesktopTopNavThemeProps {
 
 export type DesktopTopNavThemeComponent = (props: DesktopTopNavThemeProps) => ReactElement;
 
-export interface MobileNavDrawerThemeProps {
-  open: boolean;
-  onClose: () => void;
-}
-
 export interface FloatingMenuThemeProps {
   contactAddress?: string;
   contactEmail?: string;
@@ -63,7 +58,7 @@ export interface InterfaceThemeComponents {
   DesktopTopNav: DesktopTopNavThemeComponent;
   Sidebar: ComponentType;
   BottomNav: ComponentType;
-  MobileNavDrawer: ComponentType<MobileNavDrawerThemeProps>;
+  MobileNavDrawer: ComponentType /* drawer state in store */;
   FloatingMenu?: ComponentType<FloatingMenuThemeProps>;
 }
 

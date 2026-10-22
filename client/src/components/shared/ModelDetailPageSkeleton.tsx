@@ -116,7 +116,7 @@ function ModelDetailMobileSkeleton({ modelTitle, isAdmin }: { modelTitle?: strin
   const mobilePeekHeight = getModelDetailMobilePeekHeight(peekVariant);
 
   return (
-    <PublicPageShell mobileClassName="flex h-dvh flex-col bg-surface" keepMobileDrawerMounted>
+    <PublicPageShell mobileClassName="flex h-dvh flex-col bg-surface">
       <main
         className="relative min-h-0 flex-1"
         style={{ marginBottom: MODEL_DETAIL_MOBILE_BOTTOM_NAV_OFFSET }}

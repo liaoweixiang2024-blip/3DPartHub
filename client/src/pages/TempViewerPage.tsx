@@ -862,7 +862,7 @@ export default function TempViewerPage() {
 
   if (!isDesktop) {
     return (
-      <PublicPageShell mobileClassName="flex flex-col h-dvh bg-surface" keepMobileDrawerMounted>
+      <PublicPageShell mobileClassName="flex flex-col h-dvh bg-surface">
         <div
           className="relative min-h-0 flex-1 overflow-hidden bg-surface"
           style={{ marginBottom: MODEL_DETAIL_MOBILE_BOTTOM_NAV_OFFSET }}
@@ -955,8 +955,16 @@ export default function TempViewerPage() {
               </button>
             </div>
 
-            {/* 常驻渲染（收起态在屏外），避免展开瞬间挂载内容树掉帧 */}
-            <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hidden" inert={!mobileSheetExpanded}>
+            {/* 常驻渲染（收起态在屏外），避免展开瞬间挂载内容树掉帧。
+                收起态叠一层 translateY(peek)：peekHeight 略大于手柄+peek 条实际高度，不补偿会露内容顶部一截 */}
+            <div
+              className="min-h-0 flex-1 overflow-y-auto scrollbar-hidden"
+              inert={!mobileSheetExpanded}
+              style={{
+                transform: mobileSheetExpanded ? 'none' : `translateY(${peekHeight}px)`,
+                transition: 'transform 0.32s cubic-bezier(0.22, 1, 0.36, 1)',
+              }}
+            >
               <div className="space-y-4 px-4 pb-8">
                 {uploadDropHint}
                 {fileInfoPanel}

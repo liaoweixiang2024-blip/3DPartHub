@@ -11,14 +11,9 @@ export interface MobileThemeMeta {
   version: string;
 }
 
-export interface MobileNavDrawerThemeProps {
-  open: boolean;
-  onClose: () => void;
-}
-
 export interface MobileThemeComponents {
   BottomNav: ComponentType;
-  MobileNavDrawer: ComponentType<MobileNavDrawerThemeProps>;
+  MobileNavDrawer: ComponentType /* drawer state in store */;
 }
 
 export type MobileHomeListLoadingMode = 'infinite' | 'pagination';

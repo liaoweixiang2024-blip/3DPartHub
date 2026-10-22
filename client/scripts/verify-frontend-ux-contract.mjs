@@ -413,7 +413,9 @@ requireIncludes('AdminPageShell.tsx theme shell', adminPageShellSource, [
   'const { themePackage: ThemePackage, mobilePkg: MobileThemePackage } = useShellThemePackages',
   'const BottomNav = MobileThemePackage.components.BottomNav;',
   'const MobileNavDrawer = MobileThemePackage.components.MobileNavDrawer;',
-  '<MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />',
+  // 抽屉开合状态走 useMobileDrawerStore（开合时页面树零 re-render），shell 无 props 常驻挂载
+  'useMobileDrawerStore((s) => s.toggleNav)',
+  '<MobileNavDrawer />',
 ]);
 
 requireIncludes('PublicPageShell.tsx theme shell', publicPageShellSource, [
@@ -422,7 +424,8 @@ requireIncludes('PublicPageShell.tsx theme shell', publicPageShellSource, [
   'const MobileThemePackage = getMobileThemePackage(settings?.mobile_interface_theme);',
   'const BottomNav = MobileThemePackage.components.BottomNav;',
   'const MobileNavDrawer = MobileThemePackage.components.MobileNavDrawer;',
-  '<MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />',
+  'useMobileDrawerStore((s) => s.toggleNav)',
+  '{mobileDrawer || <MobileNavDrawer />}',
 ]);
 
 requireIncludes('TopNav.tsx', topNavSource, [
