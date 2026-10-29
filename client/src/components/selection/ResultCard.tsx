@@ -359,7 +359,7 @@ export function ResultCard({
         </button>
         {categoryName && onCategoryClick ? (
           /* 所属分类：纯图标小按钮（分类名文字太长，悬停 title / 无障碍 aria 展示），
-             点击进该分类的选型向导。仅全站搜索列表传；向导内不渲染 */
+             点击进该分类的选型向导。全站搜索列表与向导搜索结果列表都传 */
           <button
             type="button"
             onClick={onCategoryClick}

@@ -1282,6 +1282,41 @@ export default function SelectionPage() {
     },
     [navigate, pickSub, rememberListQuery],
   );
+  /* 向导搜索结果卡上的分类标签：与「查看全部」列表的 goToListCategory 同款
+     「按产品自身参数把选项一次选满、落在该分类向导的结果页」，但人已在该分类
+     向导内（slug 不变、preset effect 依赖 slug 不会重跑），须直接换算 specs/skipped
+     落地；搜索词一并清空退出搜索视图。产品 specs 全空时退化为从第一步开始 */
+  const wizardTagGoCategory = useCallback(
+    (p: SelectionProduct) => {
+      const cat = liveCat;
+      if (!cat) return;
+      const catFields = (cat.columns ?? []).filter((col) => !col.displayOnly).map((col) => col.key) as string[];
+      const nextSpecs: Record<string, string> = {};
+      const nextSkipped = new Set<string>();
+      for (const field of catFields) {
+        const value = p.specs[field];
+        /* 只收字符串值（与 preset effect / 服务端 specValue 同口径）；缺失项自动「跳过」 */
+        if (typeof value === 'string' && value) nextSpecs[field] = value;
+        else nextSkipped.add(field);
+      }
+      /* 至少有一个实选值才落结果页：全空落结果是整分类大列表，不如回第一步 */
+      if (Object.keys(nextSpecs).length > 0) {
+        setSpecs(nextSpecs);
+        setSkipped(nextSkipped);
+      } else {
+        setSpecs({});
+        setSkipped(new Set());
+      }
+      setManualDrafts({});
+      setAutoSelectedFields(new Set());
+      setSearchDraft('');
+      /* 搜索列表可能已滚很深，落地结果页把滚动容器归零（步骤滚动 effect 只管
+         curField 步骤态，结果页不会被抢滚动） */
+      const container = scrollContainerRef.current || mobileMainRef.current;
+      if (container) container.scrollTo({ top: 0, behavior: 'auto' });
+    },
+    [liveCat, setAutoSelectedFields, setManualDrafts, setSearchDraft, setSkipped, setSpecs],
+  );
   useEffect(() => {
     if (!slug) return;
     const preset = pendingSearchRef.current;
@@ -2583,6 +2618,8 @@ export default function SelectionPage() {
                   onToggleKit={toggleKit}
                   navigate={navigate}
                   isMobile={!isDesktop}
+                  categoryName={liveCat?.name ?? null}
+                  onCategoryClick={() => wizardTagGoCategory(visibleProduct)}
                 />
               );
             })}
