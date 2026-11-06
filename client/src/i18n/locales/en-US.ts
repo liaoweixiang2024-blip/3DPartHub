@@ -1528,6 +1528,11 @@ export const enUS: { translation: TranslationMap } = {
       inquiryCart: {
         addedCount: '{{count}} items added',
         exportFailed: 'Export failed, please retry',
+        exportDialog: {
+          download: 'Download',
+          fileNameLabel: 'File name',
+          hint: 'Download directly, or rename the file first (Excel format)',
+        },
         exportSelected: 'Export selected',
         selected: 'Selected',
         exportTitle: 'Export list',

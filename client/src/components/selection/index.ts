@@ -2,6 +2,7 @@ export { SelectionInlineLoading } from './SelectionInlineLoading';
 export { SelectionLoadingOverlay } from './SelectionLoadingOverlay';
 export { ResultCard } from './ResultCard';
 export { SelectionShareLinkDialog } from './SelectionShareLinkDialog';
+export { SelectionExportDialog } from './SelectionExportDialog';
 export {
   sv,
   isManualColumn,

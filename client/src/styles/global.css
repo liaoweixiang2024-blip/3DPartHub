@@ -206,6 +206,13 @@ html {
   width: 100%;
   overscroll-behavior: none;
   text-rendering: optimizeLegibility;
+  /* 钉死根字号 + 标准版 text-size-adjust：安卓/鸿蒙及多数国产浏览器（华为/小米/OPPO/vivo）
+     会把系统「字体大小」设置（fontScale）注入到「未显式指定」的默认字号上——全站 Tailwind
+     工具类以 rem 为单位，根字号被乘系数后整站等比放大（字体+布局整体变大）。显式声明 16px
+     与设计基准完全等价（Chrome/Safari 上零变化）；-webkit- 前缀版由 Tailwind preflight 提供，
+     这里补无前缀版覆盖只认标准写法的内核。系统「显示大小」（DPI）不在拦截范围内 */
+  font-size: 16px;
+  text-size-adjust: 100%;
 }
 
 body {

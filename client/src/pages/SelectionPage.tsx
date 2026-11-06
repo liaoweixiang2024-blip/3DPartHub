@@ -13,6 +13,7 @@ import {
 import InquirySubmitDialog from '../components/inquiry/InquirySubmitDialog';
 import {
   ResultCard,
+  SelectionExportDialog,
   SelectionInlineLoading,
   SelectionLoadingOverlay,
   SelectionShareLinkDialog,
@@ -1542,41 +1543,63 @@ export default function SelectionPage() {
     },
     [canInquiry, inquiryCart, t, toast],
   );
-  // 询价关闭场景：把选中清单导出为 Excel（型号/名称/数量/单位 + 参数列并集）
-  const handleExportSelected = useCallback(async () => {
-    const items = inquiryCart.items;
-    if (!items.length) return;
-    try {
-      const { default: writeXlsxFile } = await import('write-excel-file/browser');
-      // 只导核心四列（型号/名称/数量/单位），不带参数列；
-      // 名称剥掉型号的「所有」出现（历史数据常以「系列号 描述 完整型号」结尾，不剥会和型号列重复）
-      const headers = [
-        t('sharedMisc.exportColModelNo'),
-        t('sharedMisc.exportColName'),
-        t('sharedMisc.exportColQty'),
-        t('sharedMisc.exportColUnit'),
-      ];
-      const rows = items.map((it) => {
-        let name = it.productName || '';
-        if (it.modelNo) {
-          const escaped = it.modelNo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          name =
-            name
-              .replace(new RegExp(escaped, 'gi'), ' ')
-              .replace(/[\s\-—_]+/g, ' ')
-              .trim() || it.productName;
-        }
-        return [it.modelNo || '', name, it.qty, it.unit || ''];
-      });
-      const stamp = new Date();
-      const pad = (n: number) => String(n).padStart(2, '0');
-      const fileName = `${t('sharedMisc.exportSelectionListName')}_${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.xlsx`;
-      await writeXlsxFile([headers, ...rows], { sheet: t('selectionPage.inquiryCart.exportTitle') }).toFile(fileName);
-      toast(t('selectionPage.inquiryCart.exportedCount', { count: items.length }), 'success');
-    } catch {
-      toast(t('selectionPage.inquiryCart.exportFailed'), 'error');
-    }
-  }, [inquiryCart.items, t, toast]);
+  // 询价关闭场景：把选中清单导出为 Excel（型号/名称/数量/单位 + 参数列并集）。
+  // 点「导出选中」先弹文件名确认框（可直接下载，也可改名），确认后走这里
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportPending, setExportPending] = useState(false);
+  /* 打开时刻固定默认名：对话框开着期间 re-render 不会重置用户输入 */
+  const [exportDefaultName, setExportDefaultName] = useState('');
+  const buildExportBaseName = useCallback(() => {
+    const stamp = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${t('sharedMisc.exportSelectionListName')}_${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}`;
+  }, [t]);
+  const openExportDialog = useCallback(() => {
+    if (!inquiryCart.items.length) return;
+    setExportDefaultName(buildExportBaseName());
+    setExportDialogOpen(true);
+  }, [buildExportBaseName, inquiryCart.items.length]);
+  const handleExportSelected = useCallback(
+    async (baseName: string) => {
+      const items = inquiryCart.items;
+      if (!items.length) return;
+      setExportPending(true);
+      try {
+        const { default: writeXlsxFile } = await import('write-excel-file/browser');
+        // 只导核心四列（型号/名称/数量/单位），不带参数列；
+        // 名称剥掉型号的「所有」出现（历史数据常以「系列号 描述 完整型号」结尾，不剥会和型号列重复）
+        const headers = [
+          t('sharedMisc.exportColModelNo'),
+          t('sharedMisc.exportColName'),
+          t('sharedMisc.exportColQty'),
+          t('sharedMisc.exportColUnit'),
+        ];
+        const rows = items.map((it) => {
+          let name = it.productName || '';
+          if (it.modelNo) {
+            const escaped = it.modelNo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            name =
+              name
+                .replace(new RegExp(escaped, 'gi'), ' ')
+                .replace(/[\s\-—_]+/g, ' ')
+                .trim() || it.productName;
+          }
+          return [it.modelNo || '', name, it.qty, it.unit || ''];
+        });
+        /* 文件名已由对话框 sanitize（非法字符剔除、空回退默认名），这里只拼扩展名 */
+        await writeXlsxFile([headers, ...rows], {
+          sheet: t('selectionPage.inquiryCart.exportTitle'),
+        }).toFile(`${baseName}.xlsx`);
+        toast(t('selectionPage.inquiryCart.exportedCount', { count: items.length }), 'success');
+        setExportDialogOpen(false);
+      } catch {
+        toast(t('selectionPage.inquiryCart.exportFailed'), 'error');
+      } finally {
+        setExportPending(false);
+      }
+    },
+    [inquiryCart.items, t, toast],
+  );
   const toggleKit = useCallback(
     (id: string) =>
       setExpandedKits((p) => {
@@ -2901,9 +2924,9 @@ export default function SelectionPage() {
             </button>
           </>
         ) : (
-          /* 询价功能关闭：清单仅用于批量导出选中型号 */
+          /* 询价功能关闭：清单仅用于批量导出选中型号（先弹文件名确认框） */
           <button
-            onClick={() => void handleExportSelected()}
+            onClick={openExportDialog}
             className={
               isDesktop
                 ? `rounded-lg bg-primary-container px-4 py-1.5 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
@@ -3640,6 +3663,17 @@ export default function SelectionPage() {
       nativeSharePending={nativeSharePending}
     />
   );
+  const exportDialogNode = (
+    <SelectionExportDialog
+      open={exportDialogOpen}
+      defaultFileName={exportDefaultName}
+      pending={exportPending}
+      onDownload={(fileName) => void handleExportSelected(fileName)}
+      onClose={() => {
+        if (!exportPending) setExportDialogOpen(false);
+      }}
+    />
+  );
 
   /* 浏览门槛拦截（require_login_selection）：显示与首页一致的模糊锁屏（选型文案）。
     pendingLock：门槛已开且本地无记住的会话，判定期间直接渲染锁屏，
@@ -3681,6 +3715,7 @@ export default function SelectionPage() {
           returnUrl={location.pathname + location.search}
         />
         {shareLinkDialogNode}
+        {exportDialogNode}
       </>
     );
   }
@@ -3766,6 +3801,7 @@ export default function SelectionPage() {
         returnUrl={location.pathname + location.search}
       />
       {shareLinkDialogNode}
+      {exportDialogNode}
     </>
   );
 }

@@ -1514,6 +1514,11 @@ export const zhCN: { translation: TranslationMap } = {
       inquiryCart: {
         addedCount: '已加入 {{count}} 项',
         exportFailed: '导出失败，请重试',
+        exportDialog: {
+          download: '下载',
+          fileNameLabel: '文件名',
+          hint: '可直接下载，或修改文件名后再下载（Excel 格式）',
+        },
         exportSelected: '导出选中',
         selected: '已选',
         exportTitle: '导出清单',
