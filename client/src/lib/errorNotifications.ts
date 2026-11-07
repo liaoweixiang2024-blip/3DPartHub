@@ -125,9 +125,21 @@ export function isBrowseLoginRequiredError(error: unknown): boolean {
   );
 }
 
-/** 会话过期 401：client.ts 拦截器已统一承接（登出 + 跳登录页，不弹错误 toast），
- *  SWR 全局 onError 等兜底漏斗对这类错误静默，避免跳转瞬间闪一条「登录状态已过期」。 */
+/** client.ts 令牌刷新链路（refresh 失败/超时）创建的「会话不可恢复」错误。
+ *  它不是 axios 错误——此前各静默漏斗（isSessionExpiredError 只认 axios 401）认不出它，
+ *  未登录访客碰到需登录接口时会弹英文 "Session expired" 原文，看着像错误代码。 */
+export class SessionExpiredError extends Error {
+  constructor() {
+    super(tToast('sessionExpired', '登录状态已过期，请重新登录'));
+    this.name = 'SessionExpiredError';
+  }
+}
+
+/** 会话过期 401（或刷新链路的 SessionExpiredError）：client.ts 拦截器已统一承接
+ *  （登出 + 跳登录页，不弹错误 toast）；匿名场景无会话可跳，由页面级登录引导承接。
+ *  SWR 全局 onError 等兜底漏斗对这类错误静默，避免闪一条「登录状态已过期」/英文原文。 */
 export function isSessionExpiredError(error: unknown): boolean {
+  if (error instanceof SessionExpiredError) return true;
   return axios.isAxiosError(error) && error.response?.status === 401 && !isBrowseLoginRequiredError(error);
 }
 
@@ -255,6 +267,10 @@ export function notifyGlobalError(error: unknown, fallback?: string, type: Error
   // 浏览门槛 401 静默：client.ts 拦截器已静默拒绝，这里兜住其余漏斗
   // （SWR 全局 onError / unhandledrejection），由页面锁屏统一承接，不再弹右上角 toast
   if (isBrowseLoginRequiredError(error)) return;
+
+  // 会话过期/未登录吃到的 401 也静默：client.ts 拦截器统一承接（跳登录页），
+  // 匿名场景由页面级登录引导承接——不弹 toast，否则会闪英文 "Session expired" 原文
+  if (isSessionExpiredError(error)) return;
 
   // 脱敏错误对用户是噪音（用户无法据此做任何事），静默吞掉不上 toast。
   // 典型场景：iOS Safari 点系统分享/添加主屏幕 → 页面挂起恢复时 WebGL 抛错。

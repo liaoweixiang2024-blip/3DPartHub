@@ -173,13 +173,9 @@ export function createSettingsAdminRouter() {
   // Admin: get current client IP (for IP whitelist configuration)
   router.get('/api/settings/my-ip', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
-    const forwarded = req.headers['x-forwarded-for'];
-    const ip =
-      typeof forwarded === 'string'
-        ? forwarded.split(',')[0].trim()
-        : typeof req.headers['x-real-ip'] === 'string'
-          ? req.headers['x-real-ip']
-          : req.ip || req.socket.remoteAddress || 'unknown';
+    // 用 req.ip（trust proxy 已按部署层数解析）：与限流/IP 守卫的判定源一致，抄进白名单
+    // 才真正生效。不回显 X-Forwarded-For 首段——它可能是客户端伪造的代理链头。
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
     res.json({ ip });
   });
 

@@ -2,6 +2,30 @@
 <html class="dark" lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // 翻译建议按「用户能否读懂页面语言」动态决定：能读（设备语言列表含页面语言的
+      // 主子标签，如中文设备看简中页）→ 整页标记 translate="no"，抑制 Safari/Chrome
+      // 地址栏的「翻译为…」提示（站点自带 6 语种切换，机器翻译只会把界面翻花）；
+      // 读不懂（如纯英文设备看默认简中页）→ 不标记，保留浏览器整页翻译这条生路——
+      // 此时界面语言切换按钮本身也是中文，用户未必找得到。
+      // 内联同步执行（早于 Safari/Chrome 采样翻译状态）；React 挂载后
+      // i18n 的 applyHtmlLanguage 会在语言切换时重算同一逻辑。
+      (function () {
+        try {
+          var stored = localStorage.getItem('ui_locale') || '';
+          var pageLang = (stored || 'zh-CN').split('-')[0].toLowerCase();
+          var langs = navigator.languages && navigator.languages.length
+            ? navigator.languages
+            : [navigator.language || ''];
+          for (var i = 0; i < langs.length; i += 1) {
+            if (String(langs[i] || '').toLowerCase().split('-')[0] === pageLang) {
+              document.documentElement.setAttribute('translate', 'no');
+              break;
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
     <!-- 图标声明（favicon / apple-touch-icon）全部由下方 SSI 片段输出，
          不在此静态声明——否则构建期 PNG 会压过后台设置的自定义 favicon -->
     <link rel="manifest" href="/site.webmanifest" />

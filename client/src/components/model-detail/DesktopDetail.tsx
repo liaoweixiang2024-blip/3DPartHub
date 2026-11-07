@@ -297,7 +297,7 @@ export function DesktopDetail({
                         <span className="text-[10px] font-bold text-error">PDF</span>
                       </div>
                       <div className="min-w-0">
-                        <div className="text-sm font-medium text-on-surface truncate">{file.fileName}</div>
+                        <div className="text-sm font-medium text-on-surface font-mono truncate">{file.fileName}</div>
                         <div className="text-[11px] text-on-surface-variant mt-0.5">
                           {file.format} · {file.size}
                         </div>

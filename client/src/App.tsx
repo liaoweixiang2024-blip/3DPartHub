@@ -29,8 +29,9 @@ export default function App() {
         dedupingInterval: 5000,
         focusThrottleInterval: 10000,
         revalidateOnFocus: false,
-        // 浏览门槛 401 重试必然再 401（锁屏承接即可），不浪费请求
-        shouldRetryOnError: (error) => !isRateLimitError(error) && !isBrowseLoginRequiredError(error),
+        // 浏览门槛/会话过期 401 重试必然再失败（锁屏/登录引导承接即可），不浪费请求
+        shouldRetryOnError: (error) =>
+          !isRateLimitError(error) && !isBrowseLoginRequiredError(error) && !isSessionExpiredError(error),
         onError: (error) => {
           // 会话过期 401 由 client.ts 拦截器统一承接（登出+跳登录页），这里静默防跳转瞬间闪错误 toast
           if (isRateLimitError(error) || isSessionExpiredError(error)) return;

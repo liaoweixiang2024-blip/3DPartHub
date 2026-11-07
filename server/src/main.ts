@@ -1,5 +1,5 @@
 import cluster from 'node:cluster';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import type { Prisma, PrismaClient } from '@prisma/client';
@@ -7,6 +7,7 @@ import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
 import { detectInterruptedRestores, startBackupScheduler } from './lib/backup.js';
+import { redis } from './lib/cache.js';
 import { cdnUrlRewrite } from './lib/cdnRewrite.js';
 import { config } from './lib/config.js';
 import { logger, createLogger } from './lib/logger.js';
@@ -228,6 +229,8 @@ try {
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/refresh', refreshLimiter);
+// 忘记密码对齐登录口径的独立限流（端点内已有图形验证码+按邮箱冷却，这里补 IP 维度 50/15min）
+app.use('/api/auth/forgot-password', authLimiter);
 app.use('/api/models/upload', uploadLimiter);
 app.use('/api/temp-preview/upload', uploadLimiter);
 app.use('/api/upload', uploadLimiter);
@@ -290,22 +293,46 @@ async function staticModelAssetsRequireAuth(): Promise<boolean> {
   return value;
 }
 
-/** 静态资源段登录校验（models 段随 require_login_browse 开关；temp-previews 无条件） */
-async function requireStaticViewer(req: express.Request, res: express.Response): Promise<boolean> {
+/** 静态资源段登录校验（models 段随 require_login_browse 开关；temp-previews 无条件）。
+ *  返回验证通过的观看者（payload 含 userId/role），供 temp-previews 的属主校验使用。 */
+async function requireStaticViewer(
+  req: express.Request,
+  res: express.Response,
+): Promise<Awaited<ReturnType<typeof getVerifiedRequestUser>>> {
   try {
     const verified = await getVerifiedRequestUser(req);
     if (!verified) {
       res.status(401).json({ detail: '需要登录后才能查看模型预览', code: 'LOGIN_REQUIRED_BROWSE' });
-      return false;
+      return null;
     }
     if (verified.mustChangePassword) {
       res.status(403).json({ detail: '首次登录请先修改密码', code: 'PASSWORD_CHANGE_REQUIRED' });
-      return false;
+      return null;
     }
-    return true;
+    return verified;
   } catch (err) {
     logger.error({ err }, 'Failed to authorize model asset');
     res.status(500).json({ detail: '认证服务暂不可用' });
+    return null;
+  }
+}
+
+/** temp-preview 属主校验：与上传/删除接口同口径（temp-preview.ts 的 tempPreviewOwnerKey）。
+ *  上传时写入 Redis 映射 temp-preview:owner:<sessionId> → ownerKey（sha256(user:<userId>) 前 40 位，
+ *  TTL 覆盖文件寿命），读取时比对当前登录者。映射已过期/Redis 异常一律拒绝（fail-closed，
+ *  私有文件宁可拒读）。ADMIN 可查看全部（与其他管理视角一致）。 */
+async function isTempPreviewSessionOwner(
+  sessionId: string,
+  viewer: { userId: string; role: string },
+): Promise<boolean> {
+  if (!/^[a-f0-9-]{36}$/i.test(sessionId)) return false;
+  if (viewer.role === 'ADMIN') return true;
+  try {
+    const ownerKey = await redis.get(`temp-preview:owner:${sessionId}`);
+    if (!ownerKey) return false;
+    const viewerKey = createHash('sha256').update(`user:${viewer.userId}`).digest('hex').slice(0, 40);
+    return ownerKey === viewerKey;
+  } catch {
     return false;
   }
 }
@@ -322,10 +349,17 @@ app.use('/static', async (req, res, next) => {
     if (!(await requireStaticViewer(req, res))) return;
   }
 
-  // 临时预览是登录用户上传的 STEP 转换产物（可能含商业机密图纸）：上传/删除都要求
-  // 登录，静态读取同口径——匿名不得凭 URL 直接拖走 6 小时内的私有文件
+  // 临时预览是登录用户上传的 STEP 转换产物（可能含商业机密图纸）：匿名不得凭 URL
+  // 直接拖走，且登录只是第一步——还须通过属主校验，其他登录用户拿到/猜到 URL
+  // 也不行（与上传/删除接口的 owner 绑定同口径，不匹配一律 404 不暴露存在性）
   if (firstSegment === 'temp-previews') {
-    if (!(await requireStaticViewer(req, res))) return;
+    const viewer = await requireStaticViewer(req, res);
+    if (!viewer) return;
+    const sessionId = path.split('/').filter(Boolean)[1] || '';
+    if (!(await isTempPreviewSessionOwner(sessionId, viewer.payload))) {
+      res.status(404).end();
+      return;
+    }
   }
   next();
 });
@@ -345,6 +379,7 @@ app.use(
   express.static(join(process.cwd(), config.staticDir, 'thumbnails'), {
     maxAge: '365d',
     etag: true,
+    dotfiles: 'ignore',
     setHeaders: setStaticSecurityHeaders,
   }),
 );
@@ -354,6 +389,7 @@ app.use(
   express.static(join(process.cwd(), config.staticDir, 'temp-previews'), {
     maxAge: 0,
     etag: true,
+    dotfiles: 'ignore',
     setHeaders: setTempPreviewStaticHeaders,
   }),
 );
@@ -363,6 +399,7 @@ app.use(
   express.static(join(process.cwd(), config.staticDir), {
     maxAge: '1d',
     etag: true,
+    dotfiles: 'ignore',
     setHeaders: setStaticSecurityHeaders,
   }),
 );

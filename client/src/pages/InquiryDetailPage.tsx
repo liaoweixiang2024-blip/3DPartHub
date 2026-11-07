@@ -168,9 +168,12 @@ function buildQuotePrintHtml({
         </tr>`,
     )
     .join('');
-  const logoHtml = companyLogo
-    ? `<img src="${escapeHtml(companyLogo)}" alt="${escapeHtml(companyName)}" />`
-    : `<span class="logo-fallback">${escapeHtml(companyName.slice(0, 1))}</span>`;
+  // logo 是管理端可配 URL：escapeHtml 只防属性逃逸，scheme 还须过 isSafeUrl 白名单
+  // （http/https/站内相对路径），javascript:/data:text/html 一律回落为文字 logo
+  const logoHtml =
+    companyLogo && isSafeUrl(companyLogo)
+      ? `<img src="${escapeHtml(companyLogo)}" alt="${escapeHtml(companyName)}" />`
+      : `<span class="logo-fallback">${escapeHtml(companyName.slice(0, 1))}</span>`;
 
   return `<!doctype html>
 <html>

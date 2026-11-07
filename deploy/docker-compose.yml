@@ -79,9 +79,9 @@ services:
       # 生产代理链共 2 跳（宝塔 nginx → web 容器 nginx → api）：不设置时只信 1 跳，
       # req.ip 停在宝塔 IP，审计日志的登录 IP 全变成代理 IP
       TRUST_PROXY: ${TRUST_PROXY:-2}
-      DATABASE_URL: 'postgresql://modeluser:${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}@postgres:5432/3dparthub?connection_limit=${DB_CONNECTION_LIMIT:-3}&pool_timeout=10'
-      # <<< 建议在 .env 中覆盖为随机字符串 (openssl rand -hex 32)
-      JWT_SECRET: '${JWT_SECRET:-3dparthub-default-jwt-secret-change-me-2026-04-30}'
+      DATABASE_URL: 'postgresql://modeluser:${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}@postgres:5432/3dparthub?connection_limit=${DB_CONNECTION_LIMIT:-3}&pool_timeout=10'
+      # <<< 必须在 .env 中设置 (openssl rand -hex 32)：fail-closed，不再提供仓库内弱默认值
+      JWT_SECRET: '${JWT_SECRET:?请在 .env 中设置 JWT_SECRET (openssl rand -hex 32)}'
       BACKUP_SIGNING_SECRET: '${BACKUP_SIGNING_SECRET:-}'
       BACKUP_ENCRYPTION_SECRET: '${BACKUP_ENCRYPTION_SECRET:-}'
       JWT_EXPIRES_IN: 7d
@@ -92,7 +92,7 @@ services:
       SLOW_REQUEST_LOG_BURST: ${SLOW_REQUEST_LOG_BURST:-5}
       SLOW_REQUEST_LOG_SAMPLE_RATE: ${SLOW_REQUEST_LOG_SAMPLE_RATE:-0.01}
       MAX_FILE_SIZE: 524288000
-      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme-set-in-env}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?请在 .env 中设置 REDIS_PASSWORD}@redis:6379
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@model.local}
       ADMIN_PASS: '${ADMIN_PASS:?请在 .env 中设置 ADMIN_PASS（一键部署会自动随机生成）}'
@@ -171,8 +171,8 @@ services:
     environment:
       POSTGRES_DB: 3dparthub
       POSTGRES_USER: modeluser
-      # <<< 建议在 .env 中覆盖为强密码，与 API 的 DB_PASSWORD 一致
-      POSTGRES_PASSWORD: '${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}'
+      # <<< 必须在 .env 中设置强密码，与 API 的 DB_PASSWORD 一致（fail-closed）
+      POSTGRES_PASSWORD: '${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -194,7 +194,7 @@ services:
     command:
       - redis-server
       - --requirepass
-      - '${REDIS_PASSWORD:-changeme-set-in-env}'
+      - '${REDIS_PASSWORD:?请在 .env 中设置 REDIS_PASSWORD}'
       - --save
       - ''
       - --appendonly
@@ -213,7 +213,7 @@ services:
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ['CMD', 'sh', '-c', 'REDISCLI_AUTH=${REDIS_PASSWORD:-changeme-set-in-env} redis-cli ping']
+      test: ['CMD', 'sh', '-c', 'REDISCLI_AUTH=${REDIS_PASSWORD:?请在 .env 中设置 REDIS_PASSWORD} redis-cli ping']
       interval: 10s
       timeout: 5s
       retries: 5

@@ -1,6 +1,11 @@
 import axios from 'axios';
 import { i18n } from '../i18n';
-import { getErrorMessage, getRateLimitRetrySeconds, notifyGlobalError } from '../lib/errorNotifications';
+import {
+  SessionExpiredError,
+  getErrorMessage,
+  getRateLimitRetrySeconds,
+  notifyGlobalError,
+} from '../lib/errorNotifications';
 import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
 
 const client = axios.create({
@@ -203,7 +208,7 @@ client.interceptors.response.use(
         const timeout = setTimeout(() => {
           const idx = failedQueue.findIndex((p) => p.resolve === resolve);
           if (idx !== -1) failedQueue.splice(idx, 1);
-          reject(new Error('Token refresh timed out'));
+          reject(new SessionExpiredError());
         }, 30_000);
         failedQueue.push({
           resolve: (token) => {
@@ -232,12 +237,12 @@ client.interceptors.response.use(
         const newAccessToken = getAccessToken();
         if (!newAccessToken) {
           // Refresh truly failed (auth rejection), logout
-          processQueue(new Error('Session expired'), null);
+          processQueue(new SessionExpiredError(), null);
           // 从未登录过的访客（如开启浏览门槛后的匿名首页访问）不弹「登录失效」、不强制跳登录页
           if (useAuthStore.getState().hasHydrated && wasAuthenticated) {
             handleSessionExpiredOnce();
           }
-          return Promise.reject(new Error('Session expired'));
+          return Promise.reject(new SessionExpiredError());
         }
         // Token still present — was a transient network issue, don't retry with
         // old (possibly expired) token to avoid infinite 401 → retry → 401 loop.
@@ -247,7 +252,7 @@ client.interceptors.response.use(
       }
 
       const newAccessToken = getAccessToken();
-      if (!newAccessToken) throw new Error('No access token after refresh');
+      if (!newAccessToken) throw new SessionExpiredError();
 
       processQueue(null, newAccessToken);
       originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;

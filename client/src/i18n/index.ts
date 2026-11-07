@@ -117,6 +117,20 @@ export function resolveAppLocale(settings?: Partial<SystemSettings> | null): Sup
 function applyHtmlLanguage(locale: SupportedLocale) {
   if (typeof document === 'undefined') return;
   document.documentElement.lang = LOCALE_HTML_LANG[locale];
+
+  // 翻译建议按「用户能否读懂页面语言」动态决定（与 index.html 内联首帧脚本同一逻辑）：
+  // 能读 → translate="no" 抑制浏览器「翻译为…」提示；读不懂 → 移除标记保留整页翻译。
+  // 站点自带 6 语种切换，对读得懂的用户机器翻译只会把界面翻花；
+  // 对读不懂的访客（界面切换按钮也可能是其看不懂的语言）浏览器翻译是最后一条生路。
+  const pageLangBase = LOCALE_HTML_LANG[locale].split('-')[0].toLowerCase();
+  const userLangBases = (navigator.languages?.length ? navigator.languages : [navigator.language || '']).map(
+    (lang) => String(lang).toLowerCase().split('-')[0],
+  );
+  if (userLangBases.includes(pageLangBase)) {
+    document.documentElement.setAttribute('translate', 'no');
+  } else {
+    document.documentElement.removeAttribute('translate');
+  }
 }
 
 /** 已注入 i18n 的语言（zh-CN 永远在场：fallback + initialResources） */
