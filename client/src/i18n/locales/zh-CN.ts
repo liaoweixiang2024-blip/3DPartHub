@@ -57,6 +57,9 @@ export const zhCN: { translation: TranslationMap } = {
       title: '页面出现错误',
       toast: '页面出现错误，请刷新后重试',
       unknown: '发生了未知错误',
+      outdatedTitle: '浏览器版本过低',
+      outdatedDescription:
+        '当前浏览器内核版本过旧，无法加载页面功能。请将浏览器升级到最新版本（Chrome / Edge 111 及以上，iOS 16.4 及以上或新版 Safari）后重新访问。',
     },
     maintenance: {
       checking: '检查中',

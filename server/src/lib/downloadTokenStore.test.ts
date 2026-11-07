@@ -13,8 +13,10 @@ process.env.UPLOAD_DIR = join(root, 'uploads');
 const {
   createModelDownloadToken,
   createProtectedResourceToken,
-  consumeModelDownloadToken,
+  claimModelDownloadRecordMark,
+  releaseModelDownloadRecordMark,
   consumeProtectedResourceToken,
+  verifyModelDownloadToken,
   verifyProtectedResourceToken,
 } = await import('./downloadTokenStore.js');
 
@@ -22,7 +24,7 @@ test.after(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-test('model download tokens are single-use and bound to payload', async () => {
+test('model download tokens are reusable within TTL and bound to payload', async () => {
   const created = await createModelDownloadToken({
     modelId: 'model-1',
     format: 'original',
@@ -32,26 +34,45 @@ test('model download tokens are single-use and bound to payload', async () => {
   assert.ok(created.token.length >= 32);
   assert.ok(created.expiresAt > Date.now());
 
-  const payload = consumeModelDownloadToken(created.token);
-  assert.deepEqual(
-    payload && {
-      modelId: payload.modelId,
-      format: payload.format,
-      userId: payload.userId,
-    },
-    {
-      modelId: 'model-1',
-      format: 'original',
-      userId: 'user-1',
-    },
-  );
+  // 同一令牌可重复校验：华为/鸿蒙等浏览器的下载管理器会对同一 URL 发起多次请求
+  // （重拉 / Range 续传），一次性令牌第二次请求即 401 → 下载器报「下载失败」。
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const payload = verifyModelDownloadToken(created.token);
+    assert.deepEqual(
+      payload && {
+        modelId: payload.modelId,
+        format: payload.format,
+        userId: payload.userId,
+      },
+      {
+        modelId: 'model-1',
+        format: 'original',
+        userId: 'user-1',
+      },
+    );
+  }
+});
 
-  assert.equal(consumeModelDownloadToken(created.token), null);
+test('record mark is claimed once per token and releasable after limit rejection', async () => {
+  const created = await createModelDownloadToken({
+    modelId: 'model-2',
+    format: 'original',
+  });
+
+  // 第一个到达的请求赢得打点权
+  assert.equal(claimModelDownloadRecordMark(created.token, created.expiresAt), true);
+  // 同令牌的后续请求（下载器二次拉取）不再重复打点
+  assert.equal(claimModelDownloadRecordMark(created.token, created.expiresAt), false);
+  // 每日限额拒绝时归还标记，重试请求需重新过限额检查
+  releaseModelDownloadRecordMark(created.token);
+  assert.equal(claimModelDownloadRecordMark(created.token, created.expiresAt), true);
 });
 
 test('invalid token names are rejected', () => {
-  assert.equal(consumeModelDownloadToken('../not-a-token'), null);
-  assert.equal(consumeModelDownloadToken('short'), null);
+  assert.equal(verifyModelDownloadToken('../not-a-token'), null);
+  assert.equal(verifyModelDownloadToken('short'), null);
+  assert.equal(claimModelDownloadRecordMark('../not-a-token', Date.now() + 60_000), false);
+  assert.equal(claimModelDownloadRecordMark('short', Date.now() + 60_000), false);
   assert.equal(consumeProtectedResourceToken('../not-a-token', 'backup-download', 'backup-1'), null);
   assert.equal(consumeProtectedResourceToken('short', 'backup-download', 'backup-1'), null);
 });

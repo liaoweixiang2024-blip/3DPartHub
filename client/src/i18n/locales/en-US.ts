@@ -57,6 +57,9 @@ export const enUS: { translation: TranslationMap } = {
       title: 'Page error',
       toast: 'Page error. Please refresh and try again',
       unknown: 'An unknown error occurred',
+      outdatedTitle: 'Browser out of date',
+      outdatedDescription:
+        'Your browser engine is too old to load this site. Please update to the latest browser (Chrome / Edge 111+, iOS 16.4+, or a recent Safari) and visit again.',
     },
     maintenance: {
       checking: 'Checking',

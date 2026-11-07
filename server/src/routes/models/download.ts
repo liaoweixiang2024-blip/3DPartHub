@@ -2,7 +2,11 @@ import { existsSync } from 'node:fs';
 import type { PrismaClient } from '@prisma/client';
 import { Router, Request, Response } from 'express';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
-import { consumeModelDownloadToken, verifyModelDownloadToken } from '../../lib/downloadTokenStore.js';
+import {
+  claimModelDownloadRecordMark,
+  releaseModelDownloadRecordMark,
+  verifyModelDownloadToken,
+} from '../../lib/downloadTokenStore.js';
 import { deviceFromRequest } from '../../lib/downloadDevice.js';
 import { logger } from '../../lib/logger.js';
 import { createNotification } from '../../lib/notificationDelivery.js';
@@ -78,18 +82,18 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
     const id = req.params.id as string;
     const isHeadRequest = req.method === 'HEAD';
     const queryDownloadToken = optionalString(req.query.download_token, { maxLength: 160 });
-    const downloadTokenPayload = queryDownloadToken
-      ? isHeadRequest
-        ? verifyModelDownloadToken(queryDownloadToken)
-        : consumeModelDownloadToken(queryDownloadToken)
-      : null;
+    // 令牌 TTL 内可多次校验（verify 而非一次性 consume）：华为/鸿蒙等浏览器的系统下载
+    // 管理器会对同一 URL 发起多次请求（重拉 / Range 续传），一次性令牌在第一次请求即被
+    // 销毁，第二次请求 401 → 下载器报「下载失败」（桌面 Chrome 单请求不受影响，此前掩盖
+    // 了该问题）。打点只记一次由 claimModelDownloadRecordMark 保证，与图纸/备份令牌同款语义。
+    const downloadTokenPayload = queryDownloadToken ? verifyModelDownloadToken(queryDownloadToken) : null;
     let requestedFormat = optionalString(req.query.format, { maxLength: 20 });
 
     if (queryDownloadToken) {
       if (!downloadTokenPayload || downloadTokenPayload.modelId !== id) {
         await sendResourceError(req, res, 401, '下载链接已失效，请回到模型详情页重新发起下载', {
           htmlTitle: '下载链接已失效',
-          hint: '下载链接为一次性链接，只能使用一次且有时效',
+          hint: '下载链接有时效，过期后请回到模型详情页重新发起下载',
         });
         return;
       }
@@ -103,7 +107,8 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
     }
 
     // Authenticated API callers should use the Authorization header.
-    // Browser direct downloads use short-lived one-time download_token values instead of JWT query strings.
+    // Browser direct downloads use short-lived download_token values (TTL 内可复用，见上方
+    // verify 注释) instead of JWT query strings.
     const rawAuthHeaderPayload = verifyRequestToken(req);
     let verifiedAuthUser: Awaited<ReturnType<typeof getVerifiedRequestUser>> | null = null;
     if (rawAuthHeaderPayload) {
@@ -190,8 +195,14 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
         noRecord: booleanFlag(req.query.no_record),
         device,
       };
+      // 同一令牌只打一次点：华为/鸿蒙下载器的二次请求（重拉/续传）跳过打点直接出流。
+      // 限额拒绝时归还标记（见 catch 内 release），否则重试请求会绕过限额检查。
+      const shouldRecordThisRequest =
+        !queryDownloadToken || claimModelDownloadRecordMark(queryDownloadToken, downloadTokenPayload?.expiresAt ?? 0);
       try {
-        if (shouldSkipDownloadRecord(recordOptions)) {
+        if (!shouldRecordThisRequest) {
+          // 同令牌已打点：不再重复计数/通知/限额，直接进入文件下发。
+        } else if (shouldSkipDownloadRecord(recordOptions)) {
           // Internal/no-record downloads skip statistics without touching the hot DB path.
         } else if (shouldRecordDownloadSynchronously(recordOptions)) {
           await recordModelDownload(prisma, recordOptions);
@@ -223,6 +234,9 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
         }
       } catch (err) {
         if (err instanceof DailyDownloadLimitError) {
+          // 归还打点标记：限额拒绝没有产生记录，同令牌的后续请求应重新过限额检查，
+          // 而不是因「已打点」跳过检查直接拿到文件流。
+          if (queryDownloadToken) releaseModelDownloadRecordMark(queryDownloadToken);
           res.status(429).json({ detail: err.message });
           return;
         }

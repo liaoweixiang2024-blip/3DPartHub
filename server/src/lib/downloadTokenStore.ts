@@ -6,6 +6,7 @@ import { getSetting } from './settings.js';
 const PROTECTED_RESOURCE_TOKEN_TTL_MS = 5 * 60 * 1000;
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,}$/;
+const RECORD_MARK_SUFFIX = '.recorded';
 
 const modelTokenDir = join(resolve(process.cwd(), config.uploadDir), '.download_tokens', 'models');
 const resourceTokenDir = join(resolve(process.cwd(), config.uploadDir), '.download_tokens', 'resources');
@@ -85,6 +86,15 @@ function isResourcePayload(value: unknown): value is ProtectedResourceTokenPaylo
   );
 }
 
+interface RecordMarkPayload {
+  expiresAt: number;
+}
+
+function isRecordMarkPayload(value: unknown): value is RecordMarkPayload {
+  const mark = value as Partial<RecordMarkPayload> | null;
+  return Boolean(mark && typeof mark.expiresAt === 'number');
+}
+
 function readJsonPayload<T>(path: string, guard: (value: unknown) => value is T): T | null {
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf-8')) as unknown;
@@ -112,8 +122,15 @@ function cleanupExpiredTokenFiles<T extends ExpiringTokenPayload>(
   try {
     ensureTokenDirectory(dir);
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (!entry.isFile() || !TOKEN_PATTERN.test(entry.name)) continue;
+      if (!entry.isFile()) continue;
       const path = join(dir, entry.name);
+      // 打点去重标记：自身携带 expiresAt（与令牌同寿命），过期/损坏即清理
+      if (entry.name.endsWith(RECORD_MARK_SUFFIX)) {
+        const mark = readJsonPayload(path, isRecordMarkPayload);
+        if (!mark || mark.expiresAt <= now) rmSync(path, { force: true });
+        continue;
+      }
+      if (!TOKEN_PATTERN.test(entry.name)) continue;
       const payload = read(path);
       if (!payload || payload.expiresAt <= now) {
         rmSync(path, { force: true });
@@ -273,16 +290,40 @@ export function verifyProtectedResourceToken(
   );
 }
 
-export function consumeModelDownloadToken(token: string): ModelDownloadTokenPayload | null {
-  return consumeTokenFile(modelTokenDir, token, readPayload, (payload) => {
-    if (!payload || payload.expiresAt <= Date.now()) return null;
-    return payload;
-  });
-}
-
 export function verifyModelDownloadToken(token: string): ModelDownloadTokenPayload | null {
   return verifyTokenFile(modelTokenDir, token, readPayload, (payload) => {
     if (!payload || payload.expiresAt <= Date.now()) return null;
     return payload;
   });
+}
+
+/**
+ * 模型下载打点去重标记。华为/鸿蒙等浏览器把附件下载交给系统下载管理器，同一次下载会
+ * 对原 URL 发起多次请求（重拉 / 分段 Range 续传），因此模型下载令牌与图纸/备份令牌一致
+ * 改为 TTL 内可复用（verify 而非 consume）——但下载打点（计数+通知+每日限额）每次用户
+ * 操作只能记一次。用 wx 原子创建的标记文件判定「第一个到达的请求」：赢得标记的请求走
+ * 打点，同令牌的后续请求跳过打点直接出流。标记与令牌同 TTL，由清理任务回收。
+ */
+export function claimModelDownloadRecordMark(token: string, expiresAt: number): boolean {
+  const path = tokenFilePath(modelTokenDir, token);
+  if (!path || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) return false;
+  ensureTokenDirectory(modelTokenDir);
+  try {
+    writeFileSync(`${path}${RECORD_MARK_SUFFIX}`, JSON.stringify({ expiresAt }), { flag: 'wx', mode: 0o600 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 回收打点标记：每日限额拒绝时必须归还，否则同令牌的后续请求会因「已打点」跳过限额
+ *  检查而直接放行出流（首请求 429、重试反而成功的限额绕过）。 */
+export function releaseModelDownloadRecordMark(token: string): void {
+  const path = tokenFilePath(modelTokenDir, token);
+  if (!path) return;
+  try {
+    rmSync(`${path}${RECORD_MARK_SUFFIX}`, { force: true });
+  } catch {
+    // Best-effort; expired marks are reclaimed by the cleanup sweep anyway.
+  }
 }
