@@ -5,6 +5,7 @@ import { createLogger } from '../lib/logger.js';
 import { buildModelMatchMap } from '../lib/modelMatch.js';
 import { prisma } from '../lib/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { optionCatalogUrl } from './selections/common.js';
 
 const log = createLogger({ component: 'selection-shares' });
 
@@ -117,6 +118,45 @@ router.get('/api/selection-shares/:token', async (req: Request, res: Response) =
       ? await buildModelMatchMap(modelNos)
       : new Map<string, { id: string; thumbnailUrl: string | null }>();
 
+    /* 画册解析（与 filter 路由同规则）：选项级 optionCatalogs 命中 → 分类自带 catalogPdf
+       → 按接头形态共享兜底；分享页此前漏了整段，画册内容在分享链接里不展示 */
+    const specsOf = (value: unknown): Record<string, unknown> =>
+      value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+    const optionCatalogs = (category.optionCatalogs || {}) as Record<string, Record<string, unknown>>;
+    const ownPdf = category.catalogPdf || null;
+    let sharedPdfMap: Record<string, string> | null = null;
+    if (!ownPdf && products.length) {
+      const sharedCategories = await prisma.selectionCategory.findMany({
+        where: { catalogShared: true, catalogPdf: { not: null } },
+        select: { id: true, catalogPdf: true },
+      });
+      if (sharedCategories.length > 0) {
+        const catPdfById = new Map(sharedCategories.map((c) => [c.id, c.catalogPdf!]));
+        const sharedProducts = await prisma.selectionProduct.findMany({
+          where: { categoryId: { in: sharedCategories.map((c) => c.id) } },
+          select: { categoryId: true, specs: true },
+        });
+        sharedPdfMap = {};
+        for (const p of sharedProducts) {
+          const specs = specsOf(p.specs);
+          const jt = typeof specs['接头形态'] === 'string' ? specs['接头形态'] : null;
+          const pdf = catPdfById.get(p.categoryId);
+          if (jt && pdf) sharedPdfMap[jt] = pdf;
+        }
+      }
+    }
+    const resolveCatalogPdf = (p: (typeof products)[number]): string | null => {
+      const specs = specsOf(p.specs);
+      for (const [field, valueMap] of Object.entries(optionCatalogs)) {
+        const specVal = typeof specs[field] === 'string' ? specs[field] : null;
+        const catalogUrl = specVal ? optionCatalogUrl(valueMap[specVal as string]) : null;
+        if (specVal && catalogUrl) return catalogUrl;
+      }
+      if (ownPdf) return ownPdf;
+      const jointShape = typeof specs['接头形态'] === 'string' ? specs['接头形态'] : '';
+      return (sharedPdfMap && sharedPdfMap[jointShape]) || null;
+    };
+
     const productsWithMatch = products.map((p) => {
       const matched = p.modelNo ? modelMap.get(p.modelNo) : undefined;
       return {
@@ -130,6 +170,7 @@ router.get('/api/selection-shares/:token', async (req: Request, res: Response) =
         sortOrder: p.sortOrder,
         isKit: p.isKit,
         components: p.components,
+        categoryCatalogPdf: resolveCatalogPdf(p),
         matchedModelId: matched?.id ?? null,
         matchedModelThumbnail: matched?.thumbnailUrl ?? null,
       };

@@ -205,6 +205,7 @@ export default function SelectionPage() {
     // 渲染期只读对比（并发渲染会多次尝试，绝不能在这里写模块变量）；
     // 返回判定还要求上次记录距今 >1.5s：同一次进入内的快速重挂不算返回
     const lastInfo = wizardLastKeyInfo;
+    // eslint-disable-next-line react-hooks/purity -- 一次性初始化（ref 守卫，重渲染不重跑）内的时间戳只读对比
     const returnedToSameEntry = lastInfo?.key === location.key && performance.now() - lastInfo.at > 1500;
     let ask = false;
     let autoRestore = false;
@@ -214,6 +215,7 @@ export default function SelectionPage() {
         (restored.skipped ?? []).length > 0 ||
         Object.keys(restored.manualDrafts ?? {}).length > 0 ||
         (restored.searchDraft ?? '') !== '';
+      // eslint-disable-next-line react-hooks/purity -- 同上：一次性初始化内的会话窗口判定
       const sameSession = Date.now() - restored.savedAt < WIZARD_SESSION_WINDOW_MS;
       if (meaningful) {
         // 浏览器/系统返回到同一历史条目（POP），或从结果卡点「模型」「技术支持」
@@ -1704,6 +1706,37 @@ export default function SelectionPage() {
     });
   }
 
+  /** 搜索结果卡的单片分享：不动向导状态，直接以产品所属分类建空参数快照（1 个产品），
+      打开即该产品的完整参数卡（含清单/画册/模型入口）——不用进向导结果页整体分享 */
+  const [sharingProductId, setSharingProductId] = useState<string | null>(null);
+  const shareSingleProduct = async (product: SelectionProduct, categorySlug: string) => {
+    if (!user) {
+      requireLogin(t('selectionPage.share.loginReason'));
+      return;
+    }
+    if (!categorySlug || sharingProductId) return;
+    setSharingProductId(product.id);
+    try {
+      const result = await createSelectionShare({ categorySlug, specs: {}, productIds: [product.id] });
+      await copyShareLink(`${window.location.origin}/selection/s/${result.token}`, {
+        title: t('selectionPage.share.productTitle'),
+        description: t('selectionPage.share.description'),
+        showDialogFirst: !isDesktop,
+      });
+    } catch (err: unknown) {
+      if (import.meta.env.DEV) {
+        console.error('[Share] Single product error:', err instanceof Error ? err.message : String(err));
+      }
+      const resp = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
+      const data = typeof resp === 'object' && resp !== null ? (resp as Record<string, unknown>).data : undefined;
+      const apiMsg = typeof data === 'object' && data !== null ? (data as Record<string, unknown>).message : undefined;
+      const errMsg = err instanceof Error ? err.message : t('selectionPage.unknownError');
+      toast(t('selectionPage.share.failed', { message: apiMsg || errMsg }), 'error');
+    } finally {
+      setSharingProductId(null);
+    }
+  };
+
   /**
    * 创建选型分享并返回链接（复制到剪贴板由调用方处理）。
    * 工单来源也复用这里：用户从选型结果提交工单时，来源直接指向当前选型结果快照
@@ -2643,6 +2676,7 @@ export default function SelectionPage() {
                   isMobile={!isDesktop}
                   categoryName={liveCat?.name ?? null}
                   onCategoryClick={() => wizardTagGoCategory(visibleProduct)}
+                  onShare={featureFlags.shares ? () => void shareSingleProduct(visibleProduct, slug || '') : undefined}
                 />
               );
             })}
@@ -2716,6 +2750,7 @@ export default function SelectionPage() {
                   isMobile={!isDesktop}
                   categoryName={item.category.name}
                   onCategoryClick={() => goToListCategory(item)}
+                  onShare={featureFlags.shares ? () => void shareSingleProduct(item, item.category.slug) : undefined}
                 />
               );
             })}

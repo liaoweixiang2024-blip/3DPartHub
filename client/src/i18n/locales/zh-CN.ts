@@ -1584,6 +1584,7 @@ export const zhCN: { translation: TranslationMap } = {
         nativeShare: '系统分享',
         nativeShareFailed: '系统分享未完成，请长按链接手动复制',
         nativeSharing: '分享中...',
+        productTitle: '产品分享链接已创建',
         resultTitle: '结果分享链接已创建',
       },
       state: {
@@ -1626,6 +1627,7 @@ export const zhCN: { translation: TranslationMap } = {
       productCatalog: '产品画册',
       downloadCatalog: '下载画册',
       qty: '数量',
+      share: '分享',
       specSheet: '规格书',
       support: '技术支持',
       viewList: '查看清单',

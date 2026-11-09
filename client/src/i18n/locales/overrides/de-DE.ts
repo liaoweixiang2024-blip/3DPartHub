@@ -2004,6 +2004,7 @@ export const deDEMajorFormsTranslation: TranslationMap = {
       nativeShare: 'Systemfreigabe',
       nativeShareFailed: 'Systemfreigabe wurde nicht abgeschlossen. Link lange drücken und manuell kopieren',
       nativeSharing: 'Wird geteilt...',
+      productTitle: 'Produktfreigabelink erstellt',
       resultTitle: 'Ergebnisfreigabelink erstellt',
     },
     state: {
@@ -2042,6 +2043,7 @@ export const deDEMajorFormsTranslation: TranslationMap = {
     productCatalog: 'Produktkatalog',
     downloadCatalog: 'Katalog herunterladen',
     qty: 'Menge',
+    share: 'Teilen',
     specSheet: 'Datenblatt',
     support: 'Support',
     viewList: 'Liste anzeigen',

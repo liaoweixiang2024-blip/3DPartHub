@@ -2239,6 +2239,7 @@ export const jaJPMajorFormsTranslation: TranslationMap = {
       nativeShare: 'システム共有',
       nativeShareFailed: 'システム共有が完了しませんでした。リンクを長押しして手動でコピーしてください',
       nativeSharing: '共有中...',
+      productTitle: '製品共有リンクを作成しました',
       resultTitle: '結果共有リンクを作成しました',
     },
     state: {
@@ -2281,6 +2282,7 @@ export const jaJPMajorFormsTranslation: TranslationMap = {
     productCatalog: '製品カタログ',
     downloadCatalog: 'カタログをダウンロード',
     qty: '数量',
+    share: '共有',
     specSheet: '仕様書',
     support: 'サポート',
     viewList: 'リストを見る',

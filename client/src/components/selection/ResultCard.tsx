@@ -27,6 +27,7 @@ export function ResultCard({
   isMobile,
   categoryName,
   onCategoryClick,
+  onShare,
 }: {
   product: SelectionProduct;
   columns: ColumnDef[];
@@ -47,6 +48,8 @@ export function ResultCard({
   categoryName?: string | null;
   /** 提供时分类可点击（如进入该分类的选型向导） */
   onCategoryClick?: () => void;
+  /** 提供时渲染单片分享按钮（搜索结果卡）：直接分享该产品，不用进向导结果页 */
+  onShare?: () => void;
 }) {
   const expanded = expandedKits.has(product.id);
   const { t } = useTranslation();
@@ -66,6 +69,8 @@ export function ResultCard({
   const { toast } = useToast();
   const displayName = displayProductName(product);
   const primaryTitle = product.modelNo || displayName || product.name;
+  // 卡片图：产品自带图缺失时回落模型缩略图（与全局搜索下拉行/询价车同规则）
+  const cardImage = product.image || product.matchedModelThumbnail || null;
 
   const handleCopy = async () => {
     const parts = [product.modelNo || displayName].filter(Boolean) as string[];
@@ -91,9 +96,9 @@ export function ResultCard({
       className={`rounded-xl md:rounded-2xl border overflow-hidden ${selectionMotion} ${selected ? 'border-primary-container/40 bg-primary-container/5 shadow-sm' : 'border-outline-variant/15 bg-surface-container-low hover:border-outline-variant/25'}`}
     >
       <div className="flex items-start gap-3 px-3 md:px-4 py-3 md:py-3.5">
-        {product.image && (
+        {cardImage && (
           <SafeImage
-            src={product.image}
+            src={cardImage}
             alt=""
             className="w-16 h-16 md:w-20 md:h-20 rounded-lg object-cover shrink-0 border border-outline-variant/10"
             fallbackIcon="image"
@@ -369,6 +374,18 @@ export function ResultCard({
             className={`inline-flex items-center justify-center rounded-lg border border-outline-variant/30 px-2.5 py-1 text-on-surface-variant hover:bg-surface-container-high/50 md:py-1.5 ${selectionPress}`}
           >
             <Icon name="source" size={14} />
+          </button>
+        ) : null}
+        {onShare ? (
+          /* 单片分享：搜索结果卡直达分享，不用进向导结果页整体分享（样式与分类按钮同构） */
+          <button
+            type="button"
+            onClick={onShare}
+            title={t('selectionResult.share')}
+            aria-label={t('selectionResult.share')}
+            className={`inline-flex items-center justify-center rounded-lg border border-outline-variant/30 px-2.5 py-1 text-on-surface-variant hover:bg-surface-container-high/50 md:py-1.5 ${selectionPress}`}
+          >
+            <Icon name="share" size={14} />
           </button>
         ) : null}
       </div>

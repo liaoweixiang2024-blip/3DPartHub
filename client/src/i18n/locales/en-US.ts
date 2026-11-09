@@ -1598,6 +1598,7 @@ export const enUS: { translation: TranslationMap } = {
         nativeShare: 'System share',
         nativeShareFailed: 'System sharing did not complete. Long press the link to copy manually',
         nativeSharing: 'Sharing...',
+        productTitle: 'Product share link created',
         resultTitle: 'Result share link created',
       },
       state: {
@@ -1640,6 +1641,7 @@ export const enUS: { translation: TranslationMap } = {
       productCatalog: 'Product catalog',
       downloadCatalog: 'Download catalog',
       qty: 'Qty',
+      share: 'Share',
       specSheet: 'Spec sheet',
       support: 'Support',
       viewList: 'View list',

@@ -1947,6 +1947,7 @@ export const koKRMajorFormsTranslation: TranslationMap = {
       nativeShare: '시스템 공유',
       nativeShareFailed: '시스템 공유가 완료되지 않았습니다. 링크를 길게 눌러 직접 복사하세요',
       nativeSharing: '공유 중...',
+      productTitle: '제품 공유 링크가 생성되었습니다',
       resultTitle: '결과 공유 링크가 생성되었습니다',
     },
     state: {
@@ -1989,6 +1990,7 @@ export const koKRMajorFormsTranslation: TranslationMap = {
     productCatalog: '제품 카탈로그',
     downloadCatalog: '카탈로그 다운로드',
     qty: '수량',
+    share: '공유',
     specSheet: '사양서',
     support: '지원',
     viewList: '목록 보기',
