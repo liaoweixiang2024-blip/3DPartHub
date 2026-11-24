@@ -13,6 +13,7 @@ export const enUS: { translation: TranslationMap } = {
       confirm: 'Confirm',
       delete: 'Delete',
       download: 'Download',
+      dropFileHint: 'You can also drag a file here',
       edit: 'Edit',
       interface: 'Interface',
       language: 'Language',

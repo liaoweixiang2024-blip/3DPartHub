@@ -6,6 +6,7 @@ import { modelApi, type DrawingRef, type ServerModelListItem } from '../../api/m
 import { AdminButton, AdminIconButton } from '../../components/shared/AdminControls';
 import CategorySelect from '../../components/shared/CategorySelect';
 import DialogOverlay from '../../components/shared/DialogOverlay';
+import { FileDropArea } from '../../components/shared/FileDropArea';
 import { AppFormLabel, AppTextArea, AppTextInput } from '../../components/shared/FormControls';
 import Icon from '../../components/shared/Icon';
 import ModelThumbnail from '../../components/shared/ModelThumbnail';
@@ -103,6 +104,56 @@ export default function EditDialog({
       setThumbnailUploading(false);
     }
     if (ok) onSaved();
+  };
+
+  // 图纸上传（点按钮选文件与拖拽落区共用）：PDF 类型 + 大小校验 → 上传 → 刷新列表
+  const handleDrawingFile = async (f: File) => {
+    if (f.type !== 'application/pdf') {
+      toast(t('modelAdminComp.pdfOnly'), 'error');
+      return;
+    }
+    if (f.size > drawingMaxBytes) {
+      toast(t('modelAdminComp.pdfTooLarge', { mb: uploadPolicy.modelDrawingMaxSizeMb }), 'error');
+      return;
+    }
+    setDrawingUploading(true);
+    try {
+      const r = await modelApi.uploadDrawing(model.model_id, f);
+      setDrawings(r.drawings);
+      toast(t('modelAdminComp.drawingUploadSuccess'), 'success');
+      onSaved();
+    } catch {
+      toast(t('modelAdminComp.uploadFail'), 'error');
+    } finally {
+      setDrawingUploading(false);
+    }
+  };
+
+  // 替换模型源文件（共用入口）：扩展名校验 → 替换并触发转档 → 成功后关弹窗
+  const handleReplaceFile = async (f: File) => {
+    const ext = f.name.split('.').pop()?.toLowerCase() || '';
+    if (!MODEL_SOURCE_FORMATS.includes(ext)) {
+      toast(t('modelAdminComp.sourceFormatOnly', { formats: MODEL_SOURCE_LABEL }), 'error');
+      return;
+    }
+    setFileReplacing(true);
+    let ok = false;
+    try {
+      const result = await modelApi.replaceFile(model.model_id, f);
+      toast(
+        result.status === 'completed' ? t('modelAdminComp.fileUpdated') : t('modelAdminComp.fileUploadedConverting'),
+        'success',
+      );
+      ok = true;
+    } catch {
+      toast(t('modelAdminComp.replaceFileFail'), 'error');
+    } finally {
+      setFileReplacing(false);
+    }
+    if (ok) {
+      onSaved();
+      onClose();
+    }
   };
 
   const handleRegenerate = async () => {
@@ -269,47 +320,31 @@ export default function EditDialog({
                     accept="application/pdf"
                     className="hidden"
                     id="drawing-upload"
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const f = e.target.files?.[0];
-                      if (!f) return;
-                      if (f.type !== 'application/pdf') {
-                        toast(t('modelAdminComp.pdfOnly'), 'error');
-                        e.target.value = '';
-                        return;
-                      }
-                      if (f.size > drawingMaxBytes) {
-                        toast(t('modelAdminComp.pdfTooLarge', { mb: uploadPolicy.modelDrawingMaxSizeMb }), 'error');
-                        e.target.value = '';
-                        return;
-                      }
-                      setDrawingUploading(true);
-                      try {
-                        const r = await modelApi.uploadDrawing(model.model_id, f);
-                        setDrawings(r.drawings);
-                        toast(t('modelAdminComp.drawingUploadSuccess'), 'success');
-                        onSaved();
-                      } catch {
-                        toast(t('modelAdminComp.uploadFail'), 'error');
-                      } finally {
-                        setDrawingUploading(false);
-                      }
                       e.target.value = '';
+                      if (f) void handleDrawingFile(f);
                     }}
                   />
-                  <AdminButton
-                    onClick={() => document.getElementById('drawing-upload')?.click()}
-                    disabled={drawingUploading}
-                    icon="upload_file"
-                    size="sm"
-                    variant="secondary"
-                    className="w-full justify-center"
-                  >
-                    {drawingUploading
-                      ? t('modelAdminComp.uploading')
-                      : drawings.length > 0
-                        ? t('modelAdminComp.continueAddDrawing')
-                        : t('modelAdminComp.uploadDrawing')}
-                  </AdminButton>
+                  <FileDropArea onFileDrop={handleDrawingFile} disabled={drawingUploading}>
+                    <AdminButton
+                      onClick={() => document.getElementById('drawing-upload')?.click()}
+                      disabled={drawingUploading}
+                      icon="upload_file"
+                      size="sm"
+                      variant="secondary"
+                      className="w-full justify-center"
+                    >
+                      {drawingUploading
+                        ? t('modelAdminComp.uploading')
+                        : drawings.length > 0
+                          ? t('modelAdminComp.continueAddDrawing')
+                          : t('modelAdminComp.uploadDrawing')}
+                    </AdminButton>
+                    <p className="mt-1.5 text-center text-[10px] text-on-surface-variant/60">
+                      {t('common.dropFileHint')}
+                    </p>
+                  </FileDropArea>
                 </div>
               </div>
               <div className="border-t border-outline-variant/20 pt-4 mt-1">
@@ -322,47 +357,27 @@ export default function EditDialog({
                   accept={MODEL_SOURCE_ACCEPT}
                   className="hidden"
                   id="replace-file-upload"
-                  onChange={async (e) => {
+                  onChange={(e) => {
                     const f = e.target.files?.[0];
-                    if (!f) return;
-                    const ext = f.name.split('.').pop()?.toLowerCase() || '';
-                    if (!MODEL_SOURCE_FORMATS.includes(ext)) {
-                      toast(t('modelAdminComp.sourceFormatOnly', { formats: MODEL_SOURCE_LABEL }), 'error');
-                      return;
-                    }
-                    setFileReplacing(true);
-                    let ok = false;
-                    try {
-                      const result = await modelApi.replaceFile(model.model_id, f);
-                      toast(
-                        result.status === 'completed'
-                          ? t('modelAdminComp.fileUpdated')
-                          : t('modelAdminComp.fileUploadedConverting'),
-                        'success',
-                      );
-                      ok = true;
-                    } catch {
-                      toast(t('modelAdminComp.replaceFileFail'), 'error');
-                    } finally {
-                      setFileReplacing(false);
-                    }
-                    if (ok) {
-                      onSaved();
-                      onClose();
-                    }
                     e.target.value = '';
+                    if (f) void handleReplaceFile(f);
                   }}
                 />
-                <AdminButton
-                  onClick={() => document.getElementById('replace-file-upload')?.click()}
-                  disabled={fileReplacing}
-                  icon="swap_horiz"
-                  size="sm"
-                  variant="secondary"
-                  className="w-full"
-                >
-                  {fileReplacing ? t('modelAdminComp.uploading') : t('modelAdminComp.chooseNewFile')}
-                </AdminButton>
+                <FileDropArea onFileDrop={handleReplaceFile} disabled={fileReplacing}>
+                  <AdminButton
+                    onClick={() => document.getElementById('replace-file-upload')?.click()}
+                    disabled={fileReplacing}
+                    icon="swap_horiz"
+                    size="sm"
+                    variant="secondary"
+                    className="w-full"
+                  >
+                    {fileReplacing ? t('modelAdminComp.uploading') : t('modelAdminComp.chooseNewFile')}
+                  </AdminButton>
+                  <p className="mt-1.5 text-center text-[10px] text-on-surface-variant/60">
+                    {t('common.dropFileHint')}
+                  </p>
+                </FileDropArea>
               </div>
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 pt-2">
                 <AdminButton onClick={onClose} variant="secondary">

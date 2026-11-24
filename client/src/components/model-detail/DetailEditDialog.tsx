@@ -8,6 +8,7 @@ import { getBusinessConfig } from '../../lib/businessConfig';
 import { AdminButton, AdminIconButton } from '../shared/AdminControls';
 import CategorySelect from '../shared/CategorySelect';
 import DialogOverlay from '../shared/DialogOverlay';
+import { FileDropArea } from '../shared/FileDropArea';
 import { AppFormLabel, AppTextInput } from '../shared/FormControls';
 import Icon from '../shared/Icon';
 import ModelThumbnail from '../shared/ModelThumbnail';
@@ -132,6 +133,53 @@ curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/mai
 bash /opt/3dparthub/install-gmsh.sh
 # 完成标志：末尾两步各输出一次版本号（如 4.13.1）
 # 升级版本：GMSH_VER=4.14.1 bash /opt/3dparthub/install-gmsh.sh`;
+
+  // 图纸上传（点按钮选文件与拖拽落区共用）：PDF 类型 + 大小校验 → 上传 → 刷新列表
+  const handleDrawingFile = async (f: File) => {
+    if (f.type !== 'application/pdf') {
+      toast(t('modelAdminPage.pdfOnly'), 'error');
+      return;
+    }
+    if (f.size > drawingMaxBytes) {
+      toast(t('modelAdminPage.pdfTooLarge', { size: uploadPolicy.modelDrawingMaxSizeMb }), 'error');
+      return;
+    }
+    setDrawingUploading(true);
+    try {
+      const r = await modelApi.uploadDrawing(modelId, f);
+      setDrawings(r.drawings);
+      toast(t('modelAdminPage.drawingUploaded'), 'success');
+      onSaved();
+    } catch {
+      toast(t('modelAdminPage.uploadFailed'), 'error');
+    } finally {
+      setDrawingUploading(false);
+    }
+  };
+
+  // 替换模型源文件（共用入口）：扩展名校验 → 替换并触发转档 → 成功后关弹窗
+  const handleReplaceFile = async (f: File) => {
+    const ext = f.name.split('.').pop()?.toLowerCase() || '';
+    if (!['step', 'stp', 'iges', 'igs'].includes(ext)) {
+      toast(t('modelAdminPage.stepOnly'), 'error');
+      return;
+    }
+    setFileReplacing(true);
+    let ok = false;
+    try {
+      await modelApi.replaceFile(modelId, f);
+      toast(t('modelAdminPage.fileUploadedConverting'), 'success');
+      ok = true;
+    } catch {
+      toast(t('modelAdminPage.replaceFileFailed'), 'error');
+    } finally {
+      setFileReplacing(false);
+    }
+    if (ok) {
+      onSaved();
+      onClose();
+    }
+  };
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -407,47 +455,31 @@ bash /opt/3dparthub/install-gmsh.sh
                     accept="application/pdf"
                     className="hidden"
                     id="detail-drawing-upload"
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const f = e.target.files?.[0];
-                      if (!f) return;
-                      if (f.type !== 'application/pdf') {
-                        toast(t('modelAdminPage.pdfOnly'), 'error');
-                        e.target.value = '';
-                        return;
-                      }
-                      if (f.size > drawingMaxBytes) {
-                        toast(t('modelAdminPage.pdfTooLarge', { size: uploadPolicy.modelDrawingMaxSizeMb }), 'error');
-                        e.target.value = '';
-                        return;
-                      }
-                      setDrawingUploading(true);
-                      try {
-                        const r = await modelApi.uploadDrawing(modelId, f);
-                        setDrawings(r.drawings);
-                        toast(t('modelAdminPage.drawingUploaded'), 'success');
-                        onSaved();
-                      } catch {
-                        toast(t('modelAdminPage.uploadFailed'), 'error');
-                      } finally {
-                        setDrawingUploading(false);
-                      }
                       e.target.value = '';
+                      if (f) void handleDrawingFile(f);
                     }}
                   />
-                  <AdminButton
-                    onClick={() => document.getElementById('detail-drawing-upload')?.click()}
-                    disabled={drawingUploading}
-                    icon="upload_file"
-                    size="sm"
-                    variant="secondary"
-                    className="w-full justify-center"
-                  >
-                    {drawingUploading
-                      ? t('modelAdminPage.uploading')
-                      : drawings.length > 0
-                        ? t('modelAdminPage.addDrawing')
-                        : t('modelAdminPage.uploadDrawing')}
-                  </AdminButton>
+                  <FileDropArea onFileDrop={handleDrawingFile} disabled={drawingUploading}>
+                    <AdminButton
+                      onClick={() => document.getElementById('detail-drawing-upload')?.click()}
+                      disabled={drawingUploading}
+                      icon="upload_file"
+                      size="sm"
+                      variant="secondary"
+                      className="w-full justify-center"
+                    >
+                      {drawingUploading
+                        ? t('modelAdminPage.uploading')
+                        : drawings.length > 0
+                          ? t('modelAdminPage.addDrawing')
+                          : t('modelAdminPage.uploadDrawing')}
+                    </AdminButton>
+                    <p className="mt-1.5 text-center text-[10px] text-on-surface-variant/60">
+                      {t('common.dropFileHint')}
+                    </p>
+                  </FileDropArea>
                 </div>
               </div>
               <div className="border-t border-outline-variant/20 pt-4 mt-1">
@@ -460,42 +492,27 @@ bash /opt/3dparthub/install-gmsh.sh
                   accept=".step,.stp,.iges,.igs"
                   className="hidden"
                   id="detail-replace-file"
-                  onChange={async (e) => {
+                  onChange={(e) => {
                     const f = e.target.files?.[0];
-                    if (!f) return;
-                    const ext = f.name.split('.').pop()?.toLowerCase() || '';
-                    if (!['step', 'stp', 'iges', 'igs'].includes(ext)) {
-                      toast(t('modelAdminPage.stepOnly'), 'error');
-                      return;
-                    }
-                    setFileReplacing(true);
-                    let ok = false;
-                    try {
-                      await modelApi.replaceFile(modelId, f);
-                      toast(t('modelAdminPage.fileUploadedConverting'), 'success');
-                      ok = true;
-                    } catch {
-                      toast(t('modelAdminPage.replaceFileFailed'), 'error');
-                    } finally {
-                      setFileReplacing(false);
-                    }
-                    if (ok) {
-                      onSaved();
-                      onClose();
-                    }
                     e.target.value = '';
+                    if (f) void handleReplaceFile(f);
                   }}
                 />
-                <AdminButton
-                  onClick={() => document.getElementById('detail-replace-file')?.click()}
-                  disabled={fileReplacing}
-                  icon="swap_horiz"
-                  size="sm"
-                  variant="secondary"
-                  className="w-full justify-center"
-                >
-                  {fileReplacing ? t('modelAdminPage.uploading') : t('modelAdminPage.chooseNewFile')}
-                </AdminButton>
+                <FileDropArea onFileDrop={handleReplaceFile} disabled={fileReplacing}>
+                  <AdminButton
+                    onClick={() => document.getElementById('detail-replace-file')?.click()}
+                    disabled={fileReplacing}
+                    icon="swap_horiz"
+                    size="sm"
+                    variant="secondary"
+                    className="w-full justify-center"
+                  >
+                    {fileReplacing ? t('modelAdminPage.uploading') : t('modelAdminPage.chooseNewFile')}
+                  </AdminButton>
+                  <p className="mt-1.5 text-center text-[10px] text-on-surface-variant/60">
+                    {t('common.dropFileHint')}
+                  </p>
+                </FileDropArea>
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 border-t border-outline-variant/10 shrink-0">

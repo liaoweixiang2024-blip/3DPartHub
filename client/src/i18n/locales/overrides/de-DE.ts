@@ -11,6 +11,7 @@ export const deDETranslation: TranslationMap = {
     confirm: 'Bestätigen',
     delete: 'Löschen',
     download: 'Herunterladen',
+    dropFileHint: 'Datei auch direkt hierher ziehen',
     edit: 'Bearbeiten',
     interface: 'Oberfläche',
     language: 'Sprache',

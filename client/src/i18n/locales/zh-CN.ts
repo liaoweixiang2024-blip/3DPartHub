@@ -13,6 +13,7 @@ export const zhCN: { translation: TranslationMap } = {
       confirm: '确认',
       delete: '删除',
       download: '下载',
+      dropFileHint: '也可将文件直接拖到此处',
       edit: '编辑',
       interface: '界面',
       language: '语言',

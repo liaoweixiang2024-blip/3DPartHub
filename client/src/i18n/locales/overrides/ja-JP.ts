@@ -11,6 +11,7 @@ export const jaJPTranslation: TranslationMap = {
     confirm: '確認',
     delete: '削除',
     download: 'ダウンロード',
+    dropFileHint: 'ファイルをここにドラッグして追加',
     edit: '編集',
     interface: 'インターフェース',
     language: '言語',

@@ -11,6 +11,7 @@ export const koKRTranslation: TranslationMap = {
     confirm: '확인',
     delete: '삭제',
     download: '다운로드',
+    dropFileHint: '파일을 여기로 끌어다 놓을 수도 있습니다',
     edit: '편집',
     interface: '인터페이스',
     language: '언어',
