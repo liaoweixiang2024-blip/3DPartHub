@@ -45,7 +45,7 @@ const MERGE_SUGGESTION_PAGE_SIZE = 40;
 const CATEGORY_FILTER_ALL = '__all__';
 const MODEL_ADMIN_COUNT_KEY = '/models/count?grouped=false';
 const MODEL_ADMIN_PANEL_CLASS =
-  'rounded-lg border border-outline-variant/10 bg-surface-container-low overflow-auto [scrollbar-gutter:stable] min-h-[calc(100vh-220px)] max-h-[calc(100vh-220px)]';
+  'rounded-lg border border-outline-variant/10 bg-surface-container-low overflow-auto [scrollbar-gutter:stable] min-h-[calc(100dvh-220px)] max-h-[calc(100dvh-220px)]';
 type ModelAdminTab = 'models' | 'suggestions' | 'groups' | 'failed' | 'deleted';
 type DeletedPurgeMode = 'selected' | 'all';
 type ModelGroupConfirm =

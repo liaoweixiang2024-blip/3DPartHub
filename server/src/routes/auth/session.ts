@@ -172,14 +172,14 @@ export function createAuthSessionRouter() {
   });
 
   router.post('/api/auth/register', apiLimiter, async (req: Request, res: Response) => {
-    // Check if registration is allowed
+    // allow_register 关闭 = 邀请制：不带邀请码拒绝自由注册；带码走下方邀请码校验凭码准入
     const allowRegister = await getSetting<boolean>('allow_register');
-    if (!allowRegister) {
-      res.status(403).json({ detail: '注册功能已关闭' });
+    const { username, email, password, emailCode, phone, company, address, inviteCode } = req.body;
+    const rawInviteCode = typeof inviteCode === 'string' ? inviteCode.trim() : '';
+    if (!allowRegister && !rawInviteCode) {
+      res.status(403).json({ detail: '注册功能已关闭，请使用邀请码注册' });
       return;
     }
-
-    const { username, email, password, emailCode, phone, company, address, inviteCode } = req.body;
     const normalizedEmail = normalizeEmailInput(email);
     const normalizedPhone = normalizeContactPhoneSetting(phone);
 
@@ -247,11 +247,11 @@ export function createAuthSessionRouter() {
       return;
     }
 
-    // 邀请码校验：require_invite_code 开启时必须填有效码；一次一码，校验通过后留待创建事务中抢占标记 used
+    // 邀请码校验：require_invite_code 开启（开放注册也强制要码）或 allow_register 关闭（邀请制准入）
+    // 时必须填有效码；一次一码，校验通过后留待创建事务中抢占标记 used
     const requireInvite = (await getSetting<boolean>('require_invite_code')) === true;
-    const rawInviteCode = typeof inviteCode === 'string' ? inviteCode.trim() : '';
     let pendingInviteId: string | null = null;
-    if (requireInvite) {
+    if (requireInvite || !allowRegister) {
       if (!rawInviteCode) {
         res.status(400).json({ detail: '请输入邀请码' });
         return;

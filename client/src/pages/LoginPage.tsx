@@ -177,7 +177,8 @@ export default function LoginPage() {
       if (password !== confirmPassword) errs.confirmPassword = t('auth.errors.confirmPasswordMismatch');
       if (!captchaText) errs.captchaText = t('auth.errors.captchaRequired');
       if (!emailCode) errs.emailCode = t('auth.errors.emailCodeRequired');
-      if (featureFlags.invite && !inviteCode.trim()) {
+      // 邀请码必填：邀请码功能开启，或 allow_register 关闭（邀请制凭码准入）
+      if ((featureFlags.invite || !allowRegister) && !inviteCode.trim()) {
         errs.inviteCode = t('auth.errors.inviteCodeRequired');
       }
     }
@@ -219,7 +220,7 @@ export default function LoginPage() {
           phone: phone || undefined,
           company: company || undefined,
           address: addressRef.current || undefined,
-          inviteCode: featureFlags.invite && inviteCode.trim() ? inviteCode.trim() : undefined,
+          inviteCode: (featureFlags.invite || !allowRegister) && inviteCode.trim() ? inviteCode.trim() : undefined,
         });
         login(result.user, result.tokens, true);
         navigate(from, { replace: true });
@@ -384,7 +385,7 @@ export default function LoginPage() {
               </div>
             )}
 
-            {mode === 'register' && featureFlags.invite && (
+            {mode === 'register' && (featureFlags.invite || !allowRegister) && (
               <div>
                 <AppFormLabel uppercase>{t('auth.inviteCode')}</AppFormLabel>
                 <AppTextInput
@@ -532,7 +533,8 @@ export default function LoginPage() {
           </form>
         }
         modeSwitch={
-          allowRegister ? (
+          // 邀请码功能开启时保留注册入口：allow_register 关闭（邀请制）凭邀请码仍可注册
+          allowRegister || featureFlags.invite ? (
             <div className="px-6 sm:px-8 pb-6 text-center">
               <button
                 onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}

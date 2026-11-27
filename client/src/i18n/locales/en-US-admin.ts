@@ -749,7 +749,8 @@ export const enUSAdmin: TranslationMap = {
     redisTlsReadonly: 'Redis TLS (read-only)',
     refresh: 'Refresh',
     registerEmailCodeDesc: 'Send a verification code when users register',
-    registrationDisabledDesc: 'New users cannot register when disabled',
+    registrationDisabledDesc:
+      'Turns off open sign-up; with "Invite-code registration" on, new users can still register via invite codes / links',
     releaseNotes: 'Release notes',
     remove: 'Remove',
     removeItem: 'Remove',

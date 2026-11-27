@@ -281,9 +281,13 @@ function FeatureGate({ feature, children }: { feature: keyof FeatureFlags; child
 
 // /register: when registration is disabled, redirect to login (the login page
 // already hides its signup form when allow_register is off).
+// 邀请链接（?invite=）例外：allow_register 关闭 = 邀请制，注册入口就是邀请链接，
+// 跳去 /login 会丢掉 invite 参数，被邀请人将无法注册。
 function RegistrationGate() {
   const flags = useFeatureFlags();
-  if (flags.registration) {
+  const location = useLocation();
+  const hasInvite = Boolean(new URLSearchParams(location.search).get('invite'));
+  if (flags.registration || hasInvite) {
     return (
       <ScrollPage>
         <LoginPage />

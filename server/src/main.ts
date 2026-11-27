@@ -436,7 +436,9 @@ app.get('/api/models/:id/shares', featureGuard('feature_shares_enabled'));
 app.use('/api/downloads', featureGuard('feature_downloads_enabled'));
 // User-facing batch download — separate entry point that also needs the download guard.
 app.use('/api/batch-download', featureGuard('feature_downloads_enabled'));
-app.use('/api/auth/register', featureGuard('allow_register'));
+// allow_register 的门禁在 auth register handler 内统一判定（邀请制：带有效邀请码放行，
+// 无码 403 并提示用邀请码）——这里挂 featureGuard 一刀切会把邀请制注册也拦死
+
 app.use('/api/auth/forgot-password', featureGuard('feature_password_reset_enabled'));
 app.use('/api/auth/reset-password', featureGuard('feature_password_reset_enabled'));
 app.use('/api/temp-preview', featureGuard('feature_temp_viewer_enabled'));

@@ -1,12 +1,15 @@
+import { motion } from 'framer-motion';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import client from '../../api/client';
 import { unwrapResponse } from '../../api/response';
+import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { copyText } from '../../lib/clipboard';
 import { getErrorMessage } from '../../lib/errorNotifications';
+import { bottomSheetMotion, dialogPanelMotion } from '../../lib/motion';
 import DialogOverlay from '../shared/DialogOverlay';
 import Icon from '../shared/Icon';
 import { useToast } from '../shared/Toast';
-import { useTranslation } from 'react-i18next';
 
 const ROLE_OPTIONS = [
   { value: 'ADMIN', labelKey: 'userAdmin.roleLabel.ADMIN' },
@@ -31,6 +34,8 @@ const labelClass = 'block text-xs font-medium text-on-surface-variant mb-1';
 export default function UserCreateDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { t } = useTranslation();
   const { toast } = useToast();
+  // 移动端（<640px，与 DialogOverlay bottomOnMobile 的 sm: 断点一致）按底部弹层处理
+  const isMobile = useMediaQuery('(max-width: 639px)');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -68,14 +73,19 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
     }
   }
 
+  // zIndex 10000：盖过 TopNav(z-250)——本页 ConfirmDialog 同款；默认 120 会被移动端顶栏压住头部
   return (
-    <DialogOverlay onClose={onClose}>
-      <div
-        className="flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-surface shadow-xl"
+    <DialogOverlay onClose={onClose} zIndex={10000} bottomOnMobile safeArea>
+      <motion.div
+        variants={isMobile ? bottomSheetMotion : dialogPanelMotion}
+        initial="initial"
+        animate="animate"
+        exit="exit"
         onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom,0px))] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-surface shadow-xl sm:max-h-[90vh] sm:rounded-2xl"
       >
         {/* Header */}
-        <div className="flex items-center justify-between gap-2 border-b border-outline-variant/10 px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-outline-variant/10 px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
             <Icon name="person_add" size={18} className="text-primary-container" />
             <span className="truncate text-sm font-semibold text-on-surface">{t('userAdmin.createUser')}</span>
@@ -216,7 +226,7 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 border-t border-outline-variant/10 px-4 py-3">
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-outline-variant/10 px-4 py-3">
           <button
             type="button"
             onClick={onClose}
@@ -233,7 +243,7 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
             {saving ? t('userAdmin.create.creating') : t('userAdmin.create.submit')}
           </button>
         </div>
-      </div>
+      </motion.div>
     </DialogOverlay>
   );
 }

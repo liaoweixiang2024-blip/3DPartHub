@@ -562,15 +562,18 @@ function DesktopContent() {
                   {t('support.contact')}
                 </h4>
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center shrink-0">
-                      <Icon name="mail" size={16} className="text-on-surface-variant" />
+                  {/* 联系邮箱读站点设置（contact_email）；未配置时隐藏整卡，不显示占位假地址 */}
+                  {(settings?.contact_email || '').trim() ? (
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center shrink-0">
+                        <Icon name="mail" size={16} className="text-on-surface-variant" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-on-surface">{t('support.mailSupport')}</p>
+                        <p className="text-xs text-on-surface-variant">{settings!.contact_email}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm text-on-surface">{t('support.mailSupport')}</p>
-                      <p className="text-xs text-on-surface-variant">support@example.com</p>
-                    </div>
-                  </div>
+                  ) : null}
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center shrink-0">
                       <Icon name="support_agent" size={16} className="text-on-surface-variant" />

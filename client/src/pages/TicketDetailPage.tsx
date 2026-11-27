@@ -170,10 +170,10 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
       {/* Image preview overlay */}
       {previewImg && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
+          className="fixed inset-0 z-[260] bg-black/80 flex items-center justify-center"
           onClick={() => setPreviewImg(null)}
         >
-          <SafeImage src={previewImg} alt={t('common.preview')} className="max-w-[90vw] max-h-[90vh] object-contain" />
+          <SafeImage src={previewImg} alt={t('common.preview')} className="max-w-[90vw] max-h-[90dvh] object-contain" />
         </div>
       )}
     </div>

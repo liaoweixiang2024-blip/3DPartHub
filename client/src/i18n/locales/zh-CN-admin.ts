@@ -693,7 +693,7 @@ export const zhCNAdmin: TranslationMap = {
     redisTlsReadonly: 'Redis TLS（只读）',
     refresh: '刷新',
     registerEmailCodeDesc: '用户注册账号时发送验证码',
-    registrationDisabledDesc: '关闭后新用户无法注册账号',
+    registrationDisabledDesc: '关闭自由注册；开启「邀请码注册」后，新用户仍可凭邀请码 / 邀请链接注册',
     releaseNotes: '更新内容',
     remove: '删除',
     removeItem: '移除',

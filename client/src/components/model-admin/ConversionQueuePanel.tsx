@@ -483,15 +483,16 @@ export default function ConversionQueuePanel({
         confirmDisabled={Boolean(queueAction)}
       />
       {detailJobId && (
+        // z-[260]：盖过移动端 TopNav(z-250) 与底部导航(z-60)，但仍让本面板的 ConfirmDialog(z-10000) 压在上面
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 px-4 py-6 backdrop-blur-sm"
+          className="fixed inset-0 z-[260] flex items-end justify-center bg-surface-dim/70 px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] pt-6 backdrop-blur-sm sm:items-center sm:py-6"
           onClick={() => setDetailJobId(null)}
         >
           <div
-            className="max-h-[88vh] w-full max-w-3xl overflow-hidden rounded-lg border border-outline-variant/20 bg-surface-container-low shadow-xl"
+            className="flex max-h-[calc(100dvh-3rem-env(safe-area-inset-bottom,0px))] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-outline-variant/20 bg-surface-container-low shadow-xl sm:max-h-[88vh] sm:rounded-lg"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 px-5 py-4">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 px-5 py-4">
               <div className="min-w-0">
                 <h3 className="text-base font-semibold text-on-surface">{t('modelAdminComp.taskDetailTitle')}</h3>
                 <p className="mt-1 truncate text-xs text-on-surface-variant">{detailJobId}</p>
@@ -503,7 +504,7 @@ export default function ConversionQueuePanel({
                 <Icon name="close" size={16} />
               </button>
             </div>
-            <div className="max-h-[calc(88vh-72px)] overflow-y-auto p-5">
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
               {detailLoading ? (
                 <ConversionQueueDetailLoadingState />
               ) : detail ? (

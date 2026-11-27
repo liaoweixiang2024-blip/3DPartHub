@@ -66,7 +66,9 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
   const [company, setCompany] = useState('');
   // address 用 ref：省市区联动选择频繁，避免每次选择触发整个弹窗表单 re-render
   const addressRef = useRef('');
-  const [inviteCode, setInviteCode] = useState('');
+  // 初始值从 URL 预填邀请码：邀请链接落地后若弹出登录弹窗，切到注册时邀请码不丢
+  // （用 window.location：此处 location 尚未声明，避免 TDZ）
+  const [inviteCode, setInviteCode] = useState(() => new URLSearchParams(window.location.search).get('invite') || '');
   const login = useAuthStore((state) => state.login);
   const navigate = useNavigate();
   const location = useLocation();
@@ -128,7 +130,8 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
       if (password !== confirmPassword) nextErrors.confirmPassword = t('auth.errors.confirmPasswordMismatch');
       if (!captchaText) nextErrors.captchaText = t('auth.errors.captchaRequired');
       if (!emailCode) nextErrors.emailCode = t('auth.errors.emailCodeRequired');
-      if (featureFlags.invite && !inviteCode.trim()) {
+      // 邀请码必填：邀请码功能开启，或 allow_register 关闭（邀请制凭码准入）
+      if ((featureFlags.invite || !allowRegister) && !inviteCode.trim()) {
         nextErrors.inviteCode = t('auth.errors.inviteCodeRequired');
       }
     }
@@ -187,7 +190,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
           phone: phone || undefined,
           company: company || undefined,
           address: addressRef.current || undefined,
-          inviteCode: featureFlags.invite && inviteCode.trim() ? inviteCode.trim() : undefined,
+          inviteCode: (featureFlags.invite || !allowRegister) && inviteCode.trim() ? inviteCode.trim() : undefined,
         });
         login(result.user, result.tokens, true);
       }
@@ -303,7 +306,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                 </div>
               )}
 
-              {mode === 'register' && featureFlags.invite && (
+              {mode === 'register' && (featureFlags.invite || !allowRegister) && (
                 <div>
                   <AppFormLabel uppercase>{t('auth.inviteCode')}</AppFormLabel>
                   <AppTextInput
@@ -480,7 +483,8 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
               </button>
             </form>
 
-            {allowRegister && (
+            {/* 邀请码功能开启时保留注册入口：allow_register 关闭（邀请制）凭邀请码仍可注册 */}
+            {(allowRegister || featureFlags.invite) && (
               <div className="auth-modal-switch px-7 pb-4 text-center sm:px-8">
                 <button
                   type="button"

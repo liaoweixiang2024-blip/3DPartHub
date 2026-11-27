@@ -60,13 +60,16 @@ export default function NodeCategoriesModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/40 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={nodeLabel}
     >
-      <div className="relative flex max-h-[88vh] w-full max-w-3xl flex-col" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="relative flex max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom,0px))] w-full max-w-3xl flex-col sm:max-h-[88vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* 关闭按钮：悬浮右上角 */}
         <button
           type="button"
