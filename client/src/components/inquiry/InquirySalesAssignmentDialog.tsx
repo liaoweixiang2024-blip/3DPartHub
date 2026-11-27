@@ -142,8 +142,8 @@ export default function InquirySalesAssignmentDialog({
 
   return (
     // z-[260]：盖过移动端 TopNav(z-250)；120 会被顶栏压住头部。移动端按底部弹层展示
-    <div className="fixed inset-0 z-[260] flex items-end justify-center bg-black/45 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:items-center">
-      <div className="flex max-h-[calc(100dvh-2rem-env(safe-area-inset-bottom,0px))] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-outline-variant/15 bg-surface-container shadow-2xl sm:max-h-[86vh] sm:rounded-2xl">
+    <div className="fixed inset-0 z-[260] flex items-end justify-center bg-black/45 p-3 pb-sheet sm:items-center sm:p-4">
+      <div className="dialog-safe-max-h flex w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-outline-variant/15 bg-surface-container shadow-2xl sm:max-h-[86vh] sm:rounded-2xl">
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-outline-variant/12 px-4 py-4 md:px-5">
           <div className="min-w-0">
             <p className="text-base font-bold text-on-surface">{t('inquiryAdminPage.dialogTitle')}</p>

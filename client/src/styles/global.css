@@ -655,3 +655,41 @@ a,
   --selection-card-border: color-mix(in srgb, var(--color-outline-variant) 12%, var(--selection-card-bg));
   --selection-thumb-bg: color-mix(in srgb, var(--color-surface-container-high) 45%, var(--selection-card-bg));
 }
+
+/* 弹窗动态视口限高（含 dvh 兜底链）：移动端弹窗面板用。
+   背景：手机浏览器 vh 按「地址栏收起的大视口」计算，地址栏可见时 92vh 比可视
+   高度还高，居中弹窗上下各被切；dvh 跟随地址栏动态计算才是正确值。但不支持
+   dvh 的旧内核浏览器（Chromium <108）会让整条 max-height 声明失效（无限高），
+   所以这里用 @supports 分层：先给 vh 版兜底（min 钳住不超可视高度），支持 dvh
+   的浏览器再覆盖为精确版。env() 同理随 dvh 声明整体降级。 */
+.dialog-safe-max-h {
+  max-height: min(92vh, calc(100vh - 3rem));
+}
+@supports (height: 1dvh) {
+  .dialog-safe-max-h {
+    max-height: calc(100svh - 1.5rem - env(safe-area-inset-bottom, 0px));
+  }
+}
+/* 图片预览灯箱兜底（90dvh 回退 90vh） */
+.img-safe-max-h {
+  max-height: 90vh;
+}
+@supports (height: 1dvh) {
+  .img-safe-max-h {
+    max-height: 90dvh;
+  }
+}
+
+/* 移动端底部弹层的底 padding：让开 iOS Safari 悬浮工具栏。
+   env(safe-area-inset-bottom) 只包含 Home 指示条，不含 Safari 底部工具栏——
+   fixed 弹层不触发工具栏收起（页面本身不滚动），取消/保存按钮会被工具栏盖住。
+   100dvh - 100svh 的差值 = 当前工具栏占据的额外高度（展开时 >0，收起时 =0），
+   工具栏收起后自动贴合。不支持 svh 的旧内核回退 env 版。 */
+.pb-sheet {
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}
+@supports (height: 1svh) {
+  .pb-sheet {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px) + max(0px, 100dvh - 100svh));
+  }
+}

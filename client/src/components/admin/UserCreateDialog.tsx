@@ -82,7 +82,7 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
         animate="animate"
         exit="exit"
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom,0px))] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-surface shadow-xl sm:max-h-[90vh] sm:rounded-2xl"
+        className="dialog-safe-max-h flex w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-surface shadow-xl sm:max-h-[90vh] sm:rounded-2xl"
       >
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-outline-variant/10 px-4 py-3">

@@ -309,7 +309,11 @@ function MessageBubble({ msg, isAdminView }: { msg: InquiryMessage; isAdminView:
           className="fixed inset-0 z-[260] flex items-center justify-center bg-black/80"
           onClick={() => setPreviewImg(null)}
         >
-          <SafeImage src={previewImg} alt={t('common.preview')} className="max-h-[90dvh] max-w-[90vw] object-contain" />
+          <SafeImage
+            src={previewImg}
+            alt={t('common.preview')}
+            className="img-safe-max-h max-w-[90vw] object-contain"
+          />
         </div>
       )}
     </div>

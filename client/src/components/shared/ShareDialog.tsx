@@ -171,7 +171,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
             initial="initial"
             animate="animate"
             exit="exit"
-            className="bg-surface-container-low rounded-t-xl sm:rounded-xl border border-outline-variant/20 w-full max-w-md shadow-2xl max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom,0px))] flex flex-col overflow-hidden"
+            className="bg-surface-container-low rounded-t-xl sm:rounded-xl border border-outline-variant/20 w-full max-w-md shadow-2xl dialog-safe-max-h flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/10 shrink-0">

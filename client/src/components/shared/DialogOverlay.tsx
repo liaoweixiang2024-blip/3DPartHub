@@ -43,7 +43,8 @@ export default function DialogOverlay({
 }: DialogOverlayProps) {
   const zClass = Z_INDEX_CLASSES[zIndex];
   const alignment = bottomOnMobile ? 'items-end sm:items-center' : 'items-center';
-  const padding = safeArea ? 'p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:p-4' : 'p-4';
+  // pb-sheet：让开 iOS Safari 悬浮工具栏（global.css，unlayered 覆盖 utilities 的 pb）
+  const padding = safeArea ? 'p-3 pb-sheet sm:p-4' : 'p-4';
   // aboveBottomNav 与 inset-0 拆开写：显式 left/right/top + bottom 偏移，
   // 避免依赖 inset 与 bottom 在样式表里的级联顺序
   const position = aboveBottomNav
