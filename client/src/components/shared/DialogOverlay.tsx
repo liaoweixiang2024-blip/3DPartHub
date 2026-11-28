@@ -1,5 +1,6 @@
 import { motion, type HTMLMotionProps } from 'framer-motion';
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { overlayMotion } from '../../lib/motion';
 
 type DialogOverlayZIndex = 50 | 100 | 120 | 10000;
@@ -54,25 +55,28 @@ export default function DialogOverlay({
   const combinedClassName =
     `fixed ${position} ${zClass} flex ${alignment} justify-center ${backdropClassName} ${padding} ${className || ''}`.trim();
 
-  if (animated) {
-    return (
-      <motion.div
-        variants={overlayMotion}
-        initial="initial"
-        animate="animate"
-        exit="exit"
-        className={combinedClassName}
-        onClick={onClose}
-        {...rest}
-      >
-        {children}
-      </motion.div>
-    );
-  }
-
-  return (
+  // 统一 createPortal 到 body：#root 是 position:fixed + isolation:isolate 的层叠上下文，
+  // 留在 root 内的弹窗会被页头（TopNav z-250）/页脚菜单栏（BottomNav z-60）等更高绘制
+  // 顺序的元素盖住（iOS Safari 实测）。挂到 body 直属层后，任何 z≥1 的弹窗都必然绘制在
+  // 整个 #root 单元之上，站内元素不可能再压过弹窗。所有走 DialogOverlay 的弹窗在此
+  // 一处修复；React 事件冒泡/AnimatePresence 退场动画经 portal 依然正常。
+  const overlay = animated ? (
+    <motion.div
+      variants={overlayMotion}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      className={combinedClassName}
+      onClick={onClose}
+      {...rest}
+    >
+      {children}
+    </motion.div>
+  ) : (
     <div className={combinedClassName} onClick={onClose}>
       {children}
     </div>
   );
+
+  return createPortal(overlay, document.body);
 }

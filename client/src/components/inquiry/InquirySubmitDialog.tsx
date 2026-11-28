@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '../../api/auth';
@@ -274,7 +275,8 @@ export default function InquirySubmitDialog({
     }
   };
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <div
       className="fixed inset-0 z-[120] overflow-hidden bg-surface-container-low p-0 md:flex md:items-center md:justify-center md:bg-black/40 md:p-4 md:backdrop-blur-sm"
       role="dialog"
@@ -535,6 +537,7 @@ export default function InquirySubmitDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -67,7 +67,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ toast }}>
       {children}
       {createPortal(
-        <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
+        <div className="fixed top-4 right-4 z-[10060] flex flex-col gap-2 pointer-events-none">
           <AnimatePresence>
             {toasts.map((t) => {
               const ic = iconMap[t.type];

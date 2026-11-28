@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import Icon from '../components/shared/Icon';
 import { ensureAdminTranslationsLoaded, normalizeLocale, type SupportedLocale } from './index';
@@ -37,9 +38,13 @@ export function AdminTranslationsGate({ children }: { children: ReactNode }) {
       <div className="invisible" aria-hidden="true">
         {children}
       </div>
-      <div className="fixed inset-0 z-[600] flex items-center justify-center bg-surface-dim/95">
-        <Icon name="progress_activity" size={40} className="animate-spin text-primary motion-reduce:animate-none" />
-      </div>
+      {/* createPortal 到 body：脱离 #root isolation 层级，避免加载遮罩被页头/页脚导航盖住 */}
+      {createPortal(
+        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-surface-dim/95">
+          <Icon name="progress_activity" size={40} className="animate-spin text-primary motion-reduce:animate-none" />
+        </div>,
+        document.body,
+      )}
     </>
   );
 }

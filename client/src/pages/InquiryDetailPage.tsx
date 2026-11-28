@@ -34,6 +34,7 @@ import { exportInquiryEditableXlsx } from '../lib/inquiryExport';
 import { buildInquiryPrintCss, INQUIRY_PRINT_ACTION_SHADOW, INQUIRY_PRINT_COLORS } from '../lib/printTheme';
 import { usePublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
+import { createPortal } from 'react-dom';
 
 function CustomerStatusBadge({ status }: { status: string }) {
   const { t } = useTranslation();
@@ -304,18 +305,20 @@ function MessageBubble({ msg, isAdminView }: { msg: InquiryMessage; isAdminView:
           {isOwn ? t('inquiryDetail.me') : sender} · {formatDateTime(msg.createdAt, dateLocale)}
         </div>
       </div>
-      {previewImg && (
-        <div
-          className="fixed inset-0 z-[260] flex items-center justify-center bg-black/80"
-          onClick={() => setPreviewImg(null)}
-        >
-          <SafeImage
-            src={previewImg}
-            alt={t('common.preview')}
-            className="img-safe-max-h max-w-[90vw] object-contain"
-          />
-        </div>
-      )}
+      {previewImg &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[260] flex items-center justify-center bg-black/80"
+            onClick={() => setPreviewImg(null)}
+          >
+            <SafeImage
+              src={previewImg}
+              alt={t('common.preview')}
+              className="img-safe-max-h max-w-[90vw] object-contain"
+            />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

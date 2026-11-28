@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import type { SheetData } from 'write-excel-file/browser';
@@ -2496,894 +2497,1010 @@ function Content() {
       )}
 
       {/* ===== Category Modal ===== */}
-      {showCatModal && (
-        <div
-          className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
-          onClick={() => setShowCatModal(false)}
-          onPaste={async (e) => {
-            for (const item of Array.from(e.clipboardData.items)) {
-              if (item.type.startsWith('image/')) {
-                e.preventDefault();
-                const file = item.getAsFile();
-                if (file) {
-                  try {
-                    const { url } = await uploadOptionImage(file);
-                    setCatForm((prev) => ({ ...prev, image: url }));
-                    toast(t('selectionAdmin.imagePasted'), 'success');
-                  } catch {
-                    toast(t('selectionAdmin.uploadFailed'), 'error');
-                  }
-                }
-                return;
-              }
-            }
-            // Check for URL text
-            const text = e.clipboardData.getData('text/plain')?.trim();
-            if (text && /^https?:\/\/.+/i.test(text)) {
-              e.preventDefault();
-              toast(t('selectionAdmin.downloadingImage'), 'info');
-              try {
-                const { url } = await uploadOptionImageFromUrl(text);
-                setCatForm((prev) => ({ ...prev, image: url }));
-                toast(t('selectionAdmin.imageDownloadedSaved'), 'success');
-              } catch {
-                toast(t('selectionAdmin.downloadImageFailed'), 'error');
-              }
-            }
-          }}
-        >
+      {showCatModal &&
+        createPortal(
           <div
-            className="fixed inset-0 flex min-h-0 flex-col bg-surface-container-low p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] shadow-2xl sm:relative sm:inset-auto sm:w-[min(96vw,1280px)] sm:max-w-none sm:max-h-[90dvh] sm:rounded-xl sm:border sm:border-outline-variant/20 sm:p-5"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
+            onClick={() => setShowCatModal(false)}
+            onPaste={async (e) => {
+              for (const item of Array.from(e.clipboardData.items)) {
+                if (item.type.startsWith('image/')) {
+                  e.preventDefault();
+                  const file = item.getAsFile();
+                  if (file) {
+                    try {
+                      const { url } = await uploadOptionImage(file);
+                      setCatForm((prev) => ({ ...prev, image: url }));
+                      toast(t('selectionAdmin.imagePasted'), 'success');
+                    } catch {
+                      toast(t('selectionAdmin.uploadFailed'), 'error');
+                    }
+                  }
+                  return;
+                }
+              }
+              // Check for URL text
+              const text = e.clipboardData.getData('text/plain')?.trim();
+              if (text && /^https?:\/\/.+/i.test(text)) {
+                e.preventDefault();
+                toast(t('selectionAdmin.downloadingImage'), 'info');
+                try {
+                  const { url } = await uploadOptionImageFromUrl(text);
+                  setCatForm((prev) => ({ ...prev, image: url }));
+                  toast(t('selectionAdmin.imageDownloadedSaved'), 'success');
+                } catch {
+                  toast(t('selectionAdmin.downloadImageFailed'), 'error');
+                }
+              }
+            }}
           >
-            <div className="mb-3 flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 pb-3 sm:mb-4 sm:border-b-0 sm:pb-0">
-              <h2 className="text-base font-bold text-on-surface">
-                {editCat ? t('selectionAdmin.editCategory') : t('selectionAdmin.newCategory')}
-              </h2>
-              <button
-                onClick={() => setShowCatModal(false)}
-                className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface sm:hidden"
-                data-tooltip-ignore
-                aria-label={t('common.close')}
-              >
-                <Icon name="close" size={18} />
-              </button>
-            </div>
-            <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-0.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">
-                    {t('selectionAdmin.labelNameRequired')}
-                  </label>
-                  <input
-                    name="name"
-                    value={catForm.name}
-                    onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
-                    className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">{t('selectionAdmin.labelSlug')}</label>
-                  <input
-                    name="slug"
-                    value={catForm.slug}
-                    onChange={(e) =>
-                      setCatForm({ ...catForm, slug: e.target.value.replace(/\s+/g, '-').toLowerCase() })
-                    }
-                    className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-                  />
-                </div>
+            <div
+              className="fixed inset-0 flex min-h-0 flex-col bg-surface-container-low p-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] shadow-2xl sm:relative sm:inset-auto sm:w-[min(96vw,1280px)] sm:max-w-none sm:max-h-[90dvh] sm:rounded-xl sm:border sm:border-outline-variant/20 sm:p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 pb-3 sm:mb-4 sm:border-b-0 sm:pb-0">
+                <h2 className="text-base font-bold text-on-surface">
+                  {editCat ? t('selectionAdmin.editCategory') : t('selectionAdmin.newCategory')}
+                </h2>
+                <button
+                  onClick={() => setShowCatModal(false)}
+                  className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface sm:hidden"
+                  data-tooltip-ignore
+                  aria-label={t('common.close')}
+                >
+                  <Icon name="close" size={18} />
+                </button>
               </div>
-              <div>
-                <label className="text-xs text-on-surface-variant mb-1 block">
-                  {t('selectionAdmin.labelDescription')}
-                </label>
-                <input
-                  name="description"
-                  value={catForm.description}
-                  onChange={(e) => setCatForm({ ...catForm, description: e.target.value })}
-                  className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-on-surface-variant mb-1 block">
-                  {t('selectionAdmin.labelKitListTitle')}
-                </label>
-                <input
-                  name="kit-list-title"
-                  value={catForm.kitListTitle}
-                  onChange={(e) => setCatForm({ ...catForm, kitListTitle: e.target.value })}
-                  placeholder={t('selectionAdmin.kitListTitlePlaceholder')}
-                  className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-                />
-                <p className="mt-1 text-[10px] text-on-surface-variant">{t('selectionAdmin.kitListTitleHint')}</p>
-              </div>
-              <div>
-                <label className="text-xs text-on-surface-variant mb-1 block">{t('selectionAdmin.labelGroup')}</label>
-                <SelectMenu
-                  variant="field"
-                  ariaLabel={t('selectionAdmin.labelGroup')}
-                  value={(() => {
-                    const editCatObj = editCat ? categories.find((c) => c.id === editCat.id) : null;
-                    return editCatObj?.groupId || '';
-                  })()}
-                  onChange={async (gid) => {
-                    if (!gid) {
-                      if (editCat)
-                        await updateCategory(editCat.id, {
-                          groupId: null,
-                          groupName: null,
-                          groupIcon: null,
-                          groupImage: null,
-                          groupImageFit: null,
-                        });
-                      toast(t('selectionAdmin.groupRemoved'), 'success');
-                      mutateCats();
-                    } else {
-                      const src = categories.find((c) => c.groupId === gid);
-                      if (editCat)
-                        await updateCategory(editCat.id, {
-                          groupId: gid,
-                          groupName: src?.groupName || '',
-                          groupIcon: src?.groupIcon || '',
-                          groupImage: src?.groupImage || null,
-                          groupImageFit: src?.groupImageFit === 'contain' ? 'contain' : 'cover',
-                        });
-                      toast(t('selectionAdmin.groupSet'), 'success');
-                      mutateCats();
-                    }
-                  }}
-                  options={(() => {
-                    const groupMap = new Map<string, string>();
-                    for (const c of categories) {
-                      if (c.groupId && c.groupName && !groupMap.has(c.groupId)) groupMap.set(c.groupId, c.groupName);
-                    }
-                    return [
-                      { value: '', label: t('selectionAdmin.noGroup') },
-                      ...Array.from(groupMap.entries()).map(([id, name]) => ({ value: id, label: name })),
-                    ];
-                  })()}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">
-                    {t('selectionAdmin.labelIconName')}
-                  </label>
-                  <input
-                    name="icon"
-                    value={catForm.icon}
-                    onChange={(e) => setCatForm({ ...catForm, icon: e.target.value })}
-                    placeholder={t('selectionAdmin.iconPlaceholder')}
-                    className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">
-                    {t('selectionAdmin.labelCoverImage')}
-                  </label>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                    <input
-                      name="image"
-                      value={catForm.image}
-                      onChange={(e) => setCatForm({ ...catForm, image: e.target.value })}
-                      placeholder={t('selectionAdmin.urlOrUpload')}
-                      className="w-full sm:flex-1 bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-                    />
-                    <label className="shrink-0">
-                      <input
-                        name="file"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const f = e.target.files?.[0];
-                          if (f) {
-                            try {
-                              const { url } = await uploadOptionImage(f);
-                              setCatForm((prev) => ({ ...prev, image: url }));
-                            } catch {
-                              toast(t('selectionAdmin.uploadFailed'), 'error');
-                            }
-                          }
-                          e.target.value = '';
-                        }}
-                      />
-                      <span className="px-2.5 py-2 text-xs text-primary-container hover:underline cursor-pointer border border-outline-variant/20 rounded">
-                        {t('selectionAdmin.upload')}
-                      </span>
+              <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-0.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-on-surface-variant mb-1 block">
+                      {t('selectionAdmin.labelNameRequired')}
                     </label>
+                    <input
+                      name="name"
+                      value={catForm.name}
+                      onChange={(e) => setCatForm({ ...catForm, name: e.target.value })}
+                      className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
+                    />
                   </div>
-                  <p className="mt-1 text-[10px] leading-relaxed text-on-surface-variant">
-                    {t('selectionAdmin.coverHint1')}
-                  </p>
-                  <p className="mt-0.5 text-[10px] leading-relaxed text-on-surface-variant">
-                    {t('selectionAdmin.coverHint2')}
-                  </p>
-                  {catForm.image && (
-                    <div className="mt-2 w-20 h-14 rounded overflow-hidden bg-surface-container-lowest border border-outline-variant/10">
-                      <SafeImage src={catForm.image} alt="" className="w-full h-full object-cover" />
-                    </div>
-                  )}
+                  <div>
+                    <label className="text-xs text-on-surface-variant mb-1 block">
+                      {t('selectionAdmin.labelSlug')}
+                    </label>
+                    <input
+                      name="slug"
+                      value={catForm.slug}
+                      onChange={(e) =>
+                        setCatForm({ ...catForm, slug: e.target.value.replace(/\s+/g, '-').toLowerCase() })
+                      }
+                      className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
+                    />
+                  </div>
                 </div>
+                <div>
+                  <label className="text-xs text-on-surface-variant mb-1 block">
+                    {t('selectionAdmin.labelDescription')}
+                  </label>
+                  <input
+                    name="description"
+                    value={catForm.description}
+                    onChange={(e) => setCatForm({ ...catForm, description: e.target.value })}
+                    className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-on-surface-variant mb-1 block">
+                    {t('selectionAdmin.labelKitListTitle')}
+                  </label>
+                  <input
+                    name="kit-list-title"
+                    value={catForm.kitListTitle}
+                    onChange={(e) => setCatForm({ ...catForm, kitListTitle: e.target.value })}
+                    placeholder={t('selectionAdmin.kitListTitlePlaceholder')}
+                    className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
+                  />
+                  <p className="mt-1 text-[10px] text-on-surface-variant">{t('selectionAdmin.kitListTitleHint')}</p>
+                </div>
+                <div>
+                  <label className="text-xs text-on-surface-variant mb-1 block">{t('selectionAdmin.labelGroup')}</label>
+                  <SelectMenu
+                    variant="field"
+                    ariaLabel={t('selectionAdmin.labelGroup')}
+                    value={(() => {
+                      const editCatObj = editCat ? categories.find((c) => c.id === editCat.id) : null;
+                      return editCatObj?.groupId || '';
+                    })()}
+                    onChange={async (gid) => {
+                      if (!gid) {
+                        if (editCat)
+                          await updateCategory(editCat.id, {
+                            groupId: null,
+                            groupName: null,
+                            groupIcon: null,
+                            groupImage: null,
+                            groupImageFit: null,
+                          });
+                        toast(t('selectionAdmin.groupRemoved'), 'success');
+                        mutateCats();
+                      } else {
+                        const src = categories.find((c) => c.groupId === gid);
+                        if (editCat)
+                          await updateCategory(editCat.id, {
+                            groupId: gid,
+                            groupName: src?.groupName || '',
+                            groupIcon: src?.groupIcon || '',
+                            groupImage: src?.groupImage || null,
+                            groupImageFit: src?.groupImageFit === 'contain' ? 'contain' : 'cover',
+                          });
+                        toast(t('selectionAdmin.groupSet'), 'success');
+                        mutateCats();
+                      }
+                    }}
+                    options={(() => {
+                      const groupMap = new Map<string, string>();
+                      for (const c of categories) {
+                        if (c.groupId && c.groupName && !groupMap.has(c.groupId)) groupMap.set(c.groupId, c.groupName);
+                      }
+                      return [
+                        { value: '', label: t('selectionAdmin.noGroup') },
+                        ...Array.from(groupMap.entries()).map(([id, name]) => ({ value: id, label: name })),
+                      ];
+                    })()}
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-on-surface-variant mb-1 block">
+                      {t('selectionAdmin.labelIconName')}
+                    </label>
+                    <input
+                      name="icon"
+                      value={catForm.icon}
+                      onChange={(e) => setCatForm({ ...catForm, icon: e.target.value })}
+                      placeholder={t('selectionAdmin.iconPlaceholder')}
+                      className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-on-surface-variant mb-1 block">
+                      {t('selectionAdmin.labelCoverImage')}
+                    </label>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <input
+                        name="image"
+                        value={catForm.image}
+                        onChange={(e) => setCatForm({ ...catForm, image: e.target.value })}
+                        placeholder={t('selectionAdmin.urlOrUpload')}
+                        className="w-full sm:flex-1 bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
+                      />
+                      <label className="shrink-0">
+                        <input
+                          name="file"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            if (f) {
+                              try {
+                                const { url } = await uploadOptionImage(f);
+                                setCatForm((prev) => ({ ...prev, image: url }));
+                              } catch {
+                                toast(t('selectionAdmin.uploadFailed'), 'error');
+                              }
+                            }
+                            e.target.value = '';
+                          }}
+                        />
+                        <span className="px-2.5 py-2 text-xs text-primary-container hover:underline cursor-pointer border border-outline-variant/20 rounded">
+                          {t('selectionAdmin.upload')}
+                        </span>
+                      </label>
+                    </div>
+                    <p className="mt-1 text-[10px] leading-relaxed text-on-surface-variant">
+                      {t('selectionAdmin.coverHint1')}
+                    </p>
+                    <p className="mt-0.5 text-[10px] leading-relaxed text-on-surface-variant">
+                      {t('selectionAdmin.coverHint2')}
+                    </p>
+                    {catForm.image && (
+                      <div className="mt-2 w-20 h-14 rounded overflow-hidden bg-surface-container-lowest border border-outline-variant/10">
+                        <SafeImage src={catForm.image} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <ColumnEditor columns={catForm.columns} onChange={(columns) => setCatForm({ ...catForm, columns })} />
               </div>
-              <ColumnEditor columns={catForm.columns} onChange={(columns) => setCatForm({ ...catForm, columns })} />
+              <div className="grid grid-cols-2 gap-2 shrink-0 pt-3 border-t border-outline-variant/10 sm:flex sm:justify-end">
+                <button
+                  onClick={() => setShowCatModal(false)}
+                  className="px-4 py-2.5 sm:py-2 text-sm text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg sm:rounded"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={saveCat}
+                  disabled={!catForm.name || !catForm.slug}
+                  className="px-4 py-2.5 sm:py-2 text-sm font-bold bg-primary-container text-on-primary rounded-lg sm:rounded hover:opacity-90 disabled:opacity-50"
+                >
+                  {t('common.save')}
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 shrink-0 pt-3 border-t border-outline-variant/10 sm:flex sm:justify-end">
-              <button
-                onClick={() => setShowCatModal(false)}
-                className="px-4 py-2.5 sm:py-2 text-sm text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg sm:rounded"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={saveCat}
-                disabled={!catForm.name || !catForm.slug}
-                className="px-4 py-2.5 sm:py-2 text-sm font-bold bg-primary-container text-on-primary rounded-lg sm:rounded hover:opacity-90 disabled:opacity-50"
-              >
-                {t('common.save')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
       {/* ===== Product Modal ===== */}
-      {showProdModal && activeCat && (
-        <div
-          className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
-          onClick={() => setShowProdModal(false)}
-          onPaste={handleProductAssetPaste}
-        >
+      {showProdModal &&
+        activeCat &&
+        createPortal(
           <div
-            className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] flex min-h-0 flex-col bg-surface-container-low rounded-2xl border border-outline-variant/20 p-4 space-y-4 shadow-2xl sm:relative sm:inset-auto sm:w-full sm:max-w-lg sm:max-h-[90dvh] sm:p-5 sm:rounded-xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
+            onClick={() => setShowProdModal(false)}
+            onPaste={handleProductAssetPaste}
           >
-            <h2 className="text-base font-bold text-on-surface shrink-0">
-              {editProd ? t('selectionAdmin.editProduct') : t('selectionAdmin.newProduct')}
-            </h2>
-            <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-0.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">
-                    {t('selectionAdmin.labelNameRequired')}
-                  </label>
-                  <input
-                    name="name"
-                    value={prodForm.name}
-                    onChange={(e) => setProdForm({ ...prodForm, name: e.target.value })}
-                    className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">
-                    {t('selectionAdmin.labelModelNo')}
-                  </label>
-                  <input
-                    name="model-no"
-                    value={prodForm.modelNo}
-                    onChange={(e) => setProdForm({ ...prodForm, modelNo: e.target.value })}
-                    className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">
-                    {t('selectionAdmin.labelImageUrl')}
-                  </label>
-                  <input
-                    name="image"
-                    value={prodForm.image}
-                    onChange={(e) => setProdForm({ ...prodForm, image: e.target.value })}
-                    placeholder="https://..."
-                    className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-on-surface-variant mb-1 block">
-                    {t('selectionAdmin.labelPdfUrl')}
-                  </label>
-                  <input
-                    name="pdf-url"
-                    value={prodForm.pdfUrl}
-                    onChange={(e) => setProdForm({ ...prodForm, pdfUrl: e.target.value })}
-                    placeholder="https://..."
-                    className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-                  />
-                </div>
-              </div>
-              <div
-                onDragEnter={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setProductAssetDragging(true);
-                }}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setProductAssetDragging(true);
-                }}
-                onDragLeave={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (e.currentTarget === e.target) setProductAssetDragging(false);
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  void handleProductAssetFiles(e.dataTransfer.files);
-                }}
-                className={`rounded-xl border border-dashed p-3 transition-colors ${
-                  productAssetDragging
-                    ? 'border-primary-container bg-primary-container/10'
-                    : 'border-outline-variant/30 bg-surface-container-high/30'
-                }`}
-              >
-                <input
-                  name="file"
-                  ref={productAssetInputRef}
-                  type="file"
-                  accept="image/*,application/pdf"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files?.length) void handleProductAssetFiles(e.target.files);
-                    e.target.value = '';
-                  }}
-                />
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[88px_1fr] sm:items-center">
-                  <button
-                    type="button"
-                    onClick={() => productAssetInputRef.current?.click()}
-                    disabled={productAssetUploading}
-                    className="flex h-20 items-center justify-center rounded-lg border border-outline-variant/20 bg-surface-container-lowest text-on-surface-variant hover:text-on-surface disabled:opacity-50"
-                  >
-                    <Icon
-                      name={productAssetUploading ? 'hourglass_empty' : 'upload_file'}
-                      size={28}
-                      className={productAssetUploading ? 'animate-spin' : ''}
-                    />
-                  </button>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-on-surface">{t('selectionAdmin.dragAssetHere')}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-on-surface-variant">
-                      {t('selectionAdmin.assetHint')}
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-                      {prodForm.image && (
-                        <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-surface-container-lowest px-2 py-1 text-on-surface-variant">
-                          <Icon name="image" size={13} />
-                          <span className="truncate">{t('selectionAdmin.imageSet')}</span>
-                        </span>
-                      )}
-                      {prodForm.pdfUrl && (
-                        <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-surface-container-lowest px-2 py-1 text-on-surface-variant">
-                          <Icon name="picture_as_pdf" size={13} />
-                          <span className="truncate">{t('selectionAdmin.pdfSet')}</span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {(prodForm.image || prodForm.pdfUrl) && (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {prodForm.image && (
-                    <div className="rounded-lg border border-outline-variant/10 bg-surface-container-lowest p-2">
-                      <div className="h-24 overflow-hidden rounded bg-surface-container-high">
-                        <SafeImage
-                          src={prodForm.image}
-                          alt=""
-                          className="h-full w-full object-contain p-1"
-                          fallbackIcon="image"
-                        />
-                      </div>
-                    </div>
-                  )}
-                  {prodForm.pdfUrl && (
-                    <a
-                      href={prodForm.pdfUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        openDocumentUrl(prodForm.pdfUrl, { title: t('selectionAdmin.pdfSpecTitle') });
-                      }}
-                      className="flex items-center gap-2 rounded-lg border border-outline-variant/10 bg-surface-container-lowest p-3 text-xs text-on-surface-variant hover:text-on-surface"
-                    >
-                      <Icon name="picture_as_pdf" size={22} className="text-error" />
-                      <span className="min-w-0 flex-1 truncate">{prodForm.pdfUrl}</span>
-                    </a>
-                  )}
-                </div>
-              )}
-              {(activeCat.columns as ColumnDef[]).map((col) => (
-                <div key={col.key}>
-                  <label className="text-xs text-on-surface-variant mb-1 block">
-                    {col.label}
-                    {col.unit ? ` (${col.unit})` : ''}
-                  </label>
-                  <input
-                    name="specs"
-                    value={prodForm.specs[col.key] || ''}
-                    onChange={(e) =>
-                      setProdForm({ ...prodForm, specs: { ...prodForm.specs, [col.key]: e.target.value } })
-                    }
-                    className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-                  />
-                </div>
-              ))}
-
-              {/* Kit / BOM toggle */}
-              <div className="border-t border-outline-variant/10 pt-3">
-                <div className="flex items-center justify-between">
+            <div
+              className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] flex min-h-0 flex-col bg-surface-container-low rounded-2xl border border-outline-variant/20 p-4 space-y-4 shadow-2xl sm:relative sm:inset-auto sm:w-full sm:max-w-lg sm:max-h-[90dvh] sm:p-5 sm:rounded-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-base font-bold text-on-surface shrink-0">
+                {editProd ? t('selectionAdmin.editProduct') : t('selectionAdmin.newProduct')}
+              </h2>
+              <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-0.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <p className="text-sm text-on-surface">{t('selectionAdmin.kitToggle')}</p>
-                    <p className="text-xs text-on-surface-variant">{t('selectionAdmin.kitToggleHint')}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setProdForm({ ...prodForm, isKit: !prodForm.isKit })}
-                    className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ${prodForm.isKit ? 'bg-primary-container' : 'bg-outline-variant/30'}`}
-                  >
-                    <span
-                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${prodForm.isKit ? 'translate-x-5' : 'translate-x-0'}`}
+                    <label className="text-xs text-on-surface-variant mb-1 block">
+                      {t('selectionAdmin.labelNameRequired')}
+                    </label>
+                    <input
+                      name="name"
+                      value={prodForm.name}
+                      onChange={(e) => setProdForm({ ...prodForm, name: e.target.value })}
+                      className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
                     />
-                  </button>
+                  </div>
+                  <div>
+                    <label className="text-xs text-on-surface-variant mb-1 block">
+                      {t('selectionAdmin.labelModelNo')}
+                    </label>
+                    <input
+                      name="model-no"
+                      value={prodForm.modelNo}
+                      onChange={(e) => setProdForm({ ...prodForm, modelNo: e.target.value })}
+                      className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
+                    />
+                  </div>
                 </div>
-
-                {prodForm.isKit && (
-                  <div className="mt-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-on-surface-variant">
-                        {t('selectionAdmin.componentList')}
-                      </span>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setKitImportText('');
-                            setKitImportOpen(true);
-                          }}
-                          className="text-xs text-primary-container hover:underline"
-                        >
-                          {t('selectionAdmin.batchImport')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setProdForm({
-                              ...prodForm,
-                              components: [...prodForm.components, { name: '', modelNo: '', qty: 1, specs: {} }],
-                            })
-                          }
-                          className="text-xs text-primary-container hover:underline"
-                        >
-                          {t('selectionAdmin.addComponent')}
-                        </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-on-surface-variant mb-1 block">
+                      {t('selectionAdmin.labelImageUrl')}
+                    </label>
+                    <input
+                      name="image"
+                      value={prodForm.image}
+                      onChange={(e) => setProdForm({ ...prodForm, image: e.target.value })}
+                      placeholder="https://..."
+                      className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-on-surface-variant mb-1 block">
+                      {t('selectionAdmin.labelPdfUrl')}
+                    </label>
+                    <input
+                      name="pdf-url"
+                      value={prodForm.pdfUrl}
+                      onChange={(e) => setProdForm({ ...prodForm, pdfUrl: e.target.value })}
+                      placeholder="https://..."
+                      className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
+                    />
+                  </div>
+                </div>
+                <div
+                  onDragEnter={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setProductAssetDragging(true);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setProductAssetDragging(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.currentTarget === e.target) setProductAssetDragging(false);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void handleProductAssetFiles(e.dataTransfer.files);
+                  }}
+                  className={`rounded-xl border border-dashed p-3 transition-colors ${
+                    productAssetDragging
+                      ? 'border-primary-container bg-primary-container/10'
+                      : 'border-outline-variant/30 bg-surface-container-high/30'
+                  }`}
+                >
+                  <input
+                    name="file"
+                    ref={productAssetInputRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.length) void handleProductAssetFiles(e.target.files);
+                      e.target.value = '';
+                    }}
+                  />
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[88px_1fr] sm:items-center">
+                    <button
+                      type="button"
+                      onClick={() => productAssetInputRef.current?.click()}
+                      disabled={productAssetUploading}
+                      className="flex h-20 items-center justify-center rounded-lg border border-outline-variant/20 bg-surface-container-lowest text-on-surface-variant hover:text-on-surface disabled:opacity-50"
+                    >
+                      <Icon
+                        name={productAssetUploading ? 'hourglass_empty' : 'upload_file'}
+                        size={28}
+                        className={productAssetUploading ? 'animate-spin' : ''}
+                      />
+                    </button>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-on-surface">{t('selectionAdmin.dragAssetHere')}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-on-surface-variant">
+                        {t('selectionAdmin.assetHint')}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                        {prodForm.image && (
+                          <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-surface-container-lowest px-2 py-1 text-on-surface-variant">
+                            <Icon name="image" size={13} />
+                            <span className="truncate">{t('selectionAdmin.imageSet')}</span>
+                          </span>
+                        )}
+                        {prodForm.pdfUrl && (
+                          <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-surface-container-lowest px-2 py-1 text-on-surface-variant">
+                            <Icon name="picture_as_pdf" size={13} />
+                            <span className="truncate">{t('selectionAdmin.pdfSet')}</span>
+                          </span>
+                        )}
                       </div>
                     </div>
-                    {prodForm.components.map((comp, i) => (
-                      <div key={i} className="flex items-start gap-2 bg-surface-container-high/50 rounded-lg p-2">
-                        <div className="flex-1 min-w-0 space-y-2">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <input
-                              name="name"
-                              value={comp.name}
-                              onChange={(e) => {
-                                const next = [...prodForm.components];
-                                next[i] = { ...next[i], name: e.target.value };
-                                setProdForm({ ...prodForm, components: next });
-                              }}
-                              placeholder={t('selectionAdmin.compNamePlaceholder')}
-                              className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
-                            />
-                            <input
-                              name="model-no"
-                              value={comp.modelNo || ''}
-                              onChange={(e) => {
-                                const next = [...prodForm.components];
-                                next[i] = { ...next[i], modelNo: e.target.value };
-                                setProdForm({ ...prodForm, components: next });
-                              }}
-                              placeholder={t('selectionAdmin.colModel')}
-                              className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
-                            />
-                            <input
-                              name="qty"
-                              type="number"
-                              min={1}
-                              value={comp.qty}
-                              onChange={(e) => {
-                                const next = [...prodForm.components];
-                                next[i] = { ...next[i], qty: Math.max(1, parseInt(e.target.value) || 1) };
-                                setProdForm({ ...prodForm, components: next });
-                              }}
-                              placeholder={t('selectionAdmin.compQtyPlaceholder')}
-                              className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
-                            />
-                          </div>
-                          {kitSpecKeys.length > 0 && (
-                            <div
-                              className="grid gap-2"
-                              style={{
-                                gridTemplateColumns: `repeat(${Math.min(kitSpecKeys.length, 4)}, minmax(0, 1fr))`,
-                              }}
-                            >
-                              {kitSpecKeys.map((key) => (
-                                <input
-                                  key={key}
-                                  name={`comp-spec-${key}`}
-                                  value={comp.specs?.[key] || ''}
-                                  onChange={(e) => {
-                                    const next = [...prodForm.components];
-                                    next[i] = {
-                                      ...next[i],
-                                      specs: { ...(next[i].specs || {}), [key]: e.target.value },
-                                    };
-                                    setProdForm({ ...prodForm, components: next });
-                                  }}
-                                  placeholder={key}
-                                  className="bg-surface-container-lowest text-on-surface-variant text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
-                                />
-                              ))}
-                            </div>
-                          )}
+                  </div>
+                </div>
+                {(prodForm.image || prodForm.pdfUrl) && (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {prodForm.image && (
+                      <div className="rounded-lg border border-outline-variant/10 bg-surface-container-lowest p-2">
+                        <div className="h-24 overflow-hidden rounded bg-surface-container-high">
+                          <SafeImage
+                            src={prodForm.image}
+                            alt=""
+                            className="h-full w-full object-contain p-1"
+                            fallbackIcon="image"
+                          />
                         </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setProdForm({ ...prodForm, components: prodForm.components.filter((_, idx) => idx !== i) })
-                          }
-                          className="text-error/70 hover:text-error shrink-0 mt-1"
-                        >
-                          <Icon name="close" size={14} />
-                        </button>
                       </div>
-                    ))}
+                    )}
+                    {prodForm.pdfUrl && (
+                      <a
+                        href={prodForm.pdfUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          openDocumentUrl(prodForm.pdfUrl, { title: t('selectionAdmin.pdfSpecTitle') });
+                        }}
+                        className="flex items-center gap-2 rounded-lg border border-outline-variant/10 bg-surface-container-lowest p-3 text-xs text-on-surface-variant hover:text-on-surface"
+                      >
+                        <Icon name="picture_as_pdf" size={22} className="text-error" />
+                        <span className="min-w-0 flex-1 truncate">{prodForm.pdfUrl}</span>
+                      </a>
+                    )}
                   </div>
                 )}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2 shrink-0 pt-2 border-t border-outline-variant/10 sm:flex sm:justify-end">
-              <button
-                onClick={() => setShowProdModal(false)}
-                className="px-4 py-2.5 sm:py-2 text-sm text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg sm:rounded"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={saveProd}
-                disabled={!prodForm.name}
-                className="px-4 py-2.5 sm:py-2 text-sm font-bold bg-primary-container text-on-primary rounded-lg sm:rounded hover:opacity-90 disabled:opacity-50"
-              >
-                {t('common.save')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== Kit Components Batch Import Modal ===== */}
-      {kitImportOpen && (
-        <div
-          className="fixed inset-0 z-[340] bg-black/50 flex items-center justify-center p-3 sm:p-4"
-          onClick={() => setKitImportOpen(false)}
-        >
-          <div
-            className="w-full max-w-lg max-h-[86dvh] flex min-h-0 flex-col bg-surface-container-low rounded-2xl border border-outline-variant/20 p-4 sm:p-5 space-y-3 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="shrink-0">
-              <h2 className="text-base font-bold text-on-surface">{t('selectionAdmin.kitImportTitle')}</h2>
-              <p className="mt-1 text-xs text-on-surface-variant leading-relaxed">
-                {t('selectionAdmin.kitImportDescLine1')}
-                <br />
-                <span className="font-bold text-on-surface">{t('selectionAdmin.kitImportDescHeaderTitle')}</span>
-                {t('selectionAdmin.kitImportDescHeader')}
-                <br />
-                {t('selectionAdmin.kitImportDescNoHeader')}
-              </p>
-            </div>
-            <div className="shrink-0 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void downloadKitImportTemplate()}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg"
-              >
-                <Icon name="download" size={13} />
-                {t('selectionAdmin.downloadTemplateXlsx')}
-              </button>
-              <label className="inline-flex cursor-pointer items-center gap-1 px-2.5 py-1.5 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg">
-                <Icon name="upload_file" size={13} />
-                {t('selectionAdmin.importSpreadsheet')}
-                <input
-                  type="file"
-                  accept=".xlsx,.csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = '';
-                    if (file) void handleKitImportFile(file);
-                  }}
-                />
-              </label>
-            </div>
-            <textarea
-              name="kit-import-text"
-              value={kitImportText}
-              onChange={(e) => setKitImportText(e.target.value)}
-              rows={8}
-              spellCheck={false}
-              placeholder={'名称\t型号\t编码\t数量\n弯头接头\tPC4-M5\tKAC-001\t2\nPC4-0.5\t\tKAC-002\t4'}
-              className="flex-1 min-h-32 w-full resize-none bg-surface-container-lowest text-on-surface text-sm rounded-lg px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container font-mono"
-            />
-            {(() => {
-              const { items, badLines } = parseKitComponentLines(kitImportText);
-              return (
-                <div className="shrink-0 text-xs space-y-1">
-                  {items.length > 0 && (
-                    <p className="text-on-surface-variant">
-                      {t('selectionAdmin.parsedComponentsPrefix')}
-                      <span className="font-bold text-on-surface">{items.length}</span>
-                      {t('selectionAdmin.parsedComponentsSuffix')}
-                      {items.length <= 5 ? (
-                        <span className="text-on-surface-variant/70">
-                          （{items.map((c) => `${c.modelNo || c.name}×${c.qty}`).join('、')}）
-                        </span>
-                      ) : null}
-                    </p>
-                  )}
-                  {badLines.length > 0 && (
-                    <p className="text-error/80">
-                      {t('selectionAdmin.badLinesWarning', { lines: badLines.join('、') })}
-                    </p>
-                  )}
-                </div>
-              );
-            })()}
-            <div className="shrink-0 flex items-center justify-end gap-2 pt-1 border-t border-outline-variant/10">
-              <button
-                type="button"
-                onClick={() => setKitImportOpen(false)}
-                className="px-4 py-2 text-sm text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg"
-              >
-                {t('common.cancel')}
-              </button>
-              {prodForm.components.length > 0 && (
-                <button
-                  type="button"
-                  disabled={parseKitComponentLines(kitImportText).items.length === 0}
-                  onClick={() => {
-                    setProdForm({ ...prodForm, components: parseKitComponentLines(kitImportText).items });
-                    setKitImportOpen(false);
-                  }}
-                  className="px-4 py-2 text-sm text-on-surface-variant bg-surface-container-high hover:bg-surface-container-high/80 rounded-lg disabled:opacity-50"
-                >
-                  {t('selectionAdmin.replaceList')}
-                </button>
-              )}
-              <button
-                type="button"
-                disabled={parseKitComponentLines(kitImportText).items.length === 0}
-                onClick={() => {
-                  setProdForm({
-                    ...prodForm,
-                    components: [...prodForm.components, ...parseKitComponentLines(kitImportText).items],
-                  });
-                  setKitImportOpen(false);
-                }}
-                className="px-4 py-2 text-sm font-bold bg-primary-container text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50"
-              >
-                {t('selectionAdmin.appendImport')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ===== Unified Option Settings Modal ===== */}
-      {showOptImgModal && activeCat && (
-        <div
-          className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
-          onClick={() => setShowOptImgModal(false)}
-        >
-          <div
-            className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] max-w-none bg-surface-container-low rounded-2xl border border-outline-variant/20 p-3 space-y-3 flex min-h-0 flex-col overflow-hidden shadow-2xl sm:relative sm:inset-auto sm:w-full sm:max-w-3xl sm:max-h-[90dvh] sm:p-5 sm:space-y-4 sm:rounded-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3 shrink-0 pb-2 border-b border-outline-variant/10 sm:pb-0 sm:border-b-0">
-              <div className="min-w-0">
-                <h2 className="text-base font-bold text-on-surface leading-snug">
-                  {t('selectionAdmin.optionSettings')}
-                </h2>
-                <p className="mt-0.5 text-xs text-on-surface-variant truncate">{activeCat.name}</p>
-              </div>
-              <button
-                onClick={() => setShowOptImgModal(false)}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
-              >
-                <Icon name="close" size={18} />
-              </button>
-            </div>
-            <p className="hidden sm:block text-xs leading-relaxed text-on-surface-variant shrink-0">
-              {t('selectionAdmin.optionSettingsHint')}
-            </p>
-
-            {/* Field selector + view toggle；搜索框独占下一行，输入搜索词后不再被计数徽章挤窄 */}
-            <div className="grid grid-cols-1 gap-2 shrink-0 pb-2 border-b border-outline-variant/10 sm:pb-0 sm:border-b-0">
-              <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
-                <div ref={optFieldPickerRef} className="relative w-full sm:w-56 shrink-0">
-                  <button
-                    type="button"
-                    name="opt-img-field"
-                    onClick={() => setOptFieldOpen((v) => !v)}
-                    className={`flex w-full items-center justify-between gap-2 rounded-lg border bg-surface-container-lowest px-3 py-2 text-left text-sm transition-colors ${
-                      optFieldOpen
-                        ? 'border-primary-container ring-2 ring-primary-container/20'
-                        : 'border-outline-variant/20 hover:border-outline-variant/40'
-                    }`}
-                  >
-                    <span className={`truncate ${optImgField ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>
-                      {optImgField
-                        ? t('selectionAdmin.fieldWithOptions', {
-                            field: optImgField,
-                            count: fieldOptions[optImgField]?.length ?? 0,
-                          })
-                        : t('selectionAdmin.selectField')}
-                    </span>
-                    <Icon
-                      name="expand_more"
-                      size={16}
-                      className={`shrink-0 text-on-surface-variant transition-transform ${optFieldOpen ? 'rotate-180' : ''}`}
+                {(activeCat.columns as ColumnDef[]).map((col) => (
+                  <div key={col.key}>
+                    <label className="text-xs text-on-surface-variant mb-1 block">
+                      {col.label}
+                      {col.unit ? ` (${col.unit})` : ''}
+                    </label>
+                    <input
+                      name="specs"
+                      value={prodForm.specs[col.key] || ''}
+                      onChange={(e) =>
+                        setProdForm({ ...prodForm, specs: { ...prodForm.specs, [col.key]: e.target.value } })
+                      }
+                      className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
                     />
-                  </button>
-                  {optFieldOpen && (
-                    <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-64 overflow-y-auto rounded-xl border border-outline-variant/20 bg-surface-container-low py-1 shadow-2xl">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          pickOptField('');
-                          setOptFieldOpen(false);
-                        }}
-                        className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                          optImgField === ''
-                            ? 'bg-primary-container/10 font-medium text-primary-container'
-                            : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-                        }`}
-                      >
-                        <span>{t('selectionAdmin.selectField')}</span>
-                        <span className="text-[10px] text-on-surface-variant/60">
-                          {t('selectionAdmin.nFields', { count: Object.keys(fieldOptions).length })}
+                  </div>
+                ))}
+
+                {/* Kit / BOM toggle */}
+                <div className="border-t border-outline-variant/10 pt-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-on-surface">{t('selectionAdmin.kitToggle')}</p>
+                      <p className="text-xs text-on-surface-variant">{t('selectionAdmin.kitToggleHint')}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProdForm({ ...prodForm, isKit: !prodForm.isKit })}
+                      className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ${prodForm.isKit ? 'bg-primary-container' : 'bg-outline-variant/30'}`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${prodForm.isKit ? 'translate-x-5' : 'translate-x-0'}`}
+                      />
+                    </button>
+                  </div>
+
+                  {prodForm.isKit && (
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-on-surface-variant">
+                          {t('selectionAdmin.componentList')}
                         </span>
-                      </button>
-                      {filteredOptionFields.map((f) => (
-                        <button
-                          type="button"
-                          key={f}
-                          onClick={() => {
-                            pickOptField(f);
-                            setOptFieldOpen(false);
-                          }}
-                          className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                            f === optImgField
-                              ? 'bg-primary-container/10 font-medium text-primary-container'
-                              : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
-                          }`}
-                        >
-                          <span className="truncate">{f}</span>
-                          <span className="shrink-0 text-[10px] tabular-nums text-on-surface-variant/60">
-                            {t('selectionAdmin.nItems', { count: fieldOptions[f].length })}
-                          </span>
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setKitImportText('');
+                              setKitImportOpen(true);
+                            }}
+                            className="text-xs text-primary-container hover:underline"
+                          >
+                            {t('selectionAdmin.batchImport')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setProdForm({
+                                ...prodForm,
+                                components: [...prodForm.components, { name: '', modelNo: '', qty: 1, specs: {} }],
+                              })
+                            }
+                            className="text-xs text-primary-container hover:underline"
+                          >
+                            {t('selectionAdmin.addComponent')}
+                          </button>
+                        </div>
+                      </div>
+                      {prodForm.components.map((comp, i) => (
+                        <div key={i} className="flex items-start gap-2 bg-surface-container-high/50 rounded-lg p-2">
+                          <div className="flex-1 min-w-0 space-y-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              <input
+                                name="name"
+                                value={comp.name}
+                                onChange={(e) => {
+                                  const next = [...prodForm.components];
+                                  next[i] = { ...next[i], name: e.target.value };
+                                  setProdForm({ ...prodForm, components: next });
+                                }}
+                                placeholder={t('selectionAdmin.compNamePlaceholder')}
+                                className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                              />
+                              <input
+                                name="model-no"
+                                value={comp.modelNo || ''}
+                                onChange={(e) => {
+                                  const next = [...prodForm.components];
+                                  next[i] = { ...next[i], modelNo: e.target.value };
+                                  setProdForm({ ...prodForm, components: next });
+                                }}
+                                placeholder={t('selectionAdmin.colModel')}
+                                className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                              />
+                              <input
+                                name="qty"
+                                type="number"
+                                min={1}
+                                value={comp.qty}
+                                onChange={(e) => {
+                                  const next = [...prodForm.components];
+                                  next[i] = { ...next[i], qty: Math.max(1, parseInt(e.target.value) || 1) };
+                                  setProdForm({ ...prodForm, components: next });
+                                }}
+                                placeholder={t('selectionAdmin.compQtyPlaceholder')}
+                                className="bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                              />
+                            </div>
+                            {kitSpecKeys.length > 0 && (
+                              <div
+                                className="grid gap-2"
+                                style={{
+                                  gridTemplateColumns: `repeat(${Math.min(kitSpecKeys.length, 4)}, minmax(0, 1fr))`,
+                                }}
+                              >
+                                {kitSpecKeys.map((key) => (
+                                  <input
+                                    key={key}
+                                    name={`comp-spec-${key}`}
+                                    value={comp.specs?.[key] || ''}
+                                    onChange={(e) => {
+                                      const next = [...prodForm.components];
+                                      next[i] = {
+                                        ...next[i],
+                                        specs: { ...(next[i].specs || {}), [key]: e.target.value },
+                                      };
+                                      setProdForm({ ...prodForm, components: next });
+                                    }}
+                                    placeholder={key}
+                                    className="bg-surface-container-lowest text-on-surface-variant text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setProdForm({
+                                ...prodForm,
+                                components: prodForm.components.filter((_, idx) => idx !== i),
+                              })
+                            }
+                            className="text-error/70 hover:text-error shrink-0 mt-1"
+                          >
+                            <Icon name="close" size={14} />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}
                 </div>
-                {optImgField && (
-                  <div className="grid grid-cols-2 rounded-md border border-outline-variant/20 overflow-hidden shrink-0 sm:flex">
-                    <button
-                      onClick={() => setOptViewMode('grid')}
-                      className={`px-3 py-2 text-xs flex items-center justify-center gap-1 transition-colors ${optViewMode === 'grid' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'}`}
-                    >
-                      <Icon name="grid_view" size={14} /> {t('selectionAdmin.viewCards')}
-                    </button>
-                    <button
-                      onClick={() => setOptViewMode('list')}
-                      className={`px-3 py-2 text-xs flex items-center justify-center gap-1 transition-colors ${optViewMode === 'list' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'}`}
-                    >
-                      <Icon name="view_list" size={14} /> {t('selectionAdmin.viewList')}
-                    </button>
-                  </div>
-                )}
-                {optImgField && orderItems.length > 0 && (
-                  <button
-                    onClick={() => {
-                      const colDef = activeCat?.columns?.find((c: ColumnDef) => c.key === optImgField);
-                      setOrderItems(smartSortOptions(orderItems, colDef?.sortType));
+              </div>
+              <div className="grid grid-cols-2 gap-2 shrink-0 pt-2 border-t border-outline-variant/10 sm:flex sm:justify-end">
+                <button
+                  onClick={() => setShowProdModal(false)}
+                  className="px-4 py-2.5 sm:py-2 text-sm text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg sm:rounded"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={saveProd}
+                  disabled={!prodForm.name}
+                  className="px-4 py-2.5 sm:py-2 text-sm font-bold bg-primary-container text-on-primary rounded-lg sm:rounded hover:opacity-90 disabled:opacity-50"
+                >
+                  {t('common.save')}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* ===== Kit Components Batch Import Modal ===== */}
+      {kitImportOpen &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[340] bg-black/50 flex items-center justify-center p-3 sm:p-4"
+            onClick={() => setKitImportOpen(false)}
+          >
+            <div
+              className="w-full max-w-lg max-h-[86dvh] flex min-h-0 flex-col bg-surface-container-low rounded-2xl border border-outline-variant/20 p-4 sm:p-5 space-y-3 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="shrink-0">
+                <h2 className="text-base font-bold text-on-surface">{t('selectionAdmin.kitImportTitle')}</h2>
+                <p className="mt-1 text-xs text-on-surface-variant leading-relaxed">
+                  {t('selectionAdmin.kitImportDescLine1')}
+                  <br />
+                  <span className="font-bold text-on-surface">{t('selectionAdmin.kitImportDescHeaderTitle')}</span>
+                  {t('selectionAdmin.kitImportDescHeader')}
+                  <br />
+                  {t('selectionAdmin.kitImportDescNoHeader')}
+                </p>
+              </div>
+              <div className="shrink-0 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void downloadKitImportTemplate()}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg"
+                >
+                  <Icon name="download" size={13} />
+                  {t('selectionAdmin.downloadTemplateXlsx')}
+                </button>
+                <label className="inline-flex cursor-pointer items-center gap-1 px-2.5 py-1.5 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg">
+                  <Icon name="upload_file" size={13} />
+                  {t('selectionAdmin.importSpreadsheet')}
+                  <input
+                    type="file"
+                    accept=".xlsx,.csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (file) void handleKitImportFile(file);
                     }}
-                    className="w-full sm:w-auto px-3 py-2 text-xs font-medium bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 rounded-md hover:bg-surface-container-high hover:text-on-surface transition-colors shrink-0"
+                  />
+                </label>
+              </div>
+              <textarea
+                name="kit-import-text"
+                value={kitImportText}
+                onChange={(e) => setKitImportText(e.target.value)}
+                rows={8}
+                spellCheck={false}
+                placeholder={'名称\t型号\t编码\t数量\n弯头接头\tPC4-M5\tKAC-001\t2\nPC4-0.5\t\tKAC-002\t4'}
+                className="flex-1 min-h-32 w-full resize-none bg-surface-container-lowest text-on-surface text-sm rounded-lg px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container font-mono"
+              />
+              {(() => {
+                const { items, badLines } = parseKitComponentLines(kitImportText);
+                return (
+                  <div className="shrink-0 text-xs space-y-1">
+                    {items.length > 0 && (
+                      <p className="text-on-surface-variant">
+                        {t('selectionAdmin.parsedComponentsPrefix')}
+                        <span className="font-bold text-on-surface">{items.length}</span>
+                        {t('selectionAdmin.parsedComponentsSuffix')}
+                        {items.length <= 5 ? (
+                          <span className="text-on-surface-variant/70">
+                            （{items.map((c) => `${c.modelNo || c.name}×${c.qty}`).join('、')}）
+                          </span>
+                        ) : null}
+                      </p>
+                    )}
+                    {badLines.length > 0 && (
+                      <p className="text-error/80">
+                        {t('selectionAdmin.badLinesWarning', { lines: badLines.join('、') })}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+              <div className="shrink-0 flex items-center justify-end gap-2 pt-1 border-t border-outline-variant/10">
+                <button
+                  type="button"
+                  onClick={() => setKitImportOpen(false)}
+                  className="px-4 py-2 text-sm text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg"
+                >
+                  {t('common.cancel')}
+                </button>
+                {prodForm.components.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={parseKitComponentLines(kitImportText).items.length === 0}
+                    onClick={() => {
+                      setProdForm({ ...prodForm, components: parseKitComponentLines(kitImportText).items });
+                      setKitImportOpen(false);
+                    }}
+                    className="px-4 py-2 text-sm text-on-surface-variant bg-surface-container-high hover:bg-surface-container-high/80 rounded-lg disabled:opacity-50"
                   >
-                    <Icon name="sort" size={13} className="mr-0.5" /> {t('selectionAdmin.smartSort')}
+                    {t('selectionAdmin.replaceList')}
                   </button>
                 )}
+                <button
+                  type="button"
+                  disabled={parseKitComponentLines(kitImportText).items.length === 0}
+                  onClick={() => {
+                    setProdForm({
+                      ...prodForm,
+                      components: [...prodForm.components, ...parseKitComponentLines(kitImportText).items],
+                    });
+                    setKitImportOpen(false);
+                  }}
+                  className="px-4 py-2 text-sm font-bold bg-primary-container text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50"
+                >
+                  {t('selectionAdmin.appendImport')}
+                </button>
               </div>
-              {optImgField && (
-                <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
-                  <SearchField
-                    inputProps={optSettingsSearchInputProps}
-                    value={optSettingsSearchInputValue}
-                    onClear={() => setOptSettingsSearch('')}
-                    placeholder={t('selectionAdmin.searchOptionsPlaceholder')}
-                    className="w-full sm:flex-1"
-                  />
-                  {optSettingsSearch && (
-                    <span className="shrink-0 text-[11px] text-on-surface-variant">
-                      {t('selectionAdmin.filteredOptionsCount', {
-                        shown: filteredOrderItems.length,
-                        total: orderItems.length,
-                      })}
-                    </span>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* ===== Unified Option Settings Modal ===== */}
+      {showOptImgModal &&
+        activeCat &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
+            onClick={() => setShowOptImgModal(false)}
+          >
+            <div
+              className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] max-w-none bg-surface-container-low rounded-2xl border border-outline-variant/20 p-3 space-y-3 flex min-h-0 flex-col overflow-hidden shadow-2xl sm:relative sm:inset-auto sm:w-full sm:max-w-3xl sm:max-h-[90dvh] sm:p-5 sm:space-y-4 sm:rounded-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3 shrink-0 pb-2 border-b border-outline-variant/10 sm:pb-0 sm:border-b-0">
+                <div className="min-w-0">
+                  <h2 className="text-base font-bold text-on-surface leading-snug">
+                    {t('selectionAdmin.optionSettings')}
+                  </h2>
+                  <p className="mt-0.5 text-xs text-on-surface-variant truncate">{activeCat.name}</p>
+                </div>
+                <button
+                  onClick={() => setShowOptImgModal(false)}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
+                >
+                  <Icon name="close" size={18} />
+                </button>
+              </div>
+              <p className="hidden sm:block text-xs leading-relaxed text-on-surface-variant shrink-0">
+                {t('selectionAdmin.optionSettingsHint')}
+              </p>
+
+              {/* Field selector + view toggle；搜索框独占下一行，输入搜索词后不再被计数徽章挤窄 */}
+              <div className="grid grid-cols-1 gap-2 shrink-0 pb-2 border-b border-outline-variant/10 sm:pb-0 sm:border-b-0">
+                <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                  <div ref={optFieldPickerRef} className="relative w-full sm:w-56 shrink-0">
+                    <button
+                      type="button"
+                      name="opt-img-field"
+                      onClick={() => setOptFieldOpen((v) => !v)}
+                      className={`flex w-full items-center justify-between gap-2 rounded-lg border bg-surface-container-lowest px-3 py-2 text-left text-sm transition-colors ${
+                        optFieldOpen
+                          ? 'border-primary-container ring-2 ring-primary-container/20'
+                          : 'border-outline-variant/20 hover:border-outline-variant/40'
+                      }`}
+                    >
+                      <span className={`truncate ${optImgField ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>
+                        {optImgField
+                          ? t('selectionAdmin.fieldWithOptions', {
+                              field: optImgField,
+                              count: fieldOptions[optImgField]?.length ?? 0,
+                            })
+                          : t('selectionAdmin.selectField')}
+                      </span>
+                      <Icon
+                        name="expand_more"
+                        size={16}
+                        className={`shrink-0 text-on-surface-variant transition-transform ${optFieldOpen ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+                    {optFieldOpen && (
+                      <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-64 overflow-y-auto rounded-xl border border-outline-variant/20 bg-surface-container-low py-1 shadow-2xl">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            pickOptField('');
+                            setOptFieldOpen(false);
+                          }}
+                          className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                            optImgField === ''
+                              ? 'bg-primary-container/10 font-medium text-primary-container'
+                              : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                          }`}
+                        >
+                          <span>{t('selectionAdmin.selectField')}</span>
+                          <span className="text-[10px] text-on-surface-variant/60">
+                            {t('selectionAdmin.nFields', { count: Object.keys(fieldOptions).length })}
+                          </span>
+                        </button>
+                        {filteredOptionFields.map((f) => (
+                          <button
+                            type="button"
+                            key={f}
+                            onClick={() => {
+                              pickOptField(f);
+                              setOptFieldOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                              f === optImgField
+                                ? 'bg-primary-container/10 font-medium text-primary-container'
+                                : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                            }`}
+                          >
+                            <span className="truncate">{f}</span>
+                            <span className="shrink-0 text-[10px] tabular-nums text-on-surface-variant/60">
+                              {t('selectionAdmin.nItems', { count: fieldOptions[f].length })}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {optImgField && (
+                    <div className="grid grid-cols-2 rounded-md border border-outline-variant/20 overflow-hidden shrink-0 sm:flex">
+                      <button
+                        onClick={() => setOptViewMode('grid')}
+                        className={`px-3 py-2 text-xs flex items-center justify-center gap-1 transition-colors ${optViewMode === 'grid' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'}`}
+                      >
+                        <Icon name="grid_view" size={14} /> {t('selectionAdmin.viewCards')}
+                      </button>
+                      <button
+                        onClick={() => setOptViewMode('list')}
+                        className={`px-3 py-2 text-xs flex items-center justify-center gap-1 transition-colors ${optViewMode === 'list' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'}`}
+                      >
+                        <Icon name="view_list" size={14} /> {t('selectionAdmin.viewList')}
+                      </button>
+                    </div>
+                  )}
+                  {optImgField && orderItems.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const colDef = activeCat?.columns?.find((c: ColumnDef) => c.key === optImgField);
+                        setOrderItems(smartSortOptions(orderItems, colDef?.sortType));
+                      }}
+                      className="w-full sm:w-auto px-3 py-2 text-xs font-medium bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 rounded-md hover:bg-surface-container-high hover:text-on-surface transition-colors shrink-0"
+                    >
+                      <Icon name="sort" size={13} className="mr-0.5" /> {t('selectionAdmin.smartSort')}
+                    </button>
                   )}
                 </div>
-              )}
-            </div>
+                {optImgField && (
+                  <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
+                    <SearchField
+                      inputProps={optSettingsSearchInputProps}
+                      value={optSettingsSearchInputValue}
+                      onClear={() => setOptSettingsSearch('')}
+                      placeholder={t('selectionAdmin.searchOptionsPlaceholder')}
+                      className="w-full sm:flex-1"
+                    />
+                    {optSettingsSearch && (
+                      <span className="shrink-0 text-[11px] text-on-surface-variant">
+                        {t('selectionAdmin.filteredOptionsCount', {
+                          shown: filteredOrderItems.length,
+                          total: orderItems.length,
+                        })}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
 
-            {/* Content area */}
-            <div className="flex-1 overflow-y-auto min-h-0 pr-0.5 pb-2">
-              {!optImgField || orderItems.length === 0 ? (
-                <div className="min-h-full grid place-items-center rounded-xl border border-dashed border-outline-variant/20 bg-surface-container-lowest/60 px-4 py-8 text-center">
-                  <div className="space-y-2">
-                    <Icon name="tune" size={28} className="mx-auto text-on-surface-variant/40" />
-                    <p className="text-sm font-medium text-on-surface">{t('selectionAdmin.pickFieldPrompt')}</p>
-                    <p className="text-xs leading-relaxed text-on-surface-variant">
-                      {t('selectionAdmin.pickFieldHint')}
-                    </p>
+              {/* Content area */}
+              <div className="flex-1 overflow-y-auto min-h-0 pr-0.5 pb-2">
+                {!optImgField || orderItems.length === 0 ? (
+                  <div className="min-h-full grid place-items-center rounded-xl border border-dashed border-outline-variant/20 bg-surface-container-lowest/60 px-4 py-8 text-center">
+                    <div className="space-y-2">
+                      <Icon name="tune" size={28} className="mx-auto text-on-surface-variant/40" />
+                      <p className="text-sm font-medium text-on-surface">{t('selectionAdmin.pickFieldPrompt')}</p>
+                      <p className="text-xs leading-relaxed text-on-surface-variant">
+                        {t('selectionAdmin.pickFieldHint')}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ) : filteredOrderItems.length === 0 ? (
-                <div className="min-h-full grid place-items-center rounded-xl border border-dashed border-outline-variant/20 bg-surface-container-lowest/60 px-4 py-8 text-center">
-                  <div className="space-y-2">
-                    <Icon name="search_off" size={28} className="mx-auto text-on-surface-variant/40" />
-                    <p className="text-sm font-medium text-on-surface">{t('selectionAdmin.noMatchOptions')}</p>
-                    <p className="text-xs leading-relaxed text-on-surface-variant">
-                      {t('selectionAdmin.noMatchOptionsHint')}
-                    </p>
+                ) : filteredOrderItems.length === 0 ? (
+                  <div className="min-h-full grid place-items-center rounded-xl border border-dashed border-outline-variant/20 bg-surface-container-lowest/60 px-4 py-8 text-center">
+                    <div className="space-y-2">
+                      <Icon name="search_off" size={28} className="mx-auto text-on-surface-variant/40" />
+                      <p className="text-sm font-medium text-on-surface">{t('selectionAdmin.noMatchOptions')}</p>
+                      <p className="text-xs leading-relaxed text-on-surface-variant">
+                        {t('selectionAdmin.noMatchOptionsHint')}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ) : optViewMode === 'grid' ? (
-                /* ===== Card Grid View (for images) ===== */
-                <div className="grid grid-cols-1 min-[430px]:grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
-                  {visibleOrderItems.map((val) => {
-                    const i = orderItems.indexOf(val);
-                    const imgUrl = optImages[optImgField]?.[val];
-                    const catalogEntry = optCatalogs[optImgField]?.[val];
-                    const catalogUrl = optionCatalogUrl(catalogEntry);
-                    const catalogUpdatedAt = optionCatalogUpdatedAt(catalogEntry);
-                    const isUploading = uploadingVal === `${optImgField}::${val}`;
-                    const valueProductCount = productsByOptionValue.get(`${optImgField}\u0000${val}`)?.length ?? 0;
-                    return (
-                      <div
-                        key={val}
-                        draggable
-                        onDragStart={() => setOrderDragIdx(i)}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          if (orderDragIdx === null || orderDragIdx === i) return;
-                          const next = [...orderItems];
-                          const [item] = next.splice(orderDragIdx, 1);
-                          next.splice(i, 0, item);
-                          setOrderItems(next);
-                          setOrderDragIdx(i);
-                        }}
-                        onDragEnd={() => setOrderDragIdx(null)}
-                        className={`rounded-lg border bg-surface-container p-2.5 sm:p-3 space-y-2 transition-opacity cursor-grab active:cursor-grabbing ${
-                          orderDragIdx === i ? 'opacity-40 border-primary-container/30' : 'border-outline-variant/20'
-                        }`}
-                      >
-                        <div className="flex items-center gap-1.5">
-                          {/* 画册状态：有画册 → 拖拽手柄着主题色；没有 → 默认弱化色。悬停手柄看更新时间 */}
+                ) : optViewMode === 'grid' ? (
+                  /* ===== Card Grid View (for images) ===== */
+                  <div className="grid grid-cols-1 min-[430px]:grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                    {visibleOrderItems.map((val) => {
+                      const i = orderItems.indexOf(val);
+                      const imgUrl = optImages[optImgField]?.[val];
+                      const catalogEntry = optCatalogs[optImgField]?.[val];
+                      const catalogUrl = optionCatalogUrl(catalogEntry);
+                      const catalogUpdatedAt = optionCatalogUpdatedAt(catalogEntry);
+                      const isUploading = uploadingVal === `${optImgField}::${val}`;
+                      const valueProductCount = productsByOptionValue.get(`${optImgField}\u0000${val}`)?.length ?? 0;
+                      return (
+                        <div
+                          key={val}
+                          draggable
+                          onDragStart={() => setOrderDragIdx(i)}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            if (orderDragIdx === null || orderDragIdx === i) return;
+                            const next = [...orderItems];
+                            const [item] = next.splice(orderDragIdx, 1);
+                            next.splice(i, 0, item);
+                            setOrderItems(next);
+                            setOrderDragIdx(i);
+                          }}
+                          onDragEnd={() => setOrderDragIdx(null)}
+                          className={`rounded-lg border bg-surface-container p-2.5 sm:p-3 space-y-2 transition-opacity cursor-grab active:cursor-grabbing ${
+                            orderDragIdx === i ? 'opacity-40 border-primary-container/30' : 'border-outline-variant/20'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            {/* 画册状态：有画册 → 拖拽手柄着主题色；没有 → 默认弱化色。悬停手柄看更新时间 */}
+                            <span
+                              title={
+                                catalogUrl
+                                  ? catalogUpdatedAt
+                                    ? `${t('selectionAdmin.catalogBadgeHint')} · ${t(
+                                        'selectionAdmin.catalogUpdatedAt',
+                                        {
+                                          time: new Date(catalogUpdatedAt).toLocaleString(),
+                                        },
+                                      )}`
+                                    : t('selectionAdmin.catalogBadgeHint')
+                                  : undefined
+                              }
+                              className={`select-none text-xs shrink-0 ${
+                                catalogUrl ? 'text-primary-container' : 'text-on-surface-variant/40'
+                              }`}
+                            >
+                              ⠿
+                            </span>
+                            <span className="text-xs font-medium text-on-surface break-words line-clamp-2 flex-1 min-w-0">
+                              {val}
+                            </span>
+                            <button
+                              onClick={() => setValueProductsView({ field: optImgField, value: val })}
+                              title={t('selectionAdmin.viewValueProducts')}
+                              className={`shrink-0 rounded-full bg-surface-container-high px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors hover:bg-primary-container/15 hover:text-primary-container ${
+                                valueProductCount === 0 ? 'text-on-surface-variant/50' : 'text-on-surface-variant'
+                              }`}
+                            >
+                              {t('selectionAdmin.nModels', { count: valueProductCount })}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setRenameField(optImgField);
+                                setRenameOldVal(val);
+                                setRenameNewVal(val);
+                              }}
+                              className={SELECTION_ICON_BUTTON_EDIT}
+                            >
+                              <Icon name="edit" size={12} />
+                            </button>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setEditOptVal(val);
+                              setHoverOptVal(null);
+                            }}
+                            onMouseEnter={() => setHoverOptVal(val)}
+                            onMouseLeave={() => setHoverOptVal(null)}
+                            className="w-full aspect-[2.2/1] min-[430px]:aspect-square rounded bg-surface-container-lowest flex items-center justify-center overflow-hidden border border-outline-variant/10 hover:border-primary-container/30 transition-colors"
+                          >
+                            {isUploading ? (
+                              <Icon name="hourglass_empty" size={24} className="text-on-surface-variant animate-spin" />
+                            ) : imgUrl ? (
+                              <SafeImage
+                                src={imgUrl}
+                                alt={val}
+                                className="w-full h-full object-contain"
+                                fallbackIcon="add_photo_alternate"
+                              />
+                            ) : (
+                              <Icon name="add_photo_alternate" size={24} className="text-on-surface-variant/30" />
+                            )}
+                          </button>
+                          <span className="block text-center text-[10px] text-primary-container">
+                            {imgUrl ? t('selectionAdmin.clickOrPasteReplace') : t('selectionAdmin.clickOrPasteUpload')}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* ===== List View (for sorting & rename) ===== */
+                  <div className="space-y-1">
+                    {visibleOrderItems.map((val) => {
+                      const i = orderItems.indexOf(val);
+                      const catalogEntry = optCatalogs[optImgField]?.[val];
+                      const catalogUrl = optionCatalogUrl(catalogEntry);
+                      const catalogUpdatedAt = optionCatalogUpdatedAt(catalogEntry);
+                      const valueProductCount = productsByOptionValue.get(`${optImgField}\u0000${val}`)?.length ?? 0;
+                      return (
+                        <div
+                          key={val}
+                          draggable
+                          onDragStart={() => setOrderDragIdx(i)}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            if (orderDragIdx === null || orderDragIdx === i) return;
+                            const next = [...orderItems];
+                            const [item] = next.splice(orderDragIdx, 1);
+                            next.splice(i, 0, item);
+                            setOrderItems(next);
+                            setOrderDragIdx(i);
+                          }}
+                          onDragEnd={() => setOrderDragIdx(null)}
+                          className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all ${
+                            orderDragIdx === i
+                              ? 'opacity-40 border-primary-container/30 bg-primary-container/5'
+                              : 'border-outline-variant/20 bg-surface-container-lowest hover:border-outline-variant/40'
+                          }`}
+                        >
+                          {/* 画册状态同卡片网格视图：有画册 → 手柄主题色，悬停看更新时间 */}
                           <span
                             title={
                               catalogUrl
@@ -3394,15 +3511,13 @@ function Content() {
                                   : t('selectionAdmin.catalogBadgeHint')
                                 : undefined
                             }
-                            className={`select-none text-xs shrink-0 ${
+                            className={`cursor-grab active:cursor-grabbing select-none text-sm shrink-0 ${
                               catalogUrl ? 'text-primary-container' : 'text-on-surface-variant/40'
                             }`}
                           >
                             ⠿
                           </span>
-                          <span className="text-xs font-medium text-on-surface break-words line-clamp-2 flex-1 min-w-0">
-                            {val}
-                          </span>
+                          <span className="text-sm font-medium text-on-surface flex-1 min-w-0 break-words">{val}</span>
                           <button
                             onClick={() => setValueProductsView({ field: optImgField, value: val })}
                             title={t('selectionAdmin.viewValueProducts')}
@@ -3412,6 +3527,14 @@ function Content() {
                           >
                             {t('selectionAdmin.nModels', { count: valueProductCount })}
                           </button>
+                          {optImages[optImgField]?.[val] && (
+                            <SafeImage
+                              src={optImages[optImgField][val]}
+                              alt=""
+                              className="w-7 h-7 object-contain rounded shrink-0"
+                              fallbackIcon="image"
+                            />
+                          )}
                           <button
                             onClick={() => {
                               setRenameField(optImgField);
@@ -3420,162 +3543,58 @@ function Content() {
                             }}
                             className={SELECTION_ICON_BUTTON_EDIT}
                           >
-                            <Icon name="edit" size={12} />
+                            <Icon name="edit" size={13} />
                           </button>
                         </div>
-                        <button
-                          onClick={() => {
-                            setEditOptVal(val);
-                            setHoverOptVal(null);
-                          }}
-                          onMouseEnter={() => setHoverOptVal(val)}
-                          onMouseLeave={() => setHoverOptVal(null)}
-                          className="w-full aspect-[2.2/1] min-[430px]:aspect-square rounded bg-surface-container-lowest flex items-center justify-center overflow-hidden border border-outline-variant/10 hover:border-primary-container/30 transition-colors"
-                        >
-                          {isUploading ? (
-                            <Icon name="hourglass_empty" size={24} className="text-on-surface-variant animate-spin" />
-                          ) : imgUrl ? (
-                            <SafeImage
-                              src={imgUrl}
-                              alt={val}
-                              className="w-full h-full object-contain"
-                              fallbackIcon="add_photo_alternate"
-                            />
-                          ) : (
-                            <Icon name="add_photo_alternate" size={24} className="text-on-surface-variant/30" />
-                          )}
-                        </button>
-                        <span className="block text-center text-[10px] text-primary-container">
-                          {imgUrl ? t('selectionAdmin.clickOrPasteReplace') : t('selectionAdmin.clickOrPasteUpload')}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                /* ===== List View (for sorting & rename) ===== */
-                <div className="space-y-1">
-                  {visibleOrderItems.map((val) => {
-                    const i = orderItems.indexOf(val);
-                    const catalogEntry = optCatalogs[optImgField]?.[val];
-                    const catalogUrl = optionCatalogUrl(catalogEntry);
-                    const catalogUpdatedAt = optionCatalogUpdatedAt(catalogEntry);
-                    const valueProductCount = productsByOptionValue.get(`${optImgField}\u0000${val}`)?.length ?? 0;
-                    return (
-                      <div
-                        key={val}
-                        draggable
-                        onDragStart={() => setOrderDragIdx(i)}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          if (orderDragIdx === null || orderDragIdx === i) return;
-                          const next = [...orderItems];
-                          const [item] = next.splice(orderDragIdx, 1);
-                          next.splice(i, 0, item);
-                          setOrderItems(next);
-                          setOrderDragIdx(i);
-                        }}
-                        onDragEnd={() => setOrderDragIdx(null)}
-                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all ${
-                          orderDragIdx === i
-                            ? 'opacity-40 border-primary-container/30 bg-primary-container/5'
-                            : 'border-outline-variant/20 bg-surface-container-lowest hover:border-outline-variant/40'
-                        }`}
-                      >
-                        {/* 画册状态同卡片网格视图：有画册 → 手柄主题色，悬停看更新时间 */}
-                        <span
-                          title={
-                            catalogUrl
-                              ? catalogUpdatedAt
-                                ? `${t('selectionAdmin.catalogBadgeHint')} · ${t('selectionAdmin.catalogUpdatedAt', {
-                                    time: new Date(catalogUpdatedAt).toLocaleString(),
-                                  })}`
-                                : t('selectionAdmin.catalogBadgeHint')
-                              : undefined
-                          }
-                          className={`cursor-grab active:cursor-grabbing select-none text-sm shrink-0 ${
-                            catalogUrl ? 'text-primary-container' : 'text-on-surface-variant/40'
-                          }`}
-                        >
-                          ⠿
-                        </span>
-                        <span className="text-sm font-medium text-on-surface flex-1 min-w-0 break-words">{val}</span>
-                        <button
-                          onClick={() => setValueProductsView({ field: optImgField, value: val })}
-                          title={t('selectionAdmin.viewValueProducts')}
-                          className={`shrink-0 rounded-full bg-surface-container-high px-1.5 py-0.5 text-[10px] font-medium tabular-nums transition-colors hover:bg-primary-container/15 hover:text-primary-container ${
-                            valueProductCount === 0 ? 'text-on-surface-variant/50' : 'text-on-surface-variant'
-                          }`}
-                        >
-                          {t('selectionAdmin.nModels', { count: valueProductCount })}
-                        </button>
-                        {optImages[optImgField]?.[val] && (
-                          <SafeImage
-                            src={optImages[optImgField][val]}
-                            alt=""
-                            className="w-7 h-7 object-contain rounded shrink-0"
-                            fallbackIcon="image"
-                          />
-                        )}
-                        <button
-                          onClick={() => {
-                            setRenameField(optImgField);
-                            setRenameOldVal(val);
-                            setRenameNewVal(val);
-                          }}
-                          className={SELECTION_ICON_BUTTON_EDIT}
-                        >
-                          <Icon name="edit" size={13} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              <InfiniteLoadTrigger
-                hasMore={hasMoreOrderItems}
-                isLoading={false}
-                onLoadMore={loadMoreOrderItems}
-                buttonless
-                idleLabel={null}
-              />
-            </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <InfiniteLoadTrigger
+                  hasMore={hasMoreOrderItems}
+                  isLoading={false}
+                  onLoadMore={loadMoreOrderItems}
+                  buttonless
+                  idleLabel={null}
+                />
+              </div>
 
-            {/* Save order button */}
-            <div className="grid grid-cols-2 gap-2 shrink-0 pt-2 border-t border-outline-variant/10 bg-surface-container-low sm:flex sm:justify-end">
-              <button
-                onClick={() => setShowOptImgModal(false)}
-                className="px-3 py-2.5 sm:py-2 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg sm:rounded"
-              >
-                {t('common.close')}
-              </button>
-              <button
-                onClick={async () => {
-                  if (!optImgField || orderItems.length === 0) {
-                    toast(t('selectionAdmin.pickFieldFirst'), 'error');
-                    return;
-                  }
-                  try {
-                    const currentOrder = (activeCat.optionOrder as Record<string, string[] | string>) || {};
-                    await updateCategory(activeCat.id, {
-                      optionOrder: { ...currentOrder, [optImgField]: orderItems },
-                    });
-                    toast(t('selectionAdmin.settingsSaved'), 'success');
-                    mutateCats();
-                  } catch (err) {
-                    if (import.meta.env.DEV) console.error('保存设置失败:', err);
-                    toast(t('selectionAdmin.saveFailed'), 'error');
-                  }
-                }}
-                disabled={!optImgField || orderItems.length === 0}
-                className="px-3 py-2.5 sm:py-2 text-xs font-bold bg-primary-container text-on-primary rounded-lg sm:rounded hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {t('selectionAdmin.saveSettings')}
-              </button>
+              {/* Save order button */}
+              <div className="grid grid-cols-2 gap-2 shrink-0 pt-2 border-t border-outline-variant/10 bg-surface-container-low sm:flex sm:justify-end">
+                <button
+                  onClick={() => setShowOptImgModal(false)}
+                  className="px-3 py-2.5 sm:py-2 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg sm:rounded"
+                >
+                  {t('common.close')}
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!optImgField || orderItems.length === 0) {
+                      toast(t('selectionAdmin.pickFieldFirst'), 'error');
+                      return;
+                    }
+                    try {
+                      const currentOrder = (activeCat.optionOrder as Record<string, string[] | string>) || {};
+                      await updateCategory(activeCat.id, {
+                        optionOrder: { ...currentOrder, [optImgField]: orderItems },
+                      });
+                      toast(t('selectionAdmin.settingsSaved'), 'success');
+                      mutateCats();
+                    } catch (err) {
+                      if (import.meta.env.DEV) console.error('保存设置失败:', err);
+                      toast(t('selectionAdmin.saveFailed'), 'error');
+                    }
+                  }}
+                  disabled={!optImgField || orderItems.length === 0}
+                  className="px-3 py-2.5 sm:py-2 text-xs font-bold bg-primary-container text-on-primary rounded-lg sm:rounded hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {t('selectionAdmin.saveSettings')}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
       <ConfirmDialog
         open={Boolean(forceDeleteCat)}
@@ -3642,7 +3661,7 @@ function Content() {
             }
             toast(t('selectionAdmin.unsupportedFileType'), 'error');
           };
-          return (
+          return createPortal(
             <div
               className="fixed inset-0 z-[330] flex items-center justify-center bg-black/50 p-3 sm:p-4"
               onClick={() => setEditOptVal(null)}
@@ -3930,7 +3949,8 @@ function Content() {
                   );
                 })()}
               </div>
-            </div>
+            </div>,
+            document.body,
           );
         })()}
 
@@ -3971,7 +3991,7 @@ function Content() {
                 setValueProductsEdit(null);
               }
             };
-            return (
+            return createPortal(
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -4447,85 +4467,90 @@ function Content() {
                     </button>
                   </div>
                 </motion.div>
-              </motion.div>
+              </motion.div>,
+              document.body,
             );
           })()}
       </AnimatePresence>
 
       {/* ===== Single Rename Dialog ===== */}
-      {renameOldVal && renameField && activeCat && (
-        <div
-          className="fixed inset-0 z-[330] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
-          onClick={() => setRenameOldVal('')}
-        >
+      {renameOldVal &&
+        renameField &&
+        activeCat &&
+        createPortal(
           <div
-            className="max-h-[calc(100dvh-env(safe-area-inset-top))] w-full max-w-xs overflow-y-auto rounded-t-2xl border border-outline-variant/20 bg-surface-container-low p-4 pb-[max(env(safe-area-inset-bottom),1rem)] sm:max-h-[90dvh] sm:rounded-xl sm:p-5 space-y-4"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[330] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+            onClick={() => setRenameOldVal('')}
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-on-surface">{t('selectionAdmin.renameTitle')}</h3>
-              <button
-                onClick={() => setRenameOldVal('')}
-                className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
-              >
-                <Icon name="close" size={16} />
-              </button>
+            <div
+              className="max-h-[calc(100dvh-env(safe-area-inset-top))] w-full max-w-xs overflow-y-auto rounded-t-2xl border border-outline-variant/20 bg-surface-container-low p-4 pb-[max(env(safe-area-inset-bottom),1rem)] sm:max-h-[90dvh] sm:rounded-xl sm:p-5 space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-on-surface">{t('selectionAdmin.renameTitle')}</h3>
+                <button
+                  onClick={() => setRenameOldVal('')}
+                  className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
+                >
+                  <Icon name="close" size={16} />
+                </button>
+              </div>
+              <div>
+                <label className="text-xs text-on-surface-variant mb-1 block">{t('selectionAdmin.currentValue')}</label>
+                <p className="text-sm text-on-surface font-medium bg-surface-container-lowest px-3 py-2 rounded border border-outline-variant/10 break-words">
+                  {renameOldVal}
+                </p>
+              </div>
+              <div>
+                <label className="text-xs text-on-surface-variant mb-1 block">{t('selectionAdmin.changeTo')}</label>
+                <input
+                  name="rename-new-val"
+                  value={renameNewVal}
+                  onChange={(e) => setRenameNewVal(e.target.value)}
+                  autoFocus
+                  className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+                <button
+                  onClick={() => setRenameOldVal('')}
+                  className="px-3 py-2 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!renameNewVal.trim() || renameNewVal === renameOldVal) return;
+                    setRenaming(true);
+                    try {
+                      const newVal = renameNewVal.trim();
+                      const { updated } = await renameOptionValue(activeCat.id, renameField, renameOldVal, newVal);
+                      toast(
+                        t('selectionAdmin.renameToast', { old: renameOldVal, new: newVal, count: updated }),
+                        'success',
+                      );
+                      // Update local orderItems to reflect the rename immediately
+                      setOrderItems((prev) => prev.map((v) => (v === renameOldVal ? newVal : v)));
+                      mutateCats();
+                      mutateProds();
+                      setRenameOldVal('');
+                      setRenameNewVal('');
+                    } catch {
+                      toast(t('selectionAdmin.replaceFailed'), 'error');
+                    } finally {
+                      setRenaming(false);
+                    }
+                  }}
+                  disabled={renaming || !renameNewVal.trim() || renameNewVal === renameOldVal}
+                  className="px-3 py-2 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 disabled:opacity-50"
+                >
+                  {renaming ? t('selectionAdmin.replacing') : t('selectionAdmin.replaceConfirm')}
+                </button>
+              </div>
             </div>
-            <div>
-              <label className="text-xs text-on-surface-variant mb-1 block">{t('selectionAdmin.currentValue')}</label>
-              <p className="text-sm text-on-surface font-medium bg-surface-container-lowest px-3 py-2 rounded border border-outline-variant/10 break-words">
-                {renameOldVal}
-              </p>
-            </div>
-            <div>
-              <label className="text-xs text-on-surface-variant mb-1 block">{t('selectionAdmin.changeTo')}</label>
-              <input
-                name="rename-new-val"
-                value={renameNewVal}
-                onChange={(e) => setRenameNewVal(e.target.value)}
-                autoFocus
-                className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
-              <button
-                onClick={() => setRenameOldVal('')}
-                className="px-3 py-2 text-xs text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={async () => {
-                  if (!renameNewVal.trim() || renameNewVal === renameOldVal) return;
-                  setRenaming(true);
-                  try {
-                    const newVal = renameNewVal.trim();
-                    const { updated } = await renameOptionValue(activeCat.id, renameField, renameOldVal, newVal);
-                    toast(
-                      t('selectionAdmin.renameToast', { old: renameOldVal, new: newVal, count: updated }),
-                      'success',
-                    );
-                    // Update local orderItems to reflect the rename immediately
-                    setOrderItems((prev) => prev.map((v) => (v === renameOldVal ? newVal : v)));
-                    mutateCats();
-                    mutateProds();
-                    setRenameOldVal('');
-                    setRenameNewVal('');
-                  } catch {
-                    toast(t('selectionAdmin.replaceFailed'), 'error');
-                  } finally {
-                    setRenaming(false);
-                  }
-                }}
-                disabled={renaming || !renameNewVal.trim() || renameNewVal === renameOldVal}
-                className="px-3 py-2 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 disabled:opacity-50"
-              >
-                {renaming ? t('selectionAdmin.replacing') : t('selectionAdmin.replaceConfirm')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
       {/* ===== Product Generator Modal ===== */}
       <ProductGeneratorModal
@@ -4598,708 +4623,714 @@ function Content() {
       />
 
       {/* ===== Group Management Modal ===== */}
-      {showGroupModal && (
-        <div
-          className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
-          onClick={() => {
-            setShowGroupModal(false);
-            setManageGroupCatsId(null);
-            setDeleteGroupId(null);
-            setRemoveGroupCatId(null);
-          }}
-        >
+      {showGroupModal &&
+        createPortal(
           <div
-            className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] flex min-h-0 flex-col bg-surface-container-low rounded-2xl border border-outline-variant/20 p-4 space-y-4 shadow-2xl sm:relative sm:inset-auto sm:w-full sm:max-w-md sm:max-h-[90dvh] sm:p-5 sm:rounded-xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
+            onClick={() => {
+              setShowGroupModal(false);
+              setManageGroupCatsId(null);
+              setDeleteGroupId(null);
+              setRemoveGroupCatId(null);
+            }}
           >
-            {/* --- Sub-view: manage categories in a group --- */}
-            {manageGroupCatsId ? (
-              (() => {
-                const g = groupItems.find((gi) => gi.id === manageGroupCatsId);
-                const catsInGroup = categories.filter((c) => c.groupId === manageGroupCatsId);
-                const otherCats = categories.filter((c) => c.groupId !== manageGroupCatsId);
-                const updateManagedGroup = (
-                  patch: Partial<{ name: string; icon: string; image: string; imageFit: 'cover' | 'contain' }>,
-                ) => {
-                  setGroupItems((items) =>
-                    items.map((item) => (item.id === manageGroupCatsId ? { ...item, ...patch } : item)),
-                  );
-                };
-                const saveManagedGroupSettings = async () => {
-                  if (!g?.name.trim()) {
-                    toast(t('selectionAdmin.groupNameRequired'), 'error');
-                    return;
-                  }
-                  try {
-                    await updateSelectionGroup(manageGroupCatsId, {
-                      groupName: g.name.trim(),
-                      groupIcon: g.icon.trim() || 'category',
-                      groupImage: g.image || null,
-                      groupImageFit: g.imageFit,
-                    });
-                    patchGroupCategoryCache(manageGroupCatsId, {
-                      groupName: g.name.trim(),
-                      groupIcon: g.icon.trim() || 'category',
-                      groupImage: g.image || null,
-                      groupImageFit: g.imageFit,
-                    });
-                    toast(t('selectionAdmin.groupSettingsSaved'), 'success');
-                  } catch (err) {
-                    toast(getApiErrorMessage(err, t('selectionAdmin.groupSettingsSaveFailed')), 'error');
-                  }
-                };
-                const saveManagedGroupImage = async (
-                  image = g?.image || '',
-                  imageFit: 'cover' | 'contain' = g?.imageFit || 'cover',
-                ) => {
-                  try {
-                    const nextImage = image || '';
-                    await updateSelectionGroup(manageGroupCatsId, {
-                      groupImage: nextImage || null,
-                      groupImageFit: imageFit,
-                    });
-                    updateManagedGroup({ image: nextImage, imageFit });
-                    patchGroupCategoryCache(manageGroupCatsId, {
-                      groupImage: nextImage || null,
-                      groupImageFit: imageFit,
-                    });
-                    return true;
-                  } catch (err) {
-                    toast(getApiErrorMessage(err, t('selectionAdmin.coverSaveFailed')), 'error');
-                    return false;
-                  }
-                };
-                const uploadManagedGroupImageFromUrl = async (imageUrl?: string) => {
-                  const targetUrl = imageUrl?.trim() || '';
-                  if (!targetUrl) return false;
-                  if (!/^https?:\/\/.+/i.test(targetUrl)) {
-                    return false;
-                  }
-                  try {
-                    toast(t('selectionAdmin.downloadingImage'), 'info');
-                    const { url } = await uploadOptionImageFromUrl(targetUrl);
-                    if (await saveManagedGroupImage(url, g?.imageFit || 'cover')) {
-                      updateManagedGroup({ image: url });
-                      toast(t('selectionAdmin.imageDownloadedSaved'), 'success');
-                    }
-                    return true;
-                  } catch {
-                    toast(t('selectionAdmin.downloadImageFailed'), 'error');
-                    return true;
-                  }
-                };
-                const uploadManagedGroupFile = async (file: File) => {
-                  try {
-                    const { url } = await uploadOptionImage(file);
-                    if (await saveManagedGroupImage(url, g?.imageFit || 'cover')) {
-                      updateManagedGroup({ image: url });
-                      toast(t('selectionAdmin.groupCoverUploaded'), 'success');
-                    }
-                  } catch (err) {
-                    toast(getApiErrorMessage(err, t('selectionAdmin.uploadFailed')), 'error');
-                  }
-                };
-                const importManagedGroupCover = async () => {
-                  try {
-                    if (navigator.clipboard?.read) {
-                      const items = await navigator.clipboard.read();
-                      for (const item of items) {
-                        const imageType = item.types.find((type) => type.startsWith('image/'));
-                        if (imageType) {
-                          const blob = await item.getType(imageType);
-                          await uploadManagedGroupFile(
-                            new File([blob], `group-cover.${imageType.split('/')[1] || 'png'}`, { type: imageType }),
-                          );
-                          return;
-                        }
-                      }
-                    }
-                    const text = await navigator.clipboard?.readText?.();
-                    if (text && (await uploadManagedGroupImageFromUrl(text))) return;
-                  } catch {
-                    // Clipboard permission may be unavailable; file picker is the graceful fallback.
-                  }
-                  groupCoverInputRef.current?.click();
-                };
-                const handleManagedGroupCoverPaste = async (e: React.ClipboardEvent) => {
-                  for (const item of Array.from(e.clipboardData.items)) {
-                    if (item.type.startsWith('image/')) {
-                      e.preventDefault();
-                      const file = item.getAsFile();
-                      if (!file) return;
-                      await uploadManagedGroupFile(file);
+            <div
+              className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] flex min-h-0 flex-col bg-surface-container-low rounded-2xl border border-outline-variant/20 p-4 space-y-4 shadow-2xl sm:relative sm:inset-auto sm:w-full sm:max-w-md sm:max-h-[90dvh] sm:p-5 sm:rounded-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* --- Sub-view: manage categories in a group --- */}
+              {manageGroupCatsId ? (
+                (() => {
+                  const g = groupItems.find((gi) => gi.id === manageGroupCatsId);
+                  const catsInGroup = categories.filter((c) => c.groupId === manageGroupCatsId);
+                  const otherCats = categories.filter((c) => c.groupId !== manageGroupCatsId);
+                  const updateManagedGroup = (
+                    patch: Partial<{ name: string; icon: string; image: string; imageFit: 'cover' | 'contain' }>,
+                  ) => {
+                    setGroupItems((items) =>
+                      items.map((item) => (item.id === manageGroupCatsId ? { ...item, ...patch } : item)),
+                    );
+                  };
+                  const saveManagedGroupSettings = async () => {
+                    if (!g?.name.trim()) {
+                      toast(t('selectionAdmin.groupNameRequired'), 'error');
                       return;
                     }
-                  }
-                  const text = e.clipboardData.getData('text/plain')?.trim();
-                  if (text && /^https?:\/\/.+/i.test(text)) {
-                    e.preventDefault();
-                    await uploadManagedGroupImageFromUrl(text);
-                  }
-                };
-                return (
-                  <>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => {
-                          setManageGroupCatsId(null);
-                          setRemoveGroupCatId(null);
-                        }}
-                        className="text-on-surface-variant hover:text-on-surface"
-                      >
-                        <Icon name="arrow_back" size={18} />
-                      </button>
-                      <h2 className="text-base font-bold text-on-surface">
-                        {g?.name} — {t('selectionAdmin.tabCategories')}
-                      </h2>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto min-h-0 space-y-3">
-                      <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 space-y-3">
-                        <div>
-                          <p className="text-xs font-bold text-on-surface">{t('selectionAdmin.groupSettingsTitle')}</p>
-                          <p className="text-[10px] text-on-surface-variant mt-0.5">
-                            {t('selectionAdmin.groupSettingsHint')}
-                          </p>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] gap-2">
-                          <input
-                            name="g"
-                            value={g?.icon || ''}
-                            onChange={(e) => updateManagedGroup({ icon: e.target.value })}
-                            placeholder={t('selectionAdmin.iconPlaceholderShort')}
-                            className="w-full bg-surface-container-low text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
-                          />
-                          <input
-                            name="g"
-                            value={g?.name || ''}
-                            onChange={(e) => updateManagedGroup({ name: e.target.value })}
-                            placeholder={t('selectionAdmin.groupNamePlaceholder')}
-                            className="w-full bg-surface-container-low text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
-                          />
-                        </div>
-                        <div className="flex justify-end">
-                          <button
-                            onClick={saveManagedGroupSettings}
-                            disabled={!g?.name.trim()}
-                            className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 disabled:opacity-50"
-                          >
-                            {t('selectionAdmin.saveSettings')}
-                          </button>
-                        </div>
+                    try {
+                      await updateSelectionGroup(manageGroupCatsId, {
+                        groupName: g.name.trim(),
+                        groupIcon: g.icon.trim() || 'category',
+                        groupImage: g.image || null,
+                        groupImageFit: g.imageFit,
+                      });
+                      patchGroupCategoryCache(manageGroupCatsId, {
+                        groupName: g.name.trim(),
+                        groupIcon: g.icon.trim() || 'category',
+                        groupImage: g.image || null,
+                        groupImageFit: g.imageFit,
+                      });
+                      toast(t('selectionAdmin.groupSettingsSaved'), 'success');
+                    } catch (err) {
+                      toast(getApiErrorMessage(err, t('selectionAdmin.groupSettingsSaveFailed')), 'error');
+                    }
+                  };
+                  const saveManagedGroupImage = async (
+                    image = g?.image || '',
+                    imageFit: 'cover' | 'contain' = g?.imageFit || 'cover',
+                  ) => {
+                    try {
+                      const nextImage = image || '';
+                      await updateSelectionGroup(manageGroupCatsId, {
+                        groupImage: nextImage || null,
+                        groupImageFit: imageFit,
+                      });
+                      updateManagedGroup({ image: nextImage, imageFit });
+                      patchGroupCategoryCache(manageGroupCatsId, {
+                        groupImage: nextImage || null,
+                        groupImageFit: imageFit,
+                      });
+                      return true;
+                    } catch (err) {
+                      toast(getApiErrorMessage(err, t('selectionAdmin.coverSaveFailed')), 'error');
+                      return false;
+                    }
+                  };
+                  const uploadManagedGroupImageFromUrl = async (imageUrl?: string) => {
+                    const targetUrl = imageUrl?.trim() || '';
+                    if (!targetUrl) return false;
+                    if (!/^https?:\/\/.+/i.test(targetUrl)) {
+                      return false;
+                    }
+                    try {
+                      toast(t('selectionAdmin.downloadingImage'), 'info');
+                      const { url } = await uploadOptionImageFromUrl(targetUrl);
+                      if (await saveManagedGroupImage(url, g?.imageFit || 'cover')) {
+                        updateManagedGroup({ image: url });
+                        toast(t('selectionAdmin.imageDownloadedSaved'), 'success');
+                      }
+                      return true;
+                    } catch {
+                      toast(t('selectionAdmin.downloadImageFailed'), 'error');
+                      return true;
+                    }
+                  };
+                  const uploadManagedGroupFile = async (file: File) => {
+                    try {
+                      const { url } = await uploadOptionImage(file);
+                      if (await saveManagedGroupImage(url, g?.imageFit || 'cover')) {
+                        updateManagedGroup({ image: url });
+                        toast(t('selectionAdmin.groupCoverUploaded'), 'success');
+                      }
+                    } catch (err) {
+                      toast(getApiErrorMessage(err, t('selectionAdmin.uploadFailed')), 'error');
+                    }
+                  };
+                  const importManagedGroupCover = async () => {
+                    try {
+                      if (navigator.clipboard?.read) {
+                        const items = await navigator.clipboard.read();
+                        for (const item of items) {
+                          const imageType = item.types.find((type) => type.startsWith('image/'));
+                          if (imageType) {
+                            const blob = await item.getType(imageType);
+                            await uploadManagedGroupFile(
+                              new File([blob], `group-cover.${imageType.split('/')[1] || 'png'}`, { type: imageType }),
+                            );
+                            return;
+                          }
+                        }
+                      }
+                      const text = await navigator.clipboard?.readText?.();
+                      if (text && (await uploadManagedGroupImageFromUrl(text))) return;
+                    } catch {
+                      // Clipboard permission may be unavailable; file picker is the graceful fallback.
+                    }
+                    groupCoverInputRef.current?.click();
+                  };
+                  const handleManagedGroupCoverPaste = async (e: React.ClipboardEvent) => {
+                    for (const item of Array.from(e.clipboardData.items)) {
+                      if (item.type.startsWith('image/')) {
+                        e.preventDefault();
+                        const file = item.getAsFile();
+                        if (!file) return;
+                        await uploadManagedGroupFile(file);
+                        return;
+                      }
+                    }
+                    const text = e.clipboardData.getData('text/plain')?.trim();
+                    if (text && /^https?:\/\/.+/i.test(text)) {
+                      e.preventDefault();
+                      await uploadManagedGroupImageFromUrl(text);
+                    }
+                  };
+                  return (
+                    <>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => {
+                            setManageGroupCatsId(null);
+                            setRemoveGroupCatId(null);
+                          }}
+                          className="text-on-surface-variant hover:text-on-surface"
+                        >
+                          <Icon name="arrow_back" size={18} />
+                        </button>
+                        <h2 className="text-base font-bold text-on-surface">
+                          {g?.name} — {t('selectionAdmin.tabCategories')}
+                        </h2>
                       </div>
-                      <div
-                        className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 space-y-3"
-                        onPaste={handleManagedGroupCoverPaste}
-                      >
-                        <div className="flex items-center justify-between gap-3">
+
+                      <div className="flex-1 overflow-y-auto min-h-0 space-y-3">
+                        <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 space-y-3">
                           <div>
-                            <p className="text-xs font-bold text-on-surface">{t('selectionAdmin.groupCoverTitle')}</p>
+                            <p className="text-xs font-bold text-on-surface">
+                              {t('selectionAdmin.groupSettingsTitle')}
+                            </p>
                             <p className="text-[10px] text-on-surface-variant mt-0.5">
-                              {t('selectionAdmin.coverRecommend')}
+                              {t('selectionAdmin.groupSettingsHint')}
                             </p>
                           </div>
-                          <div className="flex rounded-lg bg-surface-container-high p-0.5 text-[11px]">
-                            {[
-                              { value: 'cover', label: t('selectionAdmin.fitCover') },
-                              { value: 'contain', label: t('selectionAdmin.fitContain') },
-                            ].map((mode) => (
-                              <button
-                                key={mode.value}
-                                onClick={async () => {
-                                  const imageFit = mode.value as 'cover' | 'contain';
-                                  const prevImageFit = g?.imageFit || 'cover';
-                                  updateManagedGroup({ imageFit });
-                                  const saved = await saveManagedGroupImage(g?.image || '', imageFit);
-                                  if (!saved) updateManagedGroup({ imageFit: prevImageFit });
-                                }}
-                                className={`px-2.5 py-1 rounded-md transition-colors ${g?.imageFit === mode.value ? 'bg-primary-container text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
-                              >
-                                {mode.label}
-                              </button>
-                            ))}
+                          <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] gap-2">
+                            <input
+                              name="g"
+                              value={g?.icon || ''}
+                              onChange={(e) => updateManagedGroup({ icon: e.target.value })}
+                              placeholder={t('selectionAdmin.iconPlaceholderShort')}
+                              className="w-full bg-surface-container-low text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                            />
+                            <input
+                              name="g"
+                              value={g?.name || ''}
+                              onChange={(e) => updateManagedGroup({ name: e.target.value })}
+                              placeholder={t('selectionAdmin.groupNamePlaceholder')}
+                              className="w-full bg-surface-container-low text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                            />
+                          </div>
+                          <div className="flex justify-end">
+                            <button
+                              onClick={saveManagedGroupSettings}
+                              disabled={!g?.name.trim()}
+                              className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 disabled:opacity-50"
+                            >
+                              {t('selectionAdmin.saveSettings')}
+                            </button>
                           </div>
                         </div>
-                        <div className="aspect-[2.35/1] rounded-lg overflow-hidden border border-outline-variant/10 bg-surface-container-high">
-                          {g?.image ? (
-                            <SafeImage
-                              src={g.image}
-                              alt=""
-                              className={
-                                g.imageFit === 'contain'
-                                  ? 'w-full h-full object-contain p-2'
-                                  : 'w-full h-full object-cover'
-                              }
-                              fallbackIcon="image"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-on-surface-variant">
-                              <Icon name={g?.icon || 'category'} size={26} />
+                        <div
+                          className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-3 space-y-3"
+                          onPaste={handleManagedGroupCoverPaste}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-bold text-on-surface">{t('selectionAdmin.groupCoverTitle')}</p>
+                              <p className="text-[10px] text-on-surface-variant mt-0.5">
+                                {t('selectionAdmin.coverRecommend')}
+                              </p>
                             </div>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-1 gap-1.5 rounded-lg bg-surface-container-high/50 px-2.5 py-2 text-[10px] leading-relaxed text-on-surface-variant sm:grid-cols-2">
-                          <span>{t('selectionAdmin.coverUploadHint')}</span>
-                          <span>{t('selectionAdmin.coverDisplayHint')}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[10px] text-on-surface-variant">{t('selectionAdmin.coverSafeHint')}</p>
-                          <input
-                            name="file"
-                            ref={groupCoverInputRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={async (e) => {
-                              const f = e.target.files?.[0];
-                              if (f) await uploadManagedGroupFile(f);
-                              e.target.value = '';
-                            }}
-                          />
-                          <div className="flex items-center gap-1.5">
-                            {g?.image && (
+                            <div className="flex rounded-lg bg-surface-container-high p-0.5 text-[11px]">
+                              {[
+                                { value: 'cover', label: t('selectionAdmin.fitCover') },
+                                { value: 'contain', label: t('selectionAdmin.fitContain') },
+                              ].map((mode) => (
+                                <button
+                                  key={mode.value}
+                                  onClick={async () => {
+                                    const imageFit = mode.value as 'cover' | 'contain';
+                                    const prevImageFit = g?.imageFit || 'cover';
+                                    updateManagedGroup({ imageFit });
+                                    const saved = await saveManagedGroupImage(g?.image || '', imageFit);
+                                    if (!saved) updateManagedGroup({ imageFit: prevImageFit });
+                                  }}
+                                  className={`px-2.5 py-1 rounded-md transition-colors ${g?.imageFit === mode.value ? 'bg-primary-container text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
+                                >
+                                  {mode.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="aspect-[2.35/1] rounded-lg overflow-hidden border border-outline-variant/10 bg-surface-container-high">
+                            {g?.image ? (
+                              <SafeImage
+                                src={g.image}
+                                alt=""
+                                className={
+                                  g.imageFit === 'contain'
+                                    ? 'w-full h-full object-contain p-2'
+                                    : 'w-full h-full object-cover'
+                                }
+                                fallbackIcon="image"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-on-surface-variant">
+                                <Icon name={g?.icon || 'category'} size={26} />
+                              </div>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 gap-1.5 rounded-lg bg-surface-container-high/50 px-2.5 py-2 text-[10px] leading-relaxed text-on-surface-variant sm:grid-cols-2">
+                            <span>{t('selectionAdmin.coverUploadHint')}</span>
+                            <span>{t('selectionAdmin.coverDisplayHint')}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[10px] text-on-surface-variant">{t('selectionAdmin.coverSafeHint')}</p>
+                            <input
+                              name="file"
+                              ref={groupCoverInputRef}
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const f = e.target.files?.[0];
+                                if (f) await uploadManagedGroupFile(f);
+                                e.target.value = '';
+                              }}
+                            />
+                            <div className="flex items-center gap-1.5">
+                              {g?.image && (
+                                <button
+                                  onClick={async () => {
+                                    const saved = await saveManagedGroupImage('', g?.imageFit || 'cover');
+                                    if (saved) {
+                                      updateManagedGroup({ image: '' });
+                                      toast(t('selectionAdmin.groupCoverDeleted'), 'success');
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 text-xs font-medium border border-outline-variant/30 text-error/70 hover:text-error rounded hover:border-error/30 shrink-0"
+                                >
+                                  {t('selectionAdmin.deleteCover')}
+                                </button>
+                              )}
                               <button
-                                onClick={async () => {
-                                  const saved = await saveManagedGroupImage('', g?.imageFit || 'cover');
-                                  if (saved) {
-                                    updateManagedGroup({ image: '' });
-                                    toast(t('selectionAdmin.groupCoverDeleted'), 'success');
-                                  }
-                                }}
-                                className="px-3 py-1.5 text-xs font-medium border border-outline-variant/30 text-error/70 hover:text-error rounded hover:border-error/30 shrink-0"
+                                onClick={importManagedGroupCover}
+                                className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 shrink-0"
                               >
-                                {t('selectionAdmin.deleteCover')}
+                                {t('selectionAdmin.uploadCover')}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wide">
+                          {t('selectionAdmin.catsInGroup', { count: catsInGroup.length })}
+                        </p>
+                        {catsInGroup.length === 0 && (
+                          <p className="text-xs text-on-surface-variant py-2 text-center">
+                            {t('selectionAdmin.noCategories')}
+                          </p>
+                        )}
+                        {catsInGroup.map((c) => (
+                          <div
+                            key={c.id}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-outline-variant/20 bg-surface-container-lowest"
+                          >
+                            <Icon name={c.icon || 'category'} size={14} className="text-primary-container shrink-0" />
+                            <span className="text-sm text-on-surface flex-1 truncate">{c.name}</span>
+                            {removeGroupCatId === c.id ? (
+                              <div className="flex shrink-0 items-center gap-1">
+                                <button
+                                  onClick={async () => {
+                                    await updateCategory(c.id, {
+                                      groupId: null,
+                                      groupName: null,
+                                      groupIcon: null,
+                                      groupImage: null,
+                                      groupImageFit: null,
+                                    });
+                                    patchSelectionCategoryCache(c.id, {
+                                      groupId: null,
+                                      groupName: null,
+                                      groupIcon: null,
+                                      groupImage: null,
+                                      groupImageFit: null,
+                                    });
+                                    setGroupItems((items) =>
+                                      items.map((item) =>
+                                        item.id === manageGroupCatsId
+                                          ? { ...item, catCount: Math.max(0, item.catCount - 1) }
+                                          : item,
+                                      ),
+                                    );
+                                    setRemoveGroupCatId(null);
+                                    toast(t('selectionAdmin.removedFromGroup', { name: c.name }), 'success');
+                                  }}
+                                  className="rounded bg-error/10 px-2 py-1 text-[11px] font-bold text-error"
+                                >
+                                  {t('common.confirm')}
+                                </button>
+                                <button
+                                  onClick={() => setRemoveGroupCatId(null)}
+                                  className="rounded px-2 py-1 text-[11px] text-on-surface-variant hover:bg-surface-container-high"
+                                >
+                                  {t('common.cancel')}
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setRemoveGroupCatId(c.id)}
+                                className="text-error/60 hover:text-error shrink-0"
+                                data-tooltip-ignore
+                                aria-label={t('selectionAdmin.removeFromGroup')}
+                                title={t('selectionAdmin.removeFromGroup')}
+                              >
+                                <Icon name="close" size={14} />
                               </button>
                             )}
-                            <button
-                              onClick={importManagedGroupCover}
-                              className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 shrink-0"
-                            >
-                              {t('selectionAdmin.uploadCover')}
-                            </button>
                           </div>
-                        </div>
+                        ))}
+
+                        {otherCats.length > 0 && (
+                          <>
+                            <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wide pt-2">
+                              {t('selectionAdmin.otherCats')}
+                            </p>
+                            {otherCats.map((c) => {
+                              const srcGroup = c.groupId ? groupItems.find((gi) => gi.id === c.groupId) : null;
+                              return (
+                                <button
+                                  key={c.id}
+                                  onClick={async () => {
+                                    const previousGroupId = c.groupId || null;
+                                    await updateCategory(c.id, {
+                                      groupId: manageGroupCatsId,
+                                      groupName: g?.name || '',
+                                      groupIcon: g?.icon || 'category',
+                                      groupImage: g?.image || null,
+                                      groupImageFit: g?.imageFit || 'cover',
+                                    });
+                                    patchSelectionCategoryCache(c.id, {
+                                      groupId: manageGroupCatsId,
+                                      groupName: g?.name || '',
+                                      groupIcon: g?.icon || 'category',
+                                      groupImage: g?.image || null,
+                                      groupImageFit: g?.imageFit || 'cover',
+                                    });
+                                    setGroupItems((items) =>
+                                      items.map((item) => {
+                                        if (item.id === manageGroupCatsId)
+                                          return { ...item, catCount: item.catCount + 1 };
+                                        if (previousGroupId && item.id === previousGroupId) {
+                                          return { ...item, catCount: Math.max(0, item.catCount - 1) };
+                                        }
+                                        return item;
+                                      }),
+                                    );
+                                    toast(t('selectionAdmin.movedToGroup', { name: c.name }), 'success');
+                                  }}
+                                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-outline-variant/30 bg-surface-container-lowest hover:border-primary-container/40 hover:bg-primary-container/5 w-full text-left transition-colors"
+                                >
+                                  <Icon name="add" size={14} className="text-primary-container shrink-0" />
+                                  <span className="text-sm text-on-surface-variant flex-1 truncate">{c.name}</span>
+                                  {srcGroup ? (
+                                    <span className="text-[10px] text-on-surface-variant/60 shrink-0">
+                                      {t('selectionAdmin.fromGroup', { name: srcGroup.name })}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-on-surface-variant/60 shrink-0">
+                                      {t('selectionAdmin.ungrouped')}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </>
+                        )}
                       </div>
-                      <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wide">
-                        {t('selectionAdmin.catsInGroup', { count: catsInGroup.length })}
-                      </p>
-                      {catsInGroup.length === 0 && (
-                        <p className="text-xs text-on-surface-variant py-2 text-center">
-                          {t('selectionAdmin.noCategories')}
-                        </p>
-                      )}
-                      {catsInGroup.map((c) => (
-                        <div
-                          key={c.id}
-                          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-outline-variant/20 bg-surface-container-lowest"
+
+                      <div className="flex justify-end shrink-0 pt-2 border-t border-outline-variant/10">
+                        <button
+                          onClick={() => {
+                            setManageGroupCatsId(null);
+                            setRemoveGroupCatId(null);
+                          }}
+                          className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded"
                         >
-                          <Icon name={c.icon || 'category'} size={14} className="text-primary-container shrink-0" />
-                          <span className="text-sm text-on-surface flex-1 truncate">{c.name}</span>
-                          {removeGroupCatId === c.id ? (
-                            <div className="flex shrink-0 items-center gap-1">
-                              <button
-                                onClick={async () => {
-                                  await updateCategory(c.id, {
-                                    groupId: null,
-                                    groupName: null,
-                                    groupIcon: null,
-                                    groupImage: null,
-                                    groupImageFit: null,
-                                  });
-                                  patchSelectionCategoryCache(c.id, {
-                                    groupId: null,
-                                    groupName: null,
-                                    groupIcon: null,
-                                    groupImage: null,
-                                    groupImageFit: null,
-                                  });
-                                  setGroupItems((items) =>
-                                    items.map((item) =>
-                                      item.id === manageGroupCatsId
-                                        ? { ...item, catCount: Math.max(0, item.catCount - 1) }
-                                        : item,
-                                    ),
-                                  );
-                                  setRemoveGroupCatId(null);
-                                  toast(t('selectionAdmin.removedFromGroup', { name: c.name }), 'success');
-                                }}
-                                className="rounded bg-error/10 px-2 py-1 text-[11px] font-bold text-error"
-                              >
-                                {t('common.confirm')}
-                              </button>
-                              <button
-                                onClick={() => setRemoveGroupCatId(null)}
-                                className="rounded px-2 py-1 text-[11px] text-on-surface-variant hover:bg-surface-container-high"
-                              >
-                                {t('common.cancel')}
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setRemoveGroupCatId(c.id)}
-                              className="text-error/60 hover:text-error shrink-0"
-                              data-tooltip-ignore
-                              aria-label={t('selectionAdmin.removeFromGroup')}
-                              title={t('selectionAdmin.removeFromGroup')}
-                            >
-                              <Icon name="close" size={14} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-
-                      {otherCats.length > 0 && (
-                        <>
-                          <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wide pt-2">
-                            {t('selectionAdmin.otherCats')}
-                          </p>
-                          {otherCats.map((c) => {
-                            const srcGroup = c.groupId ? groupItems.find((gi) => gi.id === c.groupId) : null;
-                            return (
-                              <button
-                                key={c.id}
-                                onClick={async () => {
-                                  const previousGroupId = c.groupId || null;
-                                  await updateCategory(c.id, {
-                                    groupId: manageGroupCatsId,
-                                    groupName: g?.name || '',
-                                    groupIcon: g?.icon || 'category',
-                                    groupImage: g?.image || null,
-                                    groupImageFit: g?.imageFit || 'cover',
-                                  });
-                                  patchSelectionCategoryCache(c.id, {
-                                    groupId: manageGroupCatsId,
-                                    groupName: g?.name || '',
-                                    groupIcon: g?.icon || 'category',
-                                    groupImage: g?.image || null,
-                                    groupImageFit: g?.imageFit || 'cover',
-                                  });
-                                  setGroupItems((items) =>
-                                    items.map((item) => {
-                                      if (item.id === manageGroupCatsId)
-                                        return { ...item, catCount: item.catCount + 1 };
-                                      if (previousGroupId && item.id === previousGroupId) {
-                                        return { ...item, catCount: Math.max(0, item.catCount - 1) };
-                                      }
-                                      return item;
-                                    }),
-                                  );
-                                  toast(t('selectionAdmin.movedToGroup', { name: c.name }), 'success');
-                                }}
-                                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-outline-variant/30 bg-surface-container-lowest hover:border-primary-container/40 hover:bg-primary-container/5 w-full text-left transition-colors"
-                              >
-                                <Icon name="add" size={14} className="text-primary-container shrink-0" />
-                                <span className="text-sm text-on-surface-variant flex-1 truncate">{c.name}</span>
-                                {srcGroup ? (
-                                  <span className="text-[10px] text-on-surface-variant/60 shrink-0">
-                                    {t('selectionAdmin.fromGroup', { name: srcGroup.name })}
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-on-surface-variant/60 shrink-0">
-                                    {t('selectionAdmin.ungrouped')}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </>
-                      )}
-                    </div>
-
-                    <div className="flex justify-end shrink-0 pt-2 border-t border-outline-variant/10">
-                      <button
-                        onClick={() => {
-                          setManageGroupCatsId(null);
-                          setRemoveGroupCatId(null);
-                        }}
-                        className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded"
-                      >
-                        {t('selectionAdmin.back')}
-                      </button>
-                    </div>
-                  </>
-                );
-              })()
-            ) : (
-              <>
-                {/* --- Main view: group list --- */}
-                <div className="flex items-center justify-between shrink-0">
-                  <h2 className="text-base font-bold text-on-surface">{t('selectionAdmin.groupManagement')}</h2>
-                  <button
-                    onClick={() => {
-                      setShowGroupModal(false);
-                      setDeleteGroupId(null);
-                      setRemoveGroupCatId(null);
-                    }}
-                    className="text-on-surface-variant hover:text-on-surface"
-                  >
-                    <Icon name="close" size={18} />
-                  </button>
-                </div>
-
-                {/* Add group form */}
-                <div className="shrink-0 space-y-2 border-b border-outline-variant/10 pb-3">
-                  <div className="flex items-center gap-2">
-                    <input
-                      name="icon"
-                      value={groupForm.icon}
-                      onChange={(e) => setGroupForm({ ...groupForm, icon: e.target.value })}
-                      placeholder={t('selectionAdmin.iconPlaceholderShort')}
-                      className="w-20 bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
-                    />
-                    <input
-                      name="name"
-                      value={groupForm.name}
-                      onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
-                      placeholder={t('selectionAdmin.groupNamePlaceholder')}
-                      className="flex-1 bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
-                    />
+                          {t('selectionAdmin.back')}
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()
+              ) : (
+                <>
+                  {/* --- Main view: group list --- */}
+                  <div className="flex items-center justify-between shrink-0">
+                    <h2 className="text-base font-bold text-on-surface">{t('selectionAdmin.groupManagement')}</h2>
                     <button
-                      onClick={async () => {
-                        if (!groupForm.name.trim()) return;
-                        const newId = `group_${Date.now()}`;
-                        setGroupItems([
-                          ...groupItems,
-                          {
-                            id: newId,
-                            name: groupForm.name.trim(),
-                            icon: groupForm.icon.trim() || 'category',
-                            image: '',
-                            imageFit: 'cover',
-                            catCount: 0,
-                          },
-                        ]);
-                        toast(t('selectionAdmin.groupCreated'));
-                        setGroupForm({ name: '', icon: 'category', image: '', imageFit: 'cover' });
-                        mutateCats();
+                      onClick={() => {
+                        setShowGroupModal(false);
+                        setDeleteGroupId(null);
+                        setRemoveGroupCatId(null);
                       }}
-                      disabled={!groupForm.name.trim()}
-                      className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 disabled:opacity-50 shrink-0"
+                      className="text-on-surface-variant hover:text-on-surface"
                     >
-                      {t('selectionAdmin.create')}
+                      <Icon name="close" size={18} />
                     </button>
                   </div>
-                  <p className="text-[10px] text-on-surface-variant">{t('selectionAdmin.groupCreateHint')}</p>
-                </div>
 
-                {/* Group list */}
-                <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
-                  {groupItems.length === 0 && (
-                    <p className="text-center py-8 text-on-surface-variant text-sm">{t('selectionAdmin.noGroups')}</p>
-                  )}
-                  {groupItems.map((g, i) => (
-                    <div
-                      key={g.id}
-                      draggable
-                      onDragStart={() => setGroupDragIdx(i)}
-                      onDragOver={(e) => {
-                        e.preventDefault();
-                        if (groupDragIdx === null || groupDragIdx === i) return;
-                        const next = [...groupItems];
-                        const [moved] = next.splice(groupDragIdx, 1);
-                        next.splice(i, 0, moved);
-                        setGroupItems(next);
-                        setGroupDragIdx(i);
-                      }}
-                      onDragEnd={() => setGroupDragIdx(null)}
-                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all ${
-                        groupDragIdx === i
-                          ? 'opacity-40 border-primary-container/30 bg-primary-container/5'
-                          : 'border-outline-variant/20 bg-surface-container-lowest hover:border-outline-variant/40'
-                      }`}
-                    >
-                      <span className="cursor-grab active:cursor-grabbing text-on-surface-variant/40 select-none text-sm">
-                        ⠿
-                      </span>
-                      {g.image ? (
-                        <SafeImage
-                          src={g.image}
-                          alt=""
-                          className={`h-8 w-12 rounded border border-outline-variant/10 shrink-0 ${g.imageFit === 'contain' ? 'object-contain p-0.5 bg-surface-container-high' : 'object-cover'}`}
-                          fallbackIcon="image"
-                        />
-                      ) : (
-                        <Icon name={g.icon} size={16} className="text-primary-container shrink-0" />
-                      )}
-                      <span className="text-sm font-medium text-on-surface flex-1">{g.name}</span>
-                      <span className="text-[10px] text-on-surface-variant">
-                        {t('selectionAdmin.nCategories', { count: g.catCount })}
-                      </span>
+                  {/* Add group form */}
+                  <div className="shrink-0 space-y-2 border-b border-outline-variant/10 pb-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        name="icon"
+                        value={groupForm.icon}
+                        onChange={(e) => setGroupForm({ ...groupForm, icon: e.target.value })}
+                        placeholder={t('selectionAdmin.iconPlaceholderShort')}
+                        className="w-20 bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                      />
+                      <input
+                        name="name"
+                        value={groupForm.name}
+                        onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
+                        placeholder={t('selectionAdmin.groupNamePlaceholder')}
+                        className="flex-1 bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                      />
                       <button
-                        onClick={() => setManageGroupCatsId(g.id)}
-                        className="text-primary-container hover:bg-primary-container/10 rounded p-1"
+                        onClick={async () => {
+                          if (!groupForm.name.trim()) return;
+                          const newId = `group_${Date.now()}`;
+                          setGroupItems([
+                            ...groupItems,
+                            {
+                              id: newId,
+                              name: groupForm.name.trim(),
+                              icon: groupForm.icon.trim() || 'category',
+                              image: '',
+                              imageFit: 'cover',
+                              catCount: 0,
+                            },
+                          ]);
+                          toast(t('selectionAdmin.groupCreated'));
+                          setGroupForm({ name: '', icon: 'category', image: '', imageFit: 'cover' });
+                          mutateCats();
+                        }}
+                        disabled={!groupForm.name.trim()}
+                        className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 disabled:opacity-50 shrink-0"
                       >
-                        <Icon name="settings" size={13} />
+                        {t('selectionAdmin.create')}
                       </button>
-                      {deleteGroupId === g.id ? (
-                        <div className="flex shrink-0 items-center gap-1">
-                          <button
-                            onClick={async () => {
-                              const catsInGroup = categories.filter((c) => c.groupId === g.id);
-                              for (const c of catsInGroup) {
-                                await updateCategory(c.id, {
+                    </div>
+                    <p className="text-[10px] text-on-surface-variant">{t('selectionAdmin.groupCreateHint')}</p>
+                  </div>
+
+                  {/* Group list */}
+                  <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
+                    {groupItems.length === 0 && (
+                      <p className="text-center py-8 text-on-surface-variant text-sm">{t('selectionAdmin.noGroups')}</p>
+                    )}
+                    {groupItems.map((g, i) => (
+                      <div
+                        key={g.id}
+                        draggable
+                        onDragStart={() => setGroupDragIdx(i)}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          if (groupDragIdx === null || groupDragIdx === i) return;
+                          const next = [...groupItems];
+                          const [moved] = next.splice(groupDragIdx, 1);
+                          next.splice(i, 0, moved);
+                          setGroupItems(next);
+                          setGroupDragIdx(i);
+                        }}
+                        onDragEnd={() => setGroupDragIdx(null)}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all ${
+                          groupDragIdx === i
+                            ? 'opacity-40 border-primary-container/30 bg-primary-container/5'
+                            : 'border-outline-variant/20 bg-surface-container-lowest hover:border-outline-variant/40'
+                        }`}
+                      >
+                        <span className="cursor-grab active:cursor-grabbing text-on-surface-variant/40 select-none text-sm">
+                          ⠿
+                        </span>
+                        {g.image ? (
+                          <SafeImage
+                            src={g.image}
+                            alt=""
+                            className={`h-8 w-12 rounded border border-outline-variant/10 shrink-0 ${g.imageFit === 'contain' ? 'object-contain p-0.5 bg-surface-container-high' : 'object-cover'}`}
+                            fallbackIcon="image"
+                          />
+                        ) : (
+                          <Icon name={g.icon} size={16} className="text-primary-container shrink-0" />
+                        )}
+                        <span className="text-sm font-medium text-on-surface flex-1">{g.name}</span>
+                        <span className="text-[10px] text-on-surface-variant">
+                          {t('selectionAdmin.nCategories', { count: g.catCount })}
+                        </span>
+                        <button
+                          onClick={() => setManageGroupCatsId(g.id)}
+                          className="text-primary-container hover:bg-primary-container/10 rounded p-1"
+                        >
+                          <Icon name="settings" size={13} />
+                        </button>
+                        {deleteGroupId === g.id ? (
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              onClick={async () => {
+                                const catsInGroup = categories.filter((c) => c.groupId === g.id);
+                                for (const c of catsInGroup) {
+                                  await updateCategory(c.id, {
+                                    groupId: null,
+                                    groupName: null,
+                                    groupIcon: null,
+                                    groupImage: null,
+                                    groupImageFit: null,
+                                  });
+                                }
+                                patchGroupCategoryCache(g.id, {
                                   groupId: null,
                                   groupName: null,
                                   groupIcon: null,
                                   groupImage: null,
                                   groupImageFit: null,
                                 });
-                              }
-                              patchGroupCategoryCache(g.id, {
-                                groupId: null,
-                                groupName: null,
-                                groupIcon: null,
-                                groupImage: null,
-                                groupImageFit: null,
-                              });
-                              setGroupItems(groupItems.filter((gi) => gi.id !== g.id));
-                              setDeleteGroupId(null);
-                              toast(t('selectionAdmin.groupDeleted'), 'success');
-                            }}
-                            className="rounded bg-error/10 px-2 py-1 text-[11px] font-bold text-error"
-                          >
-                            {t('common.confirm')}
-                          </button>
+                                setGroupItems(groupItems.filter((gi) => gi.id !== g.id));
+                                setDeleteGroupId(null);
+                                toast(t('selectionAdmin.groupDeleted'), 'success');
+                              }}
+                              className="rounded bg-error/10 px-2 py-1 text-[11px] font-bold text-error"
+                            >
+                              {t('common.confirm')}
+                            </button>
+                            <button
+                              onClick={() => setDeleteGroupId(null)}
+                              className="rounded px-2 py-1 text-[11px] text-on-surface-variant hover:bg-surface-container-high"
+                            >
+                              {t('common.cancel')}
+                            </button>
+                          </div>
+                        ) : (
                           <button
-                            onClick={() => setDeleteGroupId(null)}
-                            className="rounded px-2 py-1 text-[11px] text-on-surface-variant hover:bg-surface-container-high"
+                            onClick={() => setDeleteGroupId(g.id)}
+                            className={SELECTION_ICON_BUTTON_DELETE}
+                            data-tooltip-ignore
+                            aria-label={t('selectionAdmin.deleteGroup')}
                           >
-                            {t('common.cancel')}
+                            <Icon name="delete" size={13} />
                           </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setDeleteGroupId(g.id)}
-                          className={SELECTION_ICON_BUTTON_DELETE}
-                          data-tooltip-ignore
-                          aria-label={t('selectionAdmin.deleteGroup')}
-                        >
-                          <Icon name="delete" size={13} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
 
-                {/* Save group order */}
-                <div className="flex justify-end gap-2 shrink-0 pt-2 border-t border-outline-variant/10">
-                  <button
-                    onClick={() => {
-                      setShowGroupModal(false);
-                      setDeleteGroupId(null);
-                      setRemoveGroupCatId(null);
-                    }}
-                    className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded"
-                  >
-                    {t('common.close')}
-                  </button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        for (const g of groupItems) {
-                          await updateSelectionGroup(g.id, {
-                            groupName: g.name,
-                            groupIcon: g.icon,
-                            groupImage: g.image || null,
-                            groupImageFit: g.imageFit,
-                          });
-                        }
-                        toast(t('selectionAdmin.groupSaved'), 'success');
+                  {/* Save group order */}
+                  <div className="flex justify-end gap-2 shrink-0 pt-2 border-t border-outline-variant/10">
+                    <button
+                      onClick={() => {
                         setShowGroupModal(false);
                         setDeleteGroupId(null);
                         setRemoveGroupCatId(null);
-                        mutateCats();
-                      } catch {
-                        toast(t('selectionAdmin.saveFailed'), 'error');
-                      }
-                    }}
-                    className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90"
-                  >
-                    {t('selectionAdmin.saveSettings')}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+                      }}
+                      className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded"
+                    >
+                      {t('common.close')}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          for (const g of groupItems) {
+                            await updateSelectionGroup(g.id, {
+                              groupName: g.name,
+                              groupIcon: g.icon,
+                              groupImage: g.image || null,
+                              groupImageFit: g.imageFit,
+                            });
+                          }
+                          toast(t('selectionAdmin.groupSaved'), 'success');
+                          setShowGroupModal(false);
+                          setDeleteGroupId(null);
+                          setRemoveGroupCatId(null);
+                          mutateCats();
+                        } catch {
+                          toast(t('selectionAdmin.saveFailed'), 'error');
+                        }
+                      }}
+                      className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90"
+                    >
+                      {t('selectionAdmin.saveSettings')}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {/* ===== Category Sort Modal ===== */}
-      {showCatSortModal && (
-        <div
-          className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
-          onClick={() => setShowCatSortModal(false)}
-        >
+      {showCatSortModal &&
+        createPortal(
           <div
-            className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] flex min-h-0 flex-col bg-surface-container-low rounded-2xl border border-outline-variant/20 p-4 space-y-4 shadow-2xl sm:relative sm:inset-auto sm:w-full sm:max-w-md sm:max-h-[90dvh] sm:p-5 sm:rounded-xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
+            onClick={() => setShowCatSortModal(false)}
           >
-            <div className="flex items-center justify-between shrink-0">
-              <h2 className="text-base font-bold text-on-surface">{t('selectionAdmin.catSortTitle')}</h2>
-              <button
-                onClick={() => setShowCatSortModal(false)}
-                className="text-on-surface-variant hover:text-on-surface"
-              >
-                <Icon name="close" size={18} />
-              </button>
-            </div>
-            <p className="text-xs text-on-surface-variant shrink-0">{t('selectionAdmin.catSortHint')}</p>
-            <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
-              {catSortItems.map((item, i) => (
-                <div
-                  key={item.id}
-                  draggable
-                  onDragStart={() => setCatSortDragIdx(i)}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    if (catSortDragIdx === null || catSortDragIdx === i) return;
-                    const next = [...catSortItems];
-                    const [moved] = next.splice(catSortDragIdx, 1);
-                    next.splice(i, 0, moved);
-                    setCatSortItems(next);
-                    setCatSortDragIdx(i);
-                  }}
-                  onDragEnd={() => setCatSortDragIdx(null)}
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all ${
-                    catSortDragIdx === i
-                      ? 'opacity-40 border-primary-container/30 bg-primary-container/5'
-                      : 'border-outline-variant/20 bg-surface-container-lowest hover:border-outline-variant/40'
-                  }`}
+            <div
+              className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] flex min-h-0 flex-col bg-surface-container-low rounded-2xl border border-outline-variant/20 p-4 space-y-4 shadow-2xl sm:relative sm:inset-auto sm:w-full sm:max-w-md sm:max-h-[90dvh] sm:p-5 sm:rounded-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between shrink-0">
+                <h2 className="text-base font-bold text-on-surface">{t('selectionAdmin.catSortTitle')}</h2>
+                <button
+                  onClick={() => setShowCatSortModal(false)}
+                  className="text-on-surface-variant hover:text-on-surface"
                 >
-                  <span className="cursor-grab active:cursor-grabbing text-on-surface-variant/40 select-none text-sm">
-                    ⠿
-                  </span>
-                  <span className="text-sm font-medium text-on-surface flex-1">{item.name}</span>
-                  <span className="text-[10px] text-on-surface-variant">{i + 1}</span>
-                </div>
-              ))}
+                  <Icon name="close" size={18} />
+                </button>
+              </div>
+              <p className="text-xs text-on-surface-variant shrink-0">{t('selectionAdmin.catSortHint')}</p>
+              <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
+                {catSortItems.map((item, i) => (
+                  <div
+                    key={item.id}
+                    draggable
+                    onDragStart={() => setCatSortDragIdx(i)}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (catSortDragIdx === null || catSortDragIdx === i) return;
+                      const next = [...catSortItems];
+                      const [moved] = next.splice(catSortDragIdx, 1);
+                      next.splice(i, 0, moved);
+                      setCatSortItems(next);
+                      setCatSortDragIdx(i);
+                    }}
+                    onDragEnd={() => setCatSortDragIdx(null)}
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all ${
+                      catSortDragIdx === i
+                        ? 'opacity-40 border-primary-container/30 bg-primary-container/5'
+                        : 'border-outline-variant/20 bg-surface-container-lowest hover:border-outline-variant/40'
+                    }`}
+                  >
+                    <span className="cursor-grab active:cursor-grabbing text-on-surface-variant/40 select-none text-sm">
+                      ⠿
+                    </span>
+                    <span className="text-sm font-medium text-on-surface flex-1">{item.name}</span>
+                    <span className="text-[10px] text-on-surface-variant">{i + 1}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2 shrink-0 pt-2 border-t border-outline-variant/10">
+                <button
+                  onClick={() => setShowCatSortModal(false)}
+                  className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await sortCategories(catSortItems.map((item, i) => ({ id: item.id, sortOrder: i })));
+                      toast(t('selectionAdmin.orderSaved'), 'success');
+                      setShowCatSortModal(false);
+                      mutateCats();
+                    } catch (err: unknown) {
+                      toast(getApiErrorMessage(err, t('selectionAdmin.orderSaveFailed')), 'error');
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90"
+                >
+                  {t('selectionAdmin.saveOrder')}
+                </button>
+              </div>
             </div>
-            <div className="flex justify-end gap-2 shrink-0 pt-2 border-t border-outline-variant/10">
-              <button
-                onClick={() => setShowCatSortModal(false)}
-                className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={async () => {
-                  try {
-                    await sortCategories(catSortItems.map((item, i) => ({ id: item.id, sortOrder: i })));
-                    toast(t('selectionAdmin.orderSaved'), 'success');
-                    setShowCatSortModal(false);
-                    mutateCats();
-                  } catch (err: unknown) {
-                    toast(getApiErrorMessage(err, t('selectionAdmin.orderSaveFailed')), 'error');
-                  }
-                }}
-                className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90"
-              >
-                {t('selectionAdmin.saveOrder')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </AdminManagementPage>
   );
 }

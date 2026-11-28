@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import Icon from '../shared/Icon';
 
@@ -14,7 +15,8 @@ export default function LoginPromptDialog({
   const { t } = useTranslation();
   if (!open) return null;
   const reason = t('home.downloadModel', { defaultValue: t('common.download') });
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -51,6 +53,7 @@ export default function LoginPromptDialog({
           </button>
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }

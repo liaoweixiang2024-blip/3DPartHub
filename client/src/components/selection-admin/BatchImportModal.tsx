@@ -1,4 +1,5 @@
 import type { SelectionComponent } from '../../api/selections';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { AdminTableHeadCell, AdminTableHeadRow, ADMIN_TABLE_HEAD_CLASS } from '../shared/AdminDataTable';
 import Icon from '../shared/Icon';
@@ -44,7 +45,8 @@ export function BatchImportModal({
   const { t } = useTranslation();
   if (!showBatchModal) return null;
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <div
       className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
       onClick={() => {
@@ -209,6 +211,7 @@ export function BatchImportModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

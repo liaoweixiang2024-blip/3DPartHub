@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { authApi } from '../../api/auth';
@@ -213,7 +214,8 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
   const heading = mode === 'login' ? t('auth.loginHeading') : t('auth.registerHeading');
   const AuthDialog = getInterfaceThemePackage(interfaceTheme).templates.AuthDialog;
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -520,6 +522,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
           </AuthDialog>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

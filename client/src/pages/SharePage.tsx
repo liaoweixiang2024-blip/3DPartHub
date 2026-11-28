@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useEffect, lazy, Suspense, useCallback, useRef, useMemo, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
 import { getShareInfo, verifySharePassword, getShareDownloadUrl, type ShareInfo } from '../api/shares';
@@ -708,43 +709,47 @@ export default function SharePage() {
 
       {/* 移动端文件下载抽屉（对齐详情页底部弹层样式） */}
       <AnimatePresence>
-        {downloadDrawerOpen && !isDesktop && info && (
-          <>
-            <motion.div
-              key="share-download-backdrop"
-              variants={overlayMotion}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="fixed inset-0 z-[200] bg-black/50"
-              onClick={() => setDownloadDrawerOpen(false)}
-            />
-            <motion.div
-              key="share-download-sheet"
-              variants={bottomSheetMotion}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="fixed inset-x-0 bottom-0 z-[201] mx-auto max-w-lg rounded-t-2xl border-t border-outline-variant/20 bg-surface-container-low pb-[env(safe-area-inset-bottom,0px)] shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-4 pb-1 pt-3">
-                <h3 className="text-sm font-bold text-on-surface">{t('sharePage.fileDownloads')}</h3>
-                <button
-                  type="button"
-                  onClick={() => setDownloadDrawerOpen(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface"
-                  aria-label={t('sharePage.closeDrawer')}
-                >
-                  <Icon name="close" size={18} />
-                </button>
-              </div>
-              <div className="max-h-[60dvh] overflow-y-auto px-3 pb-4 pt-2">
-                {renderDownloadSection({ hideTitle: true })}
-              </div>
-            </motion.div>
-          </>
-        )}
+        {downloadDrawerOpen &&
+          !isDesktop &&
+          info &&
+          createPortal(
+            <>
+              <motion.div
+                key="share-download-backdrop"
+                variants={overlayMotion}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="fixed inset-0 z-[200] bg-black/50"
+                onClick={() => setDownloadDrawerOpen(false)}
+              />
+              <motion.div
+                key="share-download-sheet"
+                variants={bottomSheetMotion}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="fixed inset-x-0 bottom-0 z-[201] mx-auto max-w-lg rounded-t-2xl border-t border-outline-variant/20 bg-surface-container-low pb-[env(safe-area-inset-bottom,0px)] shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-4 pb-1 pt-3">
+                  <h3 className="text-sm font-bold text-on-surface">{t('sharePage.fileDownloads')}</h3>
+                  <button
+                    type="button"
+                    onClick={() => setDownloadDrawerOpen(false)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface"
+                    aria-label={t('sharePage.closeDrawer')}
+                  >
+                    <Icon name="close" size={18} />
+                  </button>
+                </div>
+                <div className="max-h-[60dvh] overflow-y-auto px-3 pb-4 pt-2">
+                  {renderDownloadSection({ hideTitle: true })}
+                </div>
+              </motion.div>
+            </>,
+            document.body,
+          )}
       </AnimatePresence>
 
       {/* Footer */}

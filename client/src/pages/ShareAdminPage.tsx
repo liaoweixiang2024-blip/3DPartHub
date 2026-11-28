@@ -20,6 +20,7 @@ import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { copyText } from '../lib/clipboard';
 import { getErrorMessage } from '../lib/errorNotifications';
 import type { ApiResponse } from '../types/api';
+import { createPortal } from 'react-dom';
 
 interface ShareItem {
   id: string;
@@ -450,47 +451,49 @@ function Content() {
         })}
         {items.length > 0 && <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />}
       </div>
-      {batchDeleteOpen && (
-        <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
-          onClick={() => !batchDeleting && setBatchDeleteOpen(false)}
-        >
+      {batchDeleteOpen &&
+        createPortal(
           <div
-            className="w-full max-w-sm rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+            onClick={() => !batchDeleting && setBatchDeleteOpen(false)}
           >
-            <div className="flex items-start gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-error-container text-error">
-                <Icon name="delete" size={20} />
-              </span>
-              <div className="min-w-0">
-                <h3 className="text-base font-bold text-on-surface">{t('shareAdminPage.batchDeleteTitle')}</h3>
-                <p className="mt-1 text-sm leading-relaxed text-on-surface-variant">
-                  {t('shareAdminPage.batchDeleteDesc', { count: selectedCount })}
-                </p>
+            <div
+              className="w-full max-w-sm rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-error-container text-error">
+                  <Icon name="delete" size={20} />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-base font-bold text-on-surface">{t('shareAdminPage.batchDeleteTitle')}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-on-surface-variant">
+                    {t('shareAdminPage.batchDeleteDesc', { count: selectedCount })}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBatchDeleteOpen(false)}
+                  disabled={batchDeleting}
+                  className="rounded-lg border border-outline-variant/25 px-4 py-2.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:opacity-50"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBatchDelete}
+                  disabled={batchDeleting}
+                  className="rounded-lg bg-error px-4 py-2.5 text-sm font-bold text-on-error-container transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {batchDeleting ? t('shareAdminPage.deleting') : t('shareAdminPage.confirmDelete')}
+                </button>
               </div>
             </div>
-            <div className="mt-5 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setBatchDeleteOpen(false)}
-                disabled={batchDeleting}
-                className="rounded-lg border border-outline-variant/25 px-4 py-2.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:opacity-50"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                onClick={handleBatchDelete}
-                disabled={batchDeleting}
-                className="rounded-lg bg-error px-4 py-2.5 text-sm font-bold text-on-error-container transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                {batchDeleting ? t('shareAdminPage.deleting') : t('shareAdminPage.confirmDelete')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </AdminManagementPage>
   );
 }

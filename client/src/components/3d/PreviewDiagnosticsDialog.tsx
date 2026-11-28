@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { ModelPreviewMeta } from '../../api/models';
 import Icon from '../shared/Icon';
@@ -95,14 +96,16 @@ export default function PreviewDiagnosticsDialog({
       })
     : '-';
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）。
+  // z-[520]：本弹窗会从预览操作弹窗（PreviewOperationsModal，z-500，同在 body 层）内部打开，需压过它
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[180] flex items-end sm:items-center justify-center bg-black/55 backdrop-blur-sm p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:p-4"
+          className="fixed inset-0 z-[520] flex items-end sm:items-center justify-center bg-black/55 backdrop-blur-sm p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:p-4"
           onClick={(event) => {
             event.stopPropagation();
             onClose();
@@ -263,6 +266,7 @@ export default function PreviewDiagnosticsDialog({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

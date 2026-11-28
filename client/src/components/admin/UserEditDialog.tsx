@@ -1,7 +1,6 @@
 import { motion } from 'framer-motion';
 import type { TFunction } from 'i18next';
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import client from '../../api/client';
@@ -274,9 +273,8 @@ export default function UserEditDialog({
   }
 
   // zIndex 10000：盖过 TopNav(z-250)——本页 ConfirmDialog 同款；默认 120 会被移动端顶栏压住头部。
-  // createPortal 到 body：脱离 #root 的 isolation:isolate 层级——iOS Safari 上 root 内弹窗
-  // 会被 root 外绘制顺序更高/同级怪癖的页头页脚导航盖住，挂到 body 直属层后任何站内元素都压不过它
-  return createPortal(
+  // 挂载点由 DialogOverlay 统一 createPortal 到 body（脱离 #root isolation 层级）
+  return (
     <DialogOverlay onClose={onClose} zIndex={10000} bottomOnMobile safeArea>
       <motion.div
         variants={isMobile ? bottomSheetMotion : dialogPanelMotion}
@@ -581,7 +579,6 @@ export default function UserEditDialog({
           </button>
         </div>
       </motion.div>
-    </DialogOverlay>,
-    document.body,
+    </DialogOverlay>
   );
 }

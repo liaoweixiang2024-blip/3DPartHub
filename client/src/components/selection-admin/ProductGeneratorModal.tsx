@@ -1,4 +1,5 @@
 import type { ColumnDef, SelectionCategory } from '../../api/selections';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { AdminButton } from '../shared/AdminControls';
 import { AdminTableHeadCell, AdminTableHeadRow, ADMIN_TABLE_HEAD_CLASS } from '../shared/AdminDataTable';
@@ -81,7 +82,8 @@ export function ProductGeneratorModal({
   const { t } = useTranslation();
   if (!showGenerateModal || !generateCat) return null;
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <div
       className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
       onClick={() => setShowGenerateModal(false)}
@@ -353,6 +355,7 @@ export function ProductGeneratorModal({
           </AdminButton>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

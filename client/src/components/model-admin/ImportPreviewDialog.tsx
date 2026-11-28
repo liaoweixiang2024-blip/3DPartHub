@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useCallback, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { modelApi } from '../../api/models';
 import { dialogPanelMotion } from '../../lib/motion';
 import Icon from '../shared/Icon';
@@ -54,7 +55,8 @@ export default function ImportPreviewDialog({
     }
   }, [file, model.model_id, model.name, onClose, onImported, toast, uploading]);
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <div
       className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={() => !uploading && onClose()}
@@ -157,6 +159,7 @@ export default function ImportPreviewDialog({
           </button>
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -1,4 +1,5 @@
 import type { ProductWallItem } from '../../api/productWall';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import Icon from '../shared/Icon';
 import SafeImage from '../shared/SafeImage';
@@ -21,7 +22,8 @@ export function ProductWallDeleteDialog({
   const { t } = useTranslation();
   if (!deleteDialog) return null;
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <div
       className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/42 px-4 py-6 backdrop-blur-md"
       onClick={() => {
@@ -92,6 +94,7 @@ export function ProductWallDeleteDialog({
           </button>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

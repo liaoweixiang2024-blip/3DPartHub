@@ -4,6 +4,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { threadSizeApi, type ThreadSizeEntry } from '../../api/threadSize';
 import { useImeSafeSearchInput } from '../../hooks/useImeSafeSearchInput';
@@ -153,7 +154,8 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
     }
   };
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <>
       <div
         className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
@@ -305,7 +307,8 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
         description={t('threadTool.confirmDeleteDesc', { name: deleteTarget?.primary || '' })}
         confirmLabel={t('threadTool.confirmDeleteLabel')}
       />
-    </>
+    </>,
+    document.body,
   );
 }
 

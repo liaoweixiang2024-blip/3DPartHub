@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import client from '../api/client';
@@ -681,7 +682,8 @@ function AuditRetentionDialog({
   const cutoffLabel = policy?.cutoffAt ? formatDateTime(policy.cutoffAt) : t('auditLog.retention.noCleanup');
   const cleanupDisabled = loading || changed || selectedDays <= 0 || deleteCount <= 0 || cleaning || saving;
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-4 py-4 backdrop-blur-sm md:items-center">
       <div className="w-full max-w-lg rounded-lg border border-outline-variant/20 bg-surface shadow-2xl">
         <div className="flex items-start gap-3 border-b border-outline-variant/10 px-5 py-4">
@@ -771,7 +773,8 @@ function AuditRetentionDialog({
           </AdminButton>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

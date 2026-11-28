@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import Icon from '../shared/Icon';
 import ModelThumbnail from '../shared/ModelThumbnail';
@@ -25,7 +26,8 @@ export default function DeleteModelDialog({
     t('deleteModelDialog.itemDatabase'),
   ];
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <AnimatePresence>
       {target && (
         <motion.div
@@ -90,6 +92,7 @@ export default function DeleteModelDialog({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

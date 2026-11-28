@@ -28,6 +28,7 @@ import { getClipboardImageFile } from '../lib/clipboardImages';
 import { notifyGlobalError } from '../lib/errorNotifications';
 import { usePublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
+import { createPortal } from 'react-dom';
 
 interface TicketInfo {
   id: string;
@@ -168,18 +169,20 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
         </div>
       </div>
       {/* Image preview overlay */}
-      {previewImg && (
-        <div
-          className="fixed inset-0 z-[260] bg-black/80 flex items-center justify-center"
-          onClick={() => setPreviewImg(null)}
-        >
-          <SafeImage
-            src={previewImg}
-            alt={t('common.preview')}
-            className="max-w-[90vw] img-safe-max-h object-contain"
-          />
-        </div>
-      )}
+      {previewImg &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[260] bg-black/80 flex items-center justify-center"
+            onClick={() => setPreviewImg(null)}
+          >
+            <SafeImage
+              src={previewImg}
+              alt={t('common.preview')}
+              className="max-w-[90vw] img-safe-max-h object-contain"
+            />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import useSWR from 'swr';
 import { modelApi } from '../../api/models';
 import { getSettings, updateSettings } from '../../api/settings';
@@ -263,7 +264,8 @@ export default function PreviewOperationsModal({
     ? 'relative flex h-dvh max-h-dvh w-full flex-col overflow-hidden bg-surface-container-low shadow-xl'
     : 'relative max-h-[92dvh] w-full max-w-[100rem] overflow-y-auto rounded-lg border border-outline-variant/20 bg-surface-container-low shadow-xl';
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -321,6 +323,7 @@ export default function PreviewOperationsModal({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

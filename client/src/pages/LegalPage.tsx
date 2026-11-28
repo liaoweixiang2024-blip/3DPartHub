@@ -18,6 +18,7 @@ import {
 } from '../lib/legalContent';
 import { refreshSiteConfig, usePublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
+import { createPortal } from 'react-dom';
 
 function splitParagraphs(content: string) {
   return content
@@ -155,55 +156,57 @@ export default function LegalPage() {
             >
               <Icon name="format_list_bulleted" size={18} />
             </button>
-            {tocOpen && (
-              <div className="fixed inset-0 z-[320] lg:hidden">
-                <button
-                  type="button"
-                  aria-label={t('legal.closeToc')}
-                  className="absolute inset-0 bg-surface-dim/45"
-                  onClick={() => setTocOpen(false)}
-                />
-                <nav className="absolute bottom-0 right-0 top-0 flex w-[18rem] max-w-[82vw] flex-col border-l border-outline-variant/16 bg-surface px-4 pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(1rem+env(safe-area-inset-top,0px))] shadow-[-12px_0_30px_rgba(0,0,0,0.18)]">
-                  <div className="flex items-center justify-between border-b border-outline-variant/12 pb-3">
-                    <div className="flex items-center gap-2">
-                      <Icon name="format_list_bulleted" size={18} className="text-primary-container" />
-                      <p className="text-sm font-bold text-on-surface">{t('legal.tableOfContents')}</p>
+            {tocOpen &&
+              createPortal(
+                <div className="fixed inset-0 z-[320] lg:hidden">
+                  <button
+                    type="button"
+                    aria-label={t('legal.closeToc')}
+                    className="absolute inset-0 bg-surface-dim/45"
+                    onClick={() => setTocOpen(false)}
+                  />
+                  <nav className="absolute bottom-0 right-0 top-0 flex w-[18rem] max-w-[82vw] flex-col border-l border-outline-variant/16 bg-surface px-4 pb-[calc(4.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(1rem+env(safe-area-inset-top,0px))] shadow-[-12px_0_30px_rgba(0,0,0,0.18)]">
+                    <div className="flex items-center justify-between border-b border-outline-variant/12 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Icon name="format_list_bulleted" size={18} className="text-primary-container" />
+                        <p className="text-sm font-bold text-on-surface">{t('legal.tableOfContents')}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setTocOpen(false)}
+                        aria-label={t('legal.closeToc')}
+                        className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant transition-colors active:bg-surface-container"
+                      >
+                        <Icon name="close" size={18} />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setTocOpen(false)}
-                      aria-label={t('legal.closeToc')}
-                      className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant transition-colors active:bg-surface-container"
-                    >
-                      <Icon name="close" size={18} />
-                    </button>
-                  </div>
-                  <div className="relative min-h-0 flex-1">
-                    <ol className="h-full touch-pan-y overflow-y-auto overscroll-y-contain py-2 text-sm text-on-surface-variant scrollbar-hidden [-webkit-overflow-scrolling:touch]">
-                      {sections.map((section, i) => (
-                        <li
-                          key={`mobile-toc-${section.title}-${i}`}
-                          className="border-b border-outline-variant/8 last:border-b-0"
-                        >
-                          <a
-                            href={`#${sectionId(i)}`}
-                            onClick={() => setTocOpen(false)}
-                            className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-3 transition-colors active:bg-surface-container active:text-primary-container"
+                    <div className="relative min-h-0 flex-1">
+                      <ol className="h-full touch-pan-y overflow-y-auto overscroll-y-contain py-2 text-sm text-on-surface-variant scrollbar-hidden [-webkit-overflow-scrolling:touch]">
+                        {sections.map((section, i) => (
+                          <li
+                            key={`mobile-toc-${section.title}-${i}`}
+                            className="border-b border-outline-variant/8 last:border-b-0"
                           >
-                            <span className="shrink-0 text-xs font-bold tabular-nums text-primary-container">
-                              {String(i + 1).padStart(2, '0')}
-                            </span>
-                            <span className="truncate">{section.title}</span>
-                          </a>
-                        </li>
-                      ))}
-                    </ol>
-                    <div className="pointer-events-none absolute inset-x-0 top-0 h-5 bg-gradient-to-b from-surface to-transparent" />
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-surface to-transparent" />
-                  </div>
-                </nav>
-              </div>
-            )}
+                            <a
+                              href={`#${sectionId(i)}`}
+                              onClick={() => setTocOpen(false)}
+                              className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-3 transition-colors active:bg-surface-container active:text-primary-container"
+                            >
+                              <span className="shrink-0 text-xs font-bold tabular-nums text-primary-container">
+                                {String(i + 1).padStart(2, '0')}
+                              </span>
+                              <span className="truncate">{section.title}</span>
+                            </a>
+                          </li>
+                        ))}
+                      </ol>
+                      <div className="pointer-events-none absolute inset-x-0 top-0 h-5 bg-gradient-to-b from-surface to-transparent" />
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-surface to-transparent" />
+                    </div>
+                  </nav>
+                </div>,
+                document.body,
+              )}
 
             <div className="grid gap-5 border-t border-outline-variant/16 lg:grid-cols-[14rem_minmax(0,1fr)]">
               <aside className="hidden py-5 lg:sticky lg:top-4 lg:block lg:self-start">

@@ -4,6 +4,7 @@
  * - SelectionImportModal  上传 zip → 预览对比 → 确认导入（slug 覆盖更新/新建，产品按型号合并不删）
  */
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
   analyzeSelectionTransfer,
@@ -14,6 +15,7 @@ import {
 import Icon from '../shared/Icon';
 
 const MODAL_OVERLAY_CLASS = 'fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4';
+// 两个弹窗均 createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
 const MODAL_PANEL_CLASS =
   'fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] flex min-h-0 flex-col bg-surface-container-low rounded-2xl border border-outline-variant/20 p-4 space-y-4 shadow-2xl sm:relative sm:inset-auto sm:w-full sm:max-w-lg sm:max-h-[90dvh] sm:p-5 sm:rounded-xl';
 
@@ -94,7 +96,7 @@ export function SelectionExportModal({
     }
   };
 
-  return (
+  return createPortal(
     <div className={MODAL_OVERLAY_CLASS}>
       <div className={MODAL_PANEL_CLASS} onClick={(e) => e.stopPropagation()}>
         <div className="shrink-0 space-y-1">
@@ -162,7 +164,8 @@ export function SelectionExportModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -259,7 +262,7 @@ export function SelectionImportModal({
     }
   };
 
-  return (
+  return createPortal(
     <div className={MODAL_OVERLAY_CLASS}>
       <div className={MODAL_PANEL_CLASS} onClick={(e) => e.stopPropagation()}>
         <div className="shrink-0 space-y-1">
@@ -428,6 +431,7 @@ export function SelectionImportModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

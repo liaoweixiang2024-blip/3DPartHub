@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { createPortal } from 'react-dom';
 import Icon from '../shared/Icon';
 import type { ShareLinkDialogState } from './selectionUtils';
 
@@ -20,7 +21,8 @@ export function SelectionShareLinkDialog({
 
   const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <div
       className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/50 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
@@ -78,6 +80,7 @@ export function SelectionShareLinkDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

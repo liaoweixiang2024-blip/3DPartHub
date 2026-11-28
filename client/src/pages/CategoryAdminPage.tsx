@@ -21,6 +21,7 @@ import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { getErrorMessage } from '../lib/errorNotifications';
+import { createPortal } from 'react-dom';
 
 const CATEGORY_ADMIN_GRID_COLUMNS = '28px 34px 44px minmax(0,1fr) 104px 68px 152px';
 
@@ -620,7 +621,8 @@ function CategoryModal({
     'other_materials',
   ];
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -739,7 +741,8 @@ function CategoryModal({
           </AdminButton>
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }
 
@@ -1045,45 +1048,47 @@ function Content() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {deleteConfirm && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
-            onClick={() => setDeleteConfirm(null)}
-          >
+        {deleteConfirm &&
+          createPortal(
             <motion.div
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.95 }}
-              className="w-full max-w-sm rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+              onClick={() => setDeleteConfirm(null)}
             >
-              <div className="mb-4 flex items-start gap-3">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-error-container/15 text-error">
-                  <Icon name="warning" size={20} />
-                </span>
-                <div>
-                  <h3 className="text-base font-semibold text-on-surface">
-                    {t('categoryAdminPage.deleteConfirmTitle')}
-                  </h3>
-                  <p className="mt-1 text-sm leading-relaxed text-on-surface-variant">
-                    {t('categoryAdminPage.deleteConfirmHint')}
-                  </p>
+              <motion.div
+                initial={{ scale: 0.95 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.95 }}
+                className="w-full max-w-sm rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5 shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="mb-4 flex items-start gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-error-container/15 text-error">
+                    <Icon name="warning" size={20} />
+                  </span>
+                  <div>
+                    <h3 className="text-base font-semibold text-on-surface">
+                      {t('categoryAdminPage.deleteConfirmTitle')}
+                    </h3>
+                    <p className="mt-1 text-sm leading-relaxed text-on-surface-variant">
+                      {t('categoryAdminPage.deleteConfirmHint')}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <AdminButton onClick={() => setDeleteConfirm(null)} className="w-full" variant="secondary">
-                  {t('common.cancel')}
-                </AdminButton>
-                <AdminButton onClick={() => handleDelete(deleteConfirm)} className="w-full" variant="danger">
-                  {t('categoryAdminPage.confirmDeleteText')}
-                </AdminButton>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
+                <div className="grid grid-cols-2 gap-2">
+                  <AdminButton onClick={() => setDeleteConfirm(null)} className="w-full" variant="secondary">
+                    {t('common.cancel')}
+                  </AdminButton>
+                  <AdminButton onClick={() => handleDelete(deleteConfirm)} className="w-full" variant="danger">
+                    {t('categoryAdminPage.confirmDeleteText')}
+                  </AdminButton>
+                </div>
+              </motion.div>
+            </motion.div>,
+            document.body,
+          )}
       </AnimatePresence>
     </AdminManagementPage>
   );

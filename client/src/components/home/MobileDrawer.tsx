@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import Icon from '../shared/Icon';
 import { useMobileDrawerStore } from '../../stores/useMobileDrawerStore';
@@ -49,7 +50,8 @@ export function MobileDrawer({
     }
   }, [open]);
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <>
       {/* 遮罩常驻（opacity 切换 + 关闭态穿透点击） */}
       <div
@@ -177,6 +179,7 @@ export function MobileDrawer({
           })}
         </div>
       </aside>
-    </>
+    </>,
+    document.body,
   );
 }

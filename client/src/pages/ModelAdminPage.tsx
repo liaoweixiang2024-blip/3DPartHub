@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { lazy, memo, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Trans, useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import useSWR, { mutate as swrMutate } from 'swr';
@@ -93,7 +94,8 @@ function useDebouncedValue<T>(value: T, delay = 300) {
 
 function UploadModalFallback({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4"
       role="dialog"
@@ -117,7 +119,8 @@ function UploadModalFallback({ onClose }: { onClose: () => void }) {
           <Icon name="close" size={18} />
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -2576,88 +2579,93 @@ function DesktopContent() {
           <ImportModelsDialog onClose={() => setImportModelsOpen(false)} onImported={refreshModelAdminData} />
         )}
         <AnimatePresence>
-          {deleteTarget && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm"
-              onClick={() => setDeleteTarget(null)}
-            >
+          {deleteTarget &&
+            createPortal(
               <motion.div
-                initial={{ scale: 0.95 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0.95 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-6"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm"
+                onClick={() => setDeleteTarget(null)}
               >
-                <h3 className="font-headline text-lg font-semibold text-on-surface mb-2">
-                  {t('modelAdminPage.confirmDeleteTitle')}
-                </h3>
-                <p className="text-sm text-on-surface-variant mb-6">
-                  {t('modelAdminPage.confirmDeleteDesc', { name: deleteTarget.name })}
-                </p>
-                <div className="flex justify-end gap-3">
-                  <button
-                    onClick={() => setDeleteTarget(null)}
-                    className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
-                  >
-                    {t('common.cancel')}
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="px-4 py-2 bg-error text-white rounded-sm text-sm hover:bg-error/90 transition-colors disabled:opacity-50"
-                  >
-                    {deleting ? t('modelAdminPage.deleting') : t('common.delete')}
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
+                <motion.div
+                  initial={{ scale: 0.95 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0.95 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-6"
+                >
+                  <h3 className="font-headline text-lg font-semibold text-on-surface mb-2">
+                    {t('modelAdminPage.confirmDeleteTitle')}
+                  </h3>
+                  <p className="text-sm text-on-surface-variant mb-6">
+                    {t('modelAdminPage.confirmDeleteDesc', { name: deleteTarget.name })}
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setDeleteTarget(null)}
+                      className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
+                    >
+                      {t('common.cancel')}
+                    </button>
+                    <button
+                      onClick={handleDelete}
+                      disabled={deleting}
+                      className="px-4 py-2 bg-error text-white rounded-sm text-sm hover:bg-error/90 transition-colors disabled:opacity-50"
+                    >
+                      {deleting ? t('modelAdminPage.deleting') : t('common.delete')}
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>,
+              document.body,
+            )}
         </AnimatePresence>
         <AnimatePresence>
-          {batchDeleteOpen && selectedModelCount > 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm"
-              onClick={() => !batchDeleting && setBatchDeleteOpen(false)}
-            >
+          {batchDeleteOpen &&
+            selectedModelCount > 0 &&
+            createPortal(
               <motion.div
-                initial={{ scale: 0.95 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0.95 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-6"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm"
+                onClick={() => !batchDeleting && setBatchDeleteOpen(false)}
               >
-                <h3 className="font-headline text-lg font-semibold text-on-surface mb-2">
-                  {t('modelAdminPage.confirmBatchDeleteTitle')}
-                </h3>
-                <p className="text-sm text-on-surface-variant mb-6">
-                  {selectedAllMatching && ` ${t('modelAdminPage.batchDeleteAllMatchingNote')} `}
-                  {t('modelAdminPage.confirmBatchDeleteDesc', { count: selectedModelCount })}
-                </p>
-                <div className="flex justify-end gap-3">
-                  <button
-                    onClick={() => setBatchDeleteOpen(false)}
-                    disabled={batchDeleting}
-                    className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-50"
-                  >
-                    {t('common.cancel')}
-                  </button>
-                  <button
-                    onClick={handleBatchDelete}
-                    disabled={batchDeleting}
-                    className="px-4 py-2 bg-error text-white rounded-sm text-sm hover:bg-error/90 transition-colors disabled:opacity-50"
-                  >
-                    {batchDeleting ? t('modelAdminPage.deleting') : t('modelAdminPage.confirmDeleteLabel')}
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
+                <motion.div
+                  initial={{ scale: 0.95 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0.95 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-6"
+                >
+                  <h3 className="font-headline text-lg font-semibold text-on-surface mb-2">
+                    {t('modelAdminPage.confirmBatchDeleteTitle')}
+                  </h3>
+                  <p className="text-sm text-on-surface-variant mb-6">
+                    {selectedAllMatching && ` ${t('modelAdminPage.batchDeleteAllMatchingNote')} `}
+                    {t('modelAdminPage.confirmBatchDeleteDesc', { count: selectedModelCount })}
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setBatchDeleteOpen(false)}
+                      disabled={batchDeleting}
+                      className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-50"
+                    >
+                      {t('common.cancel')}
+                    </button>
+                    <button
+                      onClick={handleBatchDelete}
+                      disabled={batchDeleting}
+                      className="px-4 py-2 bg-error text-white rounded-sm text-sm hover:bg-error/90 transition-colors disabled:opacity-50"
+                    >
+                      {batchDeleting ? t('modelAdminPage.deleting') : t('modelAdminPage.confirmDeleteLabel')}
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>,
+              document.body,
+            )}
         </AnimatePresence>
         <BatchCategoryDialog
           open={batchCategoryOpen && selectedModelCount > 0}
@@ -3951,85 +3959,90 @@ function MobileContent() {
         confirmDisabled={clearingFailed}
       />
       <AnimatePresence>
-        {deleteTarget && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm"
-            onClick={() => setDeleteTarget(null)}
-          >
+        {deleteTarget &&
+          createPortal(
             <motion.div
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.95 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-5 sm:p-6"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm"
+              onClick={() => setDeleteTarget(null)}
             >
-              <h3 className="font-headline text-base font-semibold text-on-surface mb-2">
-                {t('modelAdminPage.confirmDeleteTitle')}
-              </h3>
-              <p className="text-sm text-on-surface-variant mb-5 break-words">
-                {t('modelAdminPage.confirmDeleteDesc', { name: deleteTarget.name })}
-              </p>
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
-                <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 text-sm text-on-surface-variant">
-                  {t('common.cancel')}
-                </button>
-                <button
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="px-4 py-2 bg-error text-white rounded-sm text-sm disabled:opacity-50"
-                >
-                  {deleting ? t('modelAdminPage.deleting') : t('common.delete')}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
+              <motion.div
+                initial={{ scale: 0.95 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.95 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-5 sm:p-6"
+              >
+                <h3 className="font-headline text-base font-semibold text-on-surface mb-2">
+                  {t('modelAdminPage.confirmDeleteTitle')}
+                </h3>
+                <p className="text-sm text-on-surface-variant mb-5 break-words">
+                  {t('modelAdminPage.confirmDeleteDesc', { name: deleteTarget.name })}
+                </p>
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
+                  <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 text-sm text-on-surface-variant">
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="px-4 py-2 bg-error text-white rounded-sm text-sm disabled:opacity-50"
+                  >
+                    {deleting ? t('modelAdminPage.deleting') : t('common.delete')}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>,
+            document.body,
+          )}
       </AnimatePresence>
       <AnimatePresence>
-        {batchDeleteOpen && selectedModelCount > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm"
-            onClick={() => !batchDeleting && setBatchDeleteOpen(false)}
-          >
+        {batchDeleteOpen &&
+          selectedModelCount > 0 &&
+          createPortal(
             <motion.div
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.95 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-5 sm:p-6"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm"
+              onClick={() => !batchDeleting && setBatchDeleteOpen(false)}
             >
-              <h3 className="font-headline text-base font-semibold text-on-surface mb-2">
-                {t('modelAdminPage.confirmBatchDeleteTitle')}
-              </h3>
-              <p className="text-sm text-on-surface-variant mb-5 break-words">
-                {t('modelAdminPage.confirmBatchDeleteDesc', { count: selectedModelCount })}
-                {selectedAllMatching && ` ${t('modelAdminPage.batchDeleteAllMatchingNote')}`}
-              </p>
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
-                <button
-                  onClick={() => setBatchDeleteOpen(false)}
-                  disabled={batchDeleting}
-                  className="px-4 py-2 text-sm text-on-surface-variant disabled:opacity-50"
-                >
-                  {t('common.cancel')}
-                </button>
-                <button
-                  onClick={handleBatchDelete}
-                  disabled={batchDeleting}
-                  className="px-4 py-2 bg-error text-white rounded-sm text-sm disabled:opacity-50"
-                >
-                  {batchDeleting ? t('modelAdminPage.deleting') : t('modelAdminPage.confirmDeleteLabel')}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
+              <motion.div
+                initial={{ scale: 0.95 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.95 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-5 sm:p-6"
+              >
+                <h3 className="font-headline text-base font-semibold text-on-surface mb-2">
+                  {t('modelAdminPage.confirmBatchDeleteTitle')}
+                </h3>
+                <p className="text-sm text-on-surface-variant mb-5 break-words">
+                  {t('modelAdminPage.confirmBatchDeleteDesc', { count: selectedModelCount })}
+                  {selectedAllMatching && ` ${t('modelAdminPage.batchDeleteAllMatchingNote')}`}
+                </p>
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
+                  <button
+                    onClick={() => setBatchDeleteOpen(false)}
+                    disabled={batchDeleting}
+                    className="px-4 py-2 text-sm text-on-surface-variant disabled:opacity-50"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    onClick={handleBatchDelete}
+                    disabled={batchDeleting}
+                    className="px-4 py-2 bg-error text-white rounded-sm text-sm disabled:opacity-50"
+                  >
+                    {batchDeleting ? t('modelAdminPage.deleting') : t('modelAdminPage.confirmDeleteLabel')}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>,
+            document.body,
+          )}
       </AnimatePresence>
       <BatchCategoryDialog
         open={batchCategoryOpen && selectedModelCount > 0}

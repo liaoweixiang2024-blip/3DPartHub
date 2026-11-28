@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import useSWR from 'swr';
 import type { CategoryItem } from '../../api/categories';
 import { categoriesApi } from '../../api/categories';
@@ -118,7 +119,8 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
     setCategoryByIndex(new Map(models.map((m) => [m.index, categoryId])));
   };
 
-  return (
+  // createPortal 到 body：脱离 #root isolation 层级，避免被页头/页脚导航盖住（见 DialogOverlay 注释）
+  return createPortal(
     <div
       className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={() => !uploading && !importing && onClose()}
@@ -348,6 +350,7 @@ export default function ImportModelsDialog({ onClose, onImported }: { onClose: (
           )}
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body,
   );
 }
