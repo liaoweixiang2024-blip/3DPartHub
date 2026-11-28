@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import client from '../../api/client';
 import { unwrapResponse } from '../../api/response';
@@ -73,8 +74,9 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
     }
   }
 
-  // zIndex 10000：盖过 TopNav(z-250)——本页 ConfirmDialog 同款；默认 120 会被移动端顶栏压住头部
-  return (
+  // zIndex 10000 + createPortal 到 body：脱离 #root 的 isolation 层级（iOS Safari 上
+  // root 内弹窗会被页头/页脚导航盖住），挂 body 直属层后站内任何元素都压不过它
+  return createPortal(
     <DialogOverlay onClose={onClose} zIndex={10000} bottomOnMobile safeArea>
       <motion.div
         variants={isMobile ? bottomSheetMotion : dialogPanelMotion}
@@ -244,6 +246,7 @@ export default function UserCreateDialog({ onClose, onCreated }: { onClose: () =
           </button>
         </div>
       </motion.div>
-    </DialogOverlay>
+    </DialogOverlay>,
+    document.body,
   );
 }

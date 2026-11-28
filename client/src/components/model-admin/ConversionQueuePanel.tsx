@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
@@ -482,164 +483,168 @@ export default function ConversionQueuePanel({
         confirmLabel={confirmDialogCopy?.confirmLabel || t('common.confirm')}
         confirmDisabled={Boolean(queueAction)}
       />
-      {detailJobId && (
-        // z-[260]：盖过移动端 TopNav(z-250) 与底部导航(z-60)，但仍让本面板的 ConfirmDialog(z-10000) 压在上面
-        <div
-          className="fixed inset-0 z-[260] flex items-end justify-center bg-surface-dim/70 p-3 pb-sheet pt-6 backdrop-blur-sm sm:items-center sm:p-4 sm:pt-6"
-          onClick={() => setDetailJobId(null)}
-        >
+      {detailJobId &&
+        createPortal(
+          // z-[260]：盖过移动端 TopNav(z-250) 与底部导航(z-60)，但仍让本面板的 ConfirmDialog(z-10000) 压在上面
           <div
-            className="dialog-safe-max-h flex w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-outline-variant/20 bg-surface-container-low shadow-xl sm:max-h-[88vh] sm:rounded-lg"
-            onClick={(event) => event.stopPropagation()}
+            className="fixed inset-0 z-[260] flex items-end justify-center bg-surface-dim/70 p-3 pb-sheet pt-6 backdrop-blur-sm sm:items-center sm:p-4 sm:pt-6"
+            onClick={() => setDetailJobId(null)}
           >
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 px-5 py-4">
-              <div className="min-w-0">
-                <h3 className="text-base font-semibold text-on-surface">{t('modelAdminComp.taskDetailTitle')}</h3>
-                <p className="mt-1 truncate text-xs text-on-surface-variant">{detailJobId}</p>
+            <div
+              className="dialog-safe-max-h flex w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-outline-variant/20 bg-surface-container-low shadow-xl sm:max-h-[88vh] sm:rounded-lg"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 px-5 py-4">
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold text-on-surface">{t('modelAdminComp.taskDetailTitle')}</h3>
+                  <p className="mt-1 truncate text-xs text-on-surface-variant">{detailJobId}</p>
+                </div>
+                <button
+                  onClick={() => setDetailJobId(null)}
+                  className="rounded-sm border border-outline-variant/20 p-1.5 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+                >
+                  <Icon name="close" size={16} />
+                </button>
               </div>
-              <button
-                onClick={() => setDetailJobId(null)}
-                className="rounded-sm border border-outline-variant/20 p-1.5 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-              >
-                <Icon name="close" size={16} />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-5">
-              {detailLoading ? (
-                <ConversionQueueDetailLoadingState />
-              ) : detail ? (
-                <div className="space-y-4">
-                  <div className="grid gap-2 text-xs sm:grid-cols-2">
-                    <div className="rounded-sm bg-surface-container-lowest p-3">
-                      <span className="block text-[10px] text-on-surface-variant">
-                        {t('modelAdminComp.statusLabel')}
-                      </span>
-                      <span className="mt-1 inline-flex">
-                        <QueueStateBadge state={detail.state} />
-                      </span>
-                    </div>
-                    <div className="rounded-sm bg-surface-container-lowest p-3">
-                      <span className="block text-[10px] text-on-surface-variant">
-                        {t('modelAdminComp.progressAttempts')}
-                      </span>
-                      <span className="mt-1 block font-mono text-on-surface">
-                        {detail.progress}% / {detail.attempts_made}
-                      </span>
-                      {detail.state === 'active' && (
-                        <span
-                          className={
-                            detail.is_stale
-                              ? 'mt-1 block text-[10px] text-error'
-                              : 'mt-1 block text-[10px] text-on-surface-variant'
-                          }
-                        >
-                          {t('modelAdminComp.processedFor', { duration: formatQueueDuration(detail.active_ms) })}
-                          {detail.is_stale ? t('modelAdminComp.maybeStuckSuffix') : ''}
+              <div className="min-h-0 flex-1 overflow-y-auto p-5">
+                {detailLoading ? (
+                  <ConversionQueueDetailLoadingState />
+                ) : detail ? (
+                  <div className="space-y-4">
+                    <div className="grid gap-2 text-xs sm:grid-cols-2">
+                      <div className="rounded-sm bg-surface-container-lowest p-3">
+                        <span className="block text-[10px] text-on-surface-variant">
+                          {t('modelAdminComp.statusLabel')}
                         </span>
+                        <span className="mt-1 inline-flex">
+                          <QueueStateBadge state={detail.state} />
+                        </span>
+                      </div>
+                      <div className="rounded-sm bg-surface-container-lowest p-3">
+                        <span className="block text-[10px] text-on-surface-variant">
+                          {t('modelAdminComp.progressAttempts')}
+                        </span>
+                        <span className="mt-1 block font-mono text-on-surface">
+                          {detail.progress}% / {detail.attempts_made}
+                        </span>
+                        {detail.state === 'active' && (
+                          <span
+                            className={
+                              detail.is_stale
+                                ? 'mt-1 block text-[10px] text-error'
+                                : 'mt-1 block text-[10px] text-on-surface-variant'
+                            }
+                          >
+                            {t('modelAdminComp.processedFor', { duration: formatQueueDuration(detail.active_ms) })}
+                            {detail.is_stale ? t('modelAdminComp.maybeStuckSuffix') : ''}
+                          </span>
+                        )}
+                      </div>
+                      <div className="rounded-sm bg-surface-container-lowest p-3">
+                        <span className="block text-[10px] text-on-surface-variant">
+                          {t('modelAdminComp.modelLabel')}
+                        </span>
+                        <span className="mt-1 block truncate text-on-surface">
+                          {detail.model?.name || detail.data?.original_name || detail.model_id || '-'}
+                        </span>
+                      </div>
+                      <div className="rounded-sm bg-surface-container-lowest p-3">
+                        <span className="block text-[10px] text-on-surface-variant">
+                          {t('modelAdminComp.formatRebuildReason')}
+                        </span>
+                        <span className="mt-1 block font-mono text-on-surface">
+                          {detail.data?.ext?.toUpperCase() || '-'} / {detail.data?.rebuild_reason || '-'}
+                        </span>
+                      </div>
+                      <div className="rounded-sm bg-surface-container-lowest p-3 sm:col-span-2">
+                        <span className="block text-[10px] text-on-surface-variant">
+                          {t('modelAdminComp.sourceFile')}
+                        </span>
+                        <span className="mt-1 block break-all font-mono text-on-surface">
+                          {detail.data?.source_path || detail.data?.source_name || '-'}
+                        </span>
+                        <span
+                          className={`mt-1 inline-block rounded-sm px-1.5 py-0.5 text-[10px] ${detail.data?.source_exists === false ? 'bg-error/10 text-error' : 'bg-primary/10 text-primary'}`}
+                        >
+                          {detail.data?.source_exists === null || detail.data?.source_exists === undefined
+                            ? t('modelAdminComp.queueUnknown')
+                            : detail.data.source_exists
+                              ? t('modelAdminComp.fileExists')
+                              : t('modelAdminComp.fileMissing')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {detail.failed_reason && (
+                      <div className="rounded-sm border border-error/20 bg-error/10 p-3">
+                        <div className="mb-1 text-[11px] font-medium text-error">{t('modelAdminComp.failReason')}</div>
+                        <p className="break-words text-xs text-error">
+                          {formatQueueFailureReason(detail.failed_reason)}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="rounded-sm border border-outline-variant/10 bg-surface-container-lowest p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-[11px] font-medium text-on-surface-variant">
+                          {t('modelAdminComp.jobLogs')}
+                        </span>
+                        <span className="font-mono text-[10px] text-on-surface-variant">
+                          {(detail.logs || []).length} / {detail.log_count || 0}
+                        </span>
+                      </div>
+                      {(detail.logs || []).length > 0 ? (
+                        <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-surface-container-high p-3 text-[11px] leading-relaxed text-on-surface">
+                          {(detail.logs || []).map(formatLogLine).join('\n')}
+                        </pre>
+                      ) : (
+                        <div className="rounded-sm bg-surface-container-high px-3 py-4 text-center text-xs text-on-surface-variant">
+                          {t('modelAdminComp.noLogs')}
+                        </div>
                       )}
                     </div>
-                    <div className="rounded-sm bg-surface-container-lowest p-3">
-                      <span className="block text-[10px] text-on-surface-variant">
-                        {t('modelAdminComp.modelLabel')}
-                      </span>
-                      <span className="mt-1 block truncate text-on-surface">
-                        {detail.model?.name || detail.data?.original_name || detail.model_id || '-'}
-                      </span>
-                    </div>
-                    <div className="rounded-sm bg-surface-container-lowest p-3">
-                      <span className="block text-[10px] text-on-surface-variant">
-                        {t('modelAdminComp.formatRebuildReason')}
-                      </span>
-                      <span className="mt-1 block font-mono text-on-surface">
-                        {detail.data?.ext?.toUpperCase() || '-'} / {detail.data?.rebuild_reason || '-'}
-                      </span>
-                    </div>
-                    <div className="rounded-sm bg-surface-container-lowest p-3 sm:col-span-2">
-                      <span className="block text-[10px] text-on-surface-variant">
-                        {t('modelAdminComp.sourceFile')}
-                      </span>
-                      <span className="mt-1 block break-all font-mono text-on-surface">
-                        {detail.data?.source_path || detail.data?.source_name || '-'}
-                      </span>
-                      <span
-                        className={`mt-1 inline-block rounded-sm px-1.5 py-0.5 text-[10px] ${detail.data?.source_exists === false ? 'bg-error/10 text-error' : 'bg-primary/10 text-primary'}`}
-                      >
-                        {detail.data?.source_exists === null || detail.data?.source_exists === undefined
-                          ? t('modelAdminComp.queueUnknown')
-                          : detail.data.source_exists
-                            ? t('modelAdminComp.fileExists')
-                            : t('modelAdminComp.fileMissing')}
-                      </span>
-                    </div>
-                  </div>
 
-                  {detail.failed_reason && (
-                    <div className="rounded-sm border border-error/20 bg-error/10 p-3">
-                      <div className="mb-1 text-[11px] font-medium text-error">{t('modelAdminComp.failReason')}</div>
-                      <p className="break-words text-xs text-error">{formatQueueFailureReason(detail.failed_reason)}</p>
-                    </div>
-                  )}
-
-                  <div className="rounded-sm border border-outline-variant/10 bg-surface-container-lowest p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-[11px] font-medium text-on-surface-variant">
-                        {t('modelAdminComp.jobLogs')}
-                      </span>
-                      <span className="font-mono text-[10px] text-on-surface-variant">
-                        {(detail.logs || []).length} / {detail.log_count || 0}
-                      </span>
-                    </div>
-                    {(detail.logs || []).length > 0 ? (
-                      <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-surface-container-high p-3 text-[11px] leading-relaxed text-on-surface">
-                        {(detail.logs || []).map(formatLogLine).join('\n')}
-                      </pre>
-                    ) : (
-                      <div className="rounded-sm bg-surface-container-high px-3 py-4 text-center text-xs text-on-surface-variant">
-                        {t('modelAdminComp.noLogs')}
+                    {(detail.stacktrace || []).length > 0 && (
+                      <div className="rounded-sm border border-outline-variant/10 bg-surface-container-lowest p-3">
+                        <div className="mb-2 text-[11px] font-medium text-on-surface-variant">
+                          {t('modelAdminComp.stacktrace')}
+                        </div>
+                        <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-surface-container-high p-3 text-[11px] leading-relaxed text-error">
+                          {(detail.stacktrace || []).join('\n')}
+                        </pre>
                       </div>
                     )}
-                  </div>
 
-                  {(detail.stacktrace || []).length > 0 && (
-                    <div className="rounded-sm border border-outline-variant/10 bg-surface-container-lowest p-3">
-                      <div className="mb-2 text-[11px] font-medium text-on-surface-variant">
-                        {t('modelAdminComp.stacktrace')}
-                      </div>
-                      <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-surface-container-high p-3 text-[11px] leading-relaxed text-error">
-                        {(detail.stacktrace || []).join('\n')}
-                      </pre>
-                    </div>
-                  )}
-
-                  <div className="flex justify-end gap-2">
-                    {detail.model_id && (
-                      <Link
-                        to={`/model/${detail.model_id}`}
-                        target="_blank"
-                        rel="noopener"
-                        className="inline-flex items-center gap-1.5 rounded-sm border border-outline-variant/20 px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-primary"
+                    <div className="flex justify-end gap-2">
+                      {detail.model_id && (
+                        <Link
+                          to={`/model/${detail.model_id}`}
+                          target="_blank"
+                          rel="noopener"
+                          className="inline-flex items-center gap-1.5 rounded-sm border border-outline-variant/20 px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-primary"
+                        >
+                          <Icon name="open_in_new" size={14} />
+                          {t('modelAdminComp.openModel')}
+                        </Link>
+                      )}
+                      <button
+                        onClick={() => setDetailJobId(null)}
+                        className="rounded-sm bg-primary-container px-3 py-1.5 text-xs font-medium text-on-primary hover:bg-primary"
                       >
-                        <Icon name="open_in_new" size={14} />
-                        {t('modelAdminComp.openModel')}
-                      </Link>
-                    )}
-                    <button
-                      onClick={() => setDetailJobId(null)}
-                      className="rounded-sm bg-primary-container px-3 py-1.5 text-xs font-medium text-on-primary hover:bg-primary"
-                    >
-                      {t('common.close')}
-                    </button>
+                        {t('common.close')}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="rounded-sm bg-surface-container-high px-3 py-8 text-center text-xs text-on-surface-variant">
-                  {t('modelAdminComp.detailLoadFail')}
-                </div>
-              )}
+                ) : (
+                  <div className="rounded-sm bg-surface-container-high px-3 py-8 text-center text-xs text-on-surface-variant">
+                    {t('modelAdminComp.detailLoadFail')}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

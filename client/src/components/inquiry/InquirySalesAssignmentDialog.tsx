@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
@@ -140,7 +141,9 @@ export default function InquirySalesAssignmentDialog({
     }
   }
 
-  return (
+  // createPortal 到 body：脱离 #root 的 isolation 层级（iOS Safari 上 root 内弹窗会被
+  // 页头/页脚导航盖住），挂 body 直属层后站内任何元素都压不过它
+  return createPortal(
     // z-[260]：盖过移动端 TopNav(z-250)；120 会被顶栏压住头部。移动端按底部弹层展示
     <div className="fixed inset-0 z-[260] flex items-end justify-center bg-black/45 p-3 pb-sheet sm:items-center sm:p-4">
       <div className="dialog-safe-max-h flex w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-outline-variant/15 bg-surface-container shadow-2xl sm:max-h-[86vh] sm:rounded-2xl">
@@ -296,6 +299,7 @@ export default function InquirySalesAssignmentDialog({
           </AdminButton>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
